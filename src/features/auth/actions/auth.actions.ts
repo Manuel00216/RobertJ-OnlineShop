@@ -1,0 +1,121 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+
+import { ROUTES } from "@/constants/routes";
+import { fail, fromZodError, ok } from "@/lib/utils/result";
+import * as queries from "@/lib/supabase/queries";
+import type { ActionResult } from "@/types/action.types";
+import { mapAuthError } from "@/features/auth/constants/auth-errors";
+import {
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  signInSchema,
+  signUpSchema,
+} from "@/features/auth/schemas/auth.schema";
+
+export async function signInAction(
+  _prevState: ActionResult<null> | null,
+  formData: FormData,
+): Promise<ActionResult<null>> {
+  const parsed = signInSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return fromZodError(parsed.error);
+
+  try {
+    await queries.signInWithPassword(
+      parsed.data.email,
+      parsed.data.password,
+    );
+  } catch (error) {
+    return fail(mapAuthError(error));
+  }
+
+  revalidatePath("/", "layout");
+  return ok(null);
+}
+
+export async function signUpAction(
+  _prevState: ActionResult<null> | null,
+  formData: FormData,
+): Promise<ActionResult<null>> {
+  const parsed = signUpSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return fromZodError(parsed.error);
+
+  try {
+    await queries.signUpWithPassword(
+      parsed.data.email,
+      parsed.data.password,
+      parsed.data.fullName,
+    );
+  } catch (error) {
+    return fail(mapAuthError(error));
+  }
+
+  revalidatePath("/", "layout");
+  return ok(null);
+}
+
+export async function signOutAction() {
+  await queries.signOut();
+  revalidatePath("/", "layout");
+  redirect(ROUTES.signIn);
+}
+
+/**
+ * Prepared for the Forgot Password screen. Always reports success to avoid
+ * leaking which emails are registered; real errors are logged server-side.
+ */
+export async function requestPasswordResetAction(
+  _prevState: ActionResult<null> | null,
+  formData: FormData,
+): Promise<ActionResult<null>> {
+  const parsed = forgotPasswordSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return fromZodError(parsed.error);
+
+  try {
+    await queries.sendPasswordResetEmail(parsed.data.email);
+  } catch (error) {
+    console.error("Password reset request failed:", error);
+  }
+  return ok(null);
+}
+
+/** Prepared for the Reset Password screen (used inside a recovery session). */
+export async function updatePasswordAction(
+  _prevState: ActionResult<null> | null,
+  formData: FormData,
+): Promise<ActionResult<null>> {
+  const parsed = resetPasswordSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return fromZodError(parsed.error);
+
+  try {
+    await queries.updatePassword(parsed.data.password);
+  } catch (error) {
+    return fail(mapAuthError(error));
+  }
+
+  revalidatePath("/", "layout");
+  return ok(null);
+}
+
+/**
+ * Re-sends the sign-up confirmation email (Email Verification substate, spec
+ * §4). Uses the email-only schema; errors are normalised like every other
+ * action so the raw Supabase message never reaches the UI.
+ */
+export async function resendVerificationAction(
+  _prevState: ActionResult<null> | null,
+  formData: FormData,
+): Promise<ActionResult<null>> {
+  const parsed = forgotPasswordSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return fromZodError(parsed.error);
+
+  try {
+    await queries.resendVerificationEmail(parsed.data.email);
+  } catch (error) {
+    return fail(mapAuthError(error));
+  }
+
+  return ok(null);
+}

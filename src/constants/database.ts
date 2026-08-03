@@ -1,0 +1,35 @@
+/**
+ * Database Table Configuration
+ * Single source of truth for all Supabase table names.
+ *
+ * Usage:
+ *   import { DATABASE_TABLES } from "@/constants/database";
+ *   supabase.from(DATABASE_TABLES.PRODUCTS)
+ *
+ * Table names appear only here and in `supabase/migrations/*.sql`. Every query
+ * in `lib/supabase/queries.ts` references this constant instead of a literal
+ * string, so a table rename is a one-line change instead of a repo-wide
+ * find-and-replace, and a typo becomes a compile error instead of a silent
+ * runtime "relation does not exist".
+ */
+
+export const DATABASE_TABLES = {
+  PROFILES: "profiles",
+  CATEGORIES: "categories",
+  PRODUCTS: "products",
+  PRODUCT_IMAGES: "product_images",
+  ORDERS: "orders",
+  ORDER_ITEMS: "order_items",
+} as const;
+
+/** Union of every table name in the schema. */
+export type DatabaseTable = (typeof DATABASE_TABLES)[keyof typeof DATABASE_TABLES];
+
+/**
+ * Not used inside `.select()` embedded-resource strings (e.g.
+ * `seller:profiles!products_seller_id_fkey`) — those are parsed by Supabase's
+ * generated types at the type level and must stay literal, or the inferred
+ * row shape is lost. Reach for `DATABASE_TABLES.X` directly instead of
+ * interpolating into a select string; see the comment above `PRODUCT_COLUMNS`
+ * in `lib/supabase/queries.ts` for the full explanation.
+ */

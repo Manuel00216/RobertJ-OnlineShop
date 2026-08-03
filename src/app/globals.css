@@ -1,0 +1,157 @@
+@import "tailwindcss";
+
+/* Design tokens. Every colour used by components resolves through these. */
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  --card: #ffffff;
+  --card-foreground: #171717;
+  --muted: #f4f4f5;
+  --muted-foreground: #6b7280;
+  --border: #e4e4e7;
+  --ring: #2563eb;
+  --primary: #2563eb;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #171717;
+  --success: #16a34a;
+  --warning: #b45309;
+  --danger: #dc2626;
+  --danger-foreground: #ffffff;
+  --info: #0284c7;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+    --card: #111113;
+    --card-foreground: #ededed;
+    --muted: #1c1c1f;
+    --muted-foreground: #a1a1aa;
+    --border: #27272a;
+    --ring: #60a5fa;
+    --primary: #3b82f6;
+    --primary-foreground: #0a0a0a;
+    --secondary: #1c1c1f;
+    --secondary-foreground: #ededed;
+    --success: #22c55e;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --danger-foreground: #0a0a0a;
+    --info: #38bdf8;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-info: var(--info);
+
+  /*
+   * Landing-page ("RobertJ") design tokens. Fixed values — deliberately NOT in
+   * the prefers-color-scheme:dark block, so the marketing surface renders in the
+   * same editorial light palette regardless of the visitor's OS theme.
+   */
+  --color-rj-black: #0d0d0d;
+  --color-rj-white: #f8f7f5;
+  --color-rj-red: #e8192c;
+  --color-rj-red-dark: #c8111e;
+  --color-rj-gray-50: #f5f4f2;
+  --color-rj-gray-100: #ebebeb;
+  --color-rj-gray-200: #d4d4d4;
+  --color-rj-gray-400: #9b9b9b;
+  --color-rj-gray-600: #6b6b6b;
+  --color-rj-gray-800: #2d2d2d;
+  --color-rj-gold: #f4b942;
+  --color-rj-green: #22c55e;
+
+  --font-sans: var(--font-dm-sans);
+  --font-serif: var(--font-dm-serif);
+}
+
+body {
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/*
+ * Landing-page keyframes, ported from the Figma source's inline <style> block
+ * so reveal/marquee/float animations match the approved design exactly.
+ */
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-33.33%);
+  }
+}
+
+@keyframes pop {
+  0% {
+    transform: scale(0.6);
+  }
+  60% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+/* Respect users who prefer reduced motion: disable the looping decorations. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
