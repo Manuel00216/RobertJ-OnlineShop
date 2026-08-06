@@ -34,6 +34,15 @@ export const updateProfileSchema = z.object({
     .max(500, "Avatar URL must be 500 characters or fewer.")
     .or(z.literal(""))
     .default(""),
+  /** Seller/admin only — DB-enforced via profiles_payment_qr_url_role CHECK.
+   * Buyers never render this field, so their submissions simply omit it. */
+  paymentQrUrl: z
+    .string()
+    .trim()
+    .url("Enter a valid URL (https://…).")
+    .max(500, "Payment QR URL must be 500 characters or fewer.")
+    .or(z.literal(""))
+    .default(""),
   bio: z
     .string()
     .trim()

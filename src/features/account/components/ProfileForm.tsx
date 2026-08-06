@@ -6,6 +6,7 @@ import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { FormField } from "@/components/forms/FormField";
+import { DASHBOARD_ROLES } from "@/constants/roles";
 import { ROUTES } from "@/constants/routes";
 import { AvatarPreview } from "@/features/account/components/AvatarPreview";
 import { updateProfileAction } from "@/features/account/actions/account.actions";
@@ -30,6 +31,7 @@ export function ProfileForm({
     FormData
   >(updateProfileAction, null);
   const [avatarUrl, setAvatarUrl] = useState(profile.avatarUrl ?? "");
+  const isSellerOrAdmin = (DASHBOARD_ROLES as readonly string[]).includes(profile.role);
 
   const fieldErrors =
     state && !state.success ? state.fieldErrors : undefined;
@@ -102,6 +104,19 @@ export function ProfileForm({
         placeholder="Tell buyers a little about yourself…"
         errors={fieldErrors?.bio}
       />
+
+      {isSellerOrAdmin ? (
+        <FormField
+          name="paymentQrUrl"
+          label="Payment QR code URL"
+          type="url"
+          tone="brand"
+          defaultValue={profile.paymentQrUrl ?? ""}
+          placeholder="https://…"
+          hint="Shown to buyers who choose QR transfer at checkout, so they know where to send payment."
+          errors={fieldErrors?.paymentQrUrl}
+        />
+      ) : null}
 
       <div className="flex flex-col gap-1.5">
         <label htmlFor="profile-email" className="text-sm font-medium">

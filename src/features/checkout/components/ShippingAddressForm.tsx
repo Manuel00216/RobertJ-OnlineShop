@@ -73,14 +73,17 @@ export function ShippingAddressForm({
           errors={errors?.postalCode}
         />
       </div>
+      {/* Locked, not free text: this marketplace is domestic-only (no
+          courier/shipping API — see SAD Out of Scope), enforced server-side
+          too via `z.literal(CHECKOUT_CONSTANTS.shippingCountry)`. */}
       <FormField
         name="country"
         label="Country"
         tone="brand"
         value={values.country}
-        onChange={(event) => onChange("country", event.target.value)}
-        placeholder="Country"
-        autoComplete="country-name"
+        readOnly
+        disabled
+        hint="Delivery is currently available within the Philippines only."
         errors={errors?.country}
       />
       <FormField

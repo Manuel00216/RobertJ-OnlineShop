@@ -1,5 +1,4 @@
 export { placeOrderAction } from "./actions/checkout.actions";
-export { createCheckoutIntentAction } from "./actions/stripe.actions";
 export {
   shippingAddressSchema,
   placeOrderSchema,

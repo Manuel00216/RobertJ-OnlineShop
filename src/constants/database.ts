@@ -20,6 +20,7 @@ export const DATABASE_TABLES = {
   PRODUCT_IMAGES: "product_images",
   ORDERS: "orders",
   ORDER_ITEMS: "order_items",
+  PAYMENTS: "payments",
 } as const;
 
 /** Union of every table name in the schema. */

@@ -4,22 +4,18 @@ import { z } from "zod";
  * Single source of truth for environment variables.
  * Fails fast at module load so misconfiguration never reaches runtime code.
  *
- * Stripe keys are optional: the official payment path is COD + QR receipt
- * upload with manual verification (see DECISIONS.md -> ADR-008); Stripe is an
- * experimental spike (ADR-014), not a boot requirement. The app must run on
- * Supabase credentials alone — card payments simply stay unavailable until
- * Stripe keys are provided (see isStripeConfigured below).
+ * The official payment path is COD + QR receipt upload with manual
+ * verification (see DECISIONS.md -> ADR-008). The Stripe spike (ADR-014) has
+ * been retired — its keys/config are intentionally not present here.
  */
 const publicEnvSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.url(),
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1),
   NEXT_PUBLIC_SITE_URL: z.url().default("http://localhost:3000"),
-  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().min(1).optional(),
 });
 
 const serverEnvSchema = publicEnvSchema.extend({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
-  STRIPE_SECRET_KEY: z.string().min(1).optional(),
 });
 
 /**
@@ -56,8 +52,6 @@ function parsePublicEnv() {
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
-    NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:
-      process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
   });
 
   if (!result.success) formatEnvError(result.error);
@@ -67,21 +61,11 @@ function parsePublicEnv() {
 /** Values safe to reference from Client Components. */
 export const publicEnv = parsePublicEnv();
 
-/**
- * Client-safe check for whether the (experimental, non-official) Stripe
- * payment path is available. Use this to hide/disable card-payment UI and
- * skip Stripe calls gracefully instead of failing at runtime.
- */
-export const isStripeConfigured = Boolean(
-  publicEnv.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
-);
-
 /** Server-only values. Never import this from a Client Component. */
 export function getServerEnv() {
   const result = serverEnvSchema.safeParse({
     ...publicEnv,
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
-    STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
   });
 
   if (!result.success) formatEnvError(result.error);

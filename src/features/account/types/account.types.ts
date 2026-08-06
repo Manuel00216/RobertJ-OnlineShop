@@ -10,5 +10,7 @@ export interface Profile {
   avatarUrl: string | null;
   phone: string | null;
   bio: string | null;
+  /** Seller's/admin's receiving QR code image; null for buyers (also DB-enforced). */
+  paymentQrUrl: string | null;
   role: string;
 }

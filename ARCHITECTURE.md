@@ -59,10 +59,11 @@ RoberJ is a **server-first, service-oriented** web application. Its design rests
 | Validation | Zod | `^4.4.3` |
 | Motion / icons | framer-motion / lucide-react | `^12` / `^1.28` |
 | Styling utils | class-variance-authority, clsx, tailwind-merge | — |
-| Payments (spike) | Stripe (`stripe`, `@stripe/*`) | ⚠️ experimental — not the SAD payment path |
 
 > [!NOTE]
-> There is **no dedicated test runner** installed (no Jest/Vitest/Playwright). The only automated flows are Node scripts in `scripts/` (`e2e-flow.mjs`, `e2e-stripe.mjs`). See [Testing Expectations in CLAUDE.md](./CLAUDE.md#testing-expectations).
+> There is **no dedicated test runner** installed (no Jest/Vitest/Playwright). The only automated flow is the Node script in `scripts/` (`e2e-flow.mjs`). See [Testing Expectations in CLAUDE.md](./CLAUDE.md#testing-expectations).
+>
+> The Stripe payments spike (ADR-014) has been **retired and removed** — Checkout is COD-only until the target QR-upload path (ADR-008) ships.
 
 ---
 
@@ -222,12 +223,12 @@ The live schema (see `supabase/migrations/*.sql` and `src/lib/supabase/database.
 
 **Current tables:** `profiles`, `categories`, `products`, `product_images`, `orders`, `order_items`, `payments`.
 
-**Current enums:** `user_role (buyer|seller|admin)`, `product_status (draft|active|sold|archived)`, `product_condition (new|like_new|good|fair|poor)`, `payment_method_type (cod|card)`, `payment_status (pending|paid|failed|refunded|partially_refunded)`, `order_status (pending|confirmed|processing|shipped|delivered|cancelled|refunded)`.
+**Current enums:** `user_role (buyer|seller|admin)`, `product_status (draft|active|sold|archived)`, `product_condition (new|like_new|good|fair|poor)`, `payment_method_type (cod|card|qr_upload — `card` is inert legacy from the retired Stripe spike)`, `payment_status (pending|paid|failed|refunded|partially_refunded)`, `order_status (pending|confirmed|processing|shipped|delivered|cancelled|refunded)`.
 
 **Current DB functions:** `create_order`, `is_admin`, `current_user_role`, `get_my_profile`, `slugify`.
 
-> [!WARNING]
-> The `payments` table currently carries **Stripe** columns (`provider_transaction_id`, `stripe_event_id`, `charge_id`, …). These belong to the **experimental Stripe spike** (optional — the app runs without it; see [README.md → Environment variables](./README.md#environment-variables)). The SAD's payment path is **COD + QR receipt upload + manual verification** — that is the target for the Payments module.
+> [!NOTE]
+> The SAD's payment path — **COD + QR receipt upload + manual verification** — is now implemented. The `payments` table's Stripe-only columns were dropped when QR was built (this closed TD-3); `payments` now holds `receipt_path` (a private Storage object path, not a public URL), `verified_by`/`verified_at` (the manual-verification audit trail), and the `qr_upload` payment method. `submit_qr_payment`/`verify_payment` are the sole write RPCs — see [Payments RPCs](#payments-rpcs-qr-receipt-upload-manual-verification) below.
 
 For what each gap requires to close, see [Architecture Evolution Strategy](#architecture-evolution-strategy) below.
 
@@ -242,7 +243,18 @@ For what each gap requires to close, see [Architecture Evolution Strategy](#arch
 5. Decrements `products.quantity`; flips a product to `sold` at zero stock.
 6. Raises typed errors (e.g. `Only % left of %`) that the service layer maps to friendly messages.
 
-Column-level update rules are enforced by an `enforce_order_update_rules` trigger: financial/identity fields are immutable, only the seller advances fulfilment, the buyer may only cancel, and `payment_status` is never client-driven.
+Column-level update rules are enforced by an `enforce_order_update_rules` trigger: financial/identity fields are immutable, only the seller advances fulfilment, the buyer may only cancel, and `payment_status` is never client-driven **except** the one narrow case below (a seller manually verifying their own order's QR payment).
+
+### Payments RPCs (QR receipt upload + manual verification)
+
+Two `SECURITY DEFINER` RPCs are the sole write path into `payments` — no direct INSERT/UPDATE grant exists on the table, mirroring `create_order`'s chokepoint philosophy:
+
+- **`submit_qr_payment(p_order_id, p_receipt_path)`** — buyer submits a receipt for their own order (`buyer_id = auth.uid()`, checked inside the RPC). Rejects a second submission while one is `pending`/`paid` for that order (a prior `failed` one doesn't block resubmission). Re-prices from the order's own `total_cents`/`currency`, never a client-supplied amount.
+- **`verify_payment(p_payment_id, p_decision)`** — the order's seller or an admin marks a `pending` payment `paid`/`failed`. Locks both the `payments` and `orders` rows `FOR UPDATE` before touching either (one transaction, not two independent client-driven writes), then updates `orders.payment_status` to match. Refuses to re-decide an already-decided payment.
+
+The `enforce_order_update_rules` trigger has a narrow exception for this last step: a seller may move their **own** order's `payment_status` from `pending` to `paid`/`failed` (not any other transition, not admin-restricted — the SAD's target path is "Administrator **or** Shop Owner"). This is a small, in-place addition to the existing `payment_status` check, not a widened bypass — financial-field immutability and the fulfilment-status rule are untouched.
+
+Receipt images live in the private `payment-receipts` Supabase Storage bucket, path `{order_id}/{uuid}.{ext}`. RLS on `storage.objects` authorizes via a subquery against `orders` (buyer, seller, or admin of that order) — the object path is never trusted as identity on its own.
 
 ---
 
@@ -411,7 +423,7 @@ sequenceDiagram
 ```
 
 > [!NOTE]
-> **Target payment path:** at checkout the Customer selects **COD** or **QR receipt upload**. For QR, the receipt image is stored in Supabase Storage and the payment sits `pending` until the Administrator (or Shop Owner) **manually verifies** it. The Stripe/card branch present in the code is the **spike**, not the target.
+> **Target payment path — implemented:** at checkout the Customer selects **COD** or **QR Transfer** (informational only at that point — nothing is persisted until the buyer actually acts). For QR, the buyer uploads a receipt from their order detail page (`submitQrPaymentAction`), storing the image in Supabase Storage; the payment sits `pending` until the Administrator **or Shop Owner** manually verifies it (`verifyPaymentAction`, `/dashboard/payments`). The Stripe/card spike that previously sat alongside COD has been **removed** (ADR-014).
 
 ### Order Flow (lifecycle)
 
@@ -445,8 +457,8 @@ src/
 ├── components/     Shared, business-agnostic UI: ui/ layout/ feedback/ forms/
 │                   navigation/ brand/ tables/ charts/.
 ├── features/       Self-contained domains. Built: auth, products, categories, cart,
-│                   landing, account, orders, checkout. Stubs (upcoming): assistant,
-│                   dashboard, inventory, notifications, reports.
+│                   landing, account, orders, checkout, payments. Stubs (upcoming):
+│                   assistant, dashboard, inventory, notifications, reports.
 ├── lib/
 │   ├── supabase/   client.ts server.ts session.ts queries.ts database.types.ts
 │   ├── auth/       permissions.ts
@@ -477,7 +489,7 @@ The code converges toward the SAD **without breaking the build at any step**. Re
 
 1. **Introduce `shops` + `shop_users`.** Add tables; backfill each existing `seller` as a shop owner. Keep `products.seller_id` working via a view or FK bridge during transition.
 2. **Extract `inventory`.** Move stock from `products.quantity` into an `inventory` table; keep `create_order` atomic (lock inventory rows `FOR UPDATE`).
-3. **Implement Payments (target).** Add `qr_upload` method + receipt storage + manual verification workflow. Quarantine or remove Stripe columns once the spike is retired.
+3. ~~**Implement Payments (target).** Add `qr_upload` method + receipt storage + manual verification workflow. Drop the now-unused Stripe columns from `payments`.~~ **Done.** See [Payments RPCs](#payments-rpcs-qr-receipt-upload-manual-verification). Remaining Payments-adjacent work: an Admin/Shop Owner dashboard beyond the single `/dashboard/payments` page built for this.
 4. **Add `recommendation_rules`** and build the rule-based Guided Product Selection engine behind `features/assistant`.
 5. **Add `reports`** aggregates and build `features/reports` + `features/dashboard`.
 
@@ -501,6 +513,11 @@ The code converges toward the SAD **without breaking the build at any step**. Re
   5. `20260804000100_add_get_my_profile.sql` — ensure `get_my_profile()` DEFINER RPC exists.
   6. `20260804000200_add_payments.sql` — `payment_method_type` enum + `payments` table + RLS.
   7. `20260804000300_revoke_create_order_anon_execute.sql` — restrict `create_order` EXECUTE to `authenticated`.
+  8. `20260807000000_add_rate_limiting.sql` — `rate_limit_hits` table + `check_rate_limit()` fixed-window RPC.
+  9. `20260807010000_evolve_payments_for_qr.sql` — `qr_upload` payment method; drops Stripe-only `payments` columns (resolves TD-3); adds `verified_by`/`verified_at`; renames `receipt_url` → `receipt_path`.
+  10. `20260807020000_qr_payment_rpcs.sql` — `submit_qr_payment()`/`verify_payment()` RPCs; narrow `enforce_order_update_rules` fix for seller self-verification.
+  11. `20260807030000_payment_receipts_storage.sql` — private `payment-receipts` Storage bucket + RLS (first Storage feature in this repo).
+  12. `20260807040000_profiles_payment_qr_url.sql` — seller's receiving QR code (`profiles.payment_qr_url`).
 - **Type regeneration** after any schema change:
   ```bash
   npx supabase gen types typescript --project-id <project-id> > src/lib/supabase/database.types.ts
@@ -519,7 +536,7 @@ The code converges toward the SAD **without breaking the build at any step**. Re
 |---|------|--------|-------------------|
 | TD-1 | **No `shops` / `shop_users`** — sellers stand in for shops | Cannot model true multi-shop ownership/staffing | Evolution step 1 |
 | TD-2 | **Inventory is `products.quantity`** | No multi-location / dedicated inventory ops | Evolution step 2 |
-| TD-3 | **Stripe spike in `payments`** conflicts with SAD payment scope | Card path exists outside official scope. ~~Env required Stripe keys to boot~~ — **resolved**: `env.ts` now makes Stripe keys optional and Checkout hides "Card" automatically when unset. Remaining impact is scope-only. | Evolution step 3 (retire spike) |
+| ~~TD-3~~ | ~~Stripe columns on `payments`~~ | **Resolved** — dropped in `20260807010000_evolve_payments_for_qr.sql` when QR payments were built. | — |
 | TD-4 | **No `recommendation_rules`** — Guided Selection is a landing preview only | Core SAD feature unbuilt | Evolution step 4 |
 | TD-5 | **No `reports` table / module** | No analytics for owners/admin | Evolution step 5 |
 | TD-6 | **No test runner** (only `scripts/*.mjs`) | Limited automated regression safety | Add a runner when justified (see CLAUDE.md) |

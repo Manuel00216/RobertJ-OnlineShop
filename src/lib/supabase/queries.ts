@@ -8,6 +8,7 @@ import { DATABASE_TABLES } from "@/constants/database";
 import { ROUTES } from "@/constants/routes";
 import {
   ORDER_STATUS,
+  PAYMENT_STATUS,
   PRODUCT_STATUS,
   type OrderStatus,
   type ProductCondition,
@@ -45,6 +46,7 @@ import type {
 } from "@/features/orders/types/order.types";
 import type { UpdateProfileInput } from "@/features/account/schemas/account.schema";
 import type { Profile } from "@/features/account/types/account.types";
+import type { Payment, PaymentDecision } from "@/features/payments/types/payment.types";
 
 /**
  * Centralized, reusable Supabase data-access layer.
@@ -630,7 +632,7 @@ const ORDER_COLUMNS = `
   id, order_number, seller_id, subtotal_cents, shipping_fee_cents, total_cents,
   currency, payment_status, order_status, shipping_address, notes, placed_at,
   paid_at, shipped_at, delivered_at, cancelled_at,
-  seller:profiles!orders_seller_id_fkey ( full_name, username ),
+  seller:profiles!orders_seller_id_fkey ( full_name, username, payment_qr_url ),
   order_items (
     id, product_id, product_title, quantity, unit_price_cents, subtotal_cents,
     product:products!order_items_product_id_fkey ( slug, product_images ( url ) )
@@ -639,7 +641,7 @@ const ORDER_COLUMNS = `
 
 type OrderRowWithItems = Omit<OrderRow, "shipping_address"> & {
   shipping_address: Json;
-  seller: Pick<ProfileRow, "full_name" | "username"> | null;
+  seller: Pick<ProfileRow, "full_name" | "username" | "payment_qr_url"> | null;
   order_items: Array<
     OrderItemRow & {
       product: { slug: string; product_images: { url: string }[] } | null;
@@ -682,6 +684,7 @@ function toOrder(row: OrderRowWithItems): Order {
     notes: row.notes,
     sellerId: row.seller_id,
     sellerName: row.seller?.full_name ?? row.seller?.username ?? null,
+    sellerPaymentQrUrl: row.seller?.payment_qr_url ?? null,
     items: (row.order_items ?? []).map((item) => ({
       id: item.id,
       productId: item.product_id,
@@ -895,6 +898,7 @@ function toProfile(
     | "avatar_url"
     | "phone"
     | "bio"
+    | "payment_qr_url"
     | "role"
   >,
 ): Profile {
@@ -905,6 +909,7 @@ function toProfile(
     avatarUrl: row.avatar_url,
     phone: row.phone,
     bio: row.bio,
+    paymentQrUrl: row.payment_qr_url,
     role: row.role,
   };
 }
@@ -943,6 +948,7 @@ export async function updateMyProfile(
       avatar_url: input.avatarUrl || null,
       phone: input.phone || null,
       bio: input.bio || null,
+      payment_qr_url: input.paymentQrUrl || null,
     })
     .eq("id", userId);
 
@@ -961,6 +967,178 @@ export async function updateMyProfile(
     throw new Error("Failed to load your profile after saving.");
   }
   return profile;
+}
+
+// ============================================================================
+// Payments (QR receipt upload + manual verification — ADR-008)
+// ============================================================================
+
+type PaymentRow = Database["public"]["Tables"]["payments"]["Row"];
+
+/**
+ * Payment columns plus the parent order's number and buyer name, for the
+ * seller/admin verification queue. Literal for the same reason as
+ * `PRODUCT_COLUMNS`/`ORDER_COLUMNS` — parsed at the type level, must not be
+ * interpolated.
+ */
+const PAYMENT_COLUMNS = `
+  id, order_id, receipt_path, failure_reason, payment_method_type, amount_cents,
+  currency, status, verified_by, verified_at, created_at,
+  order:orders!payments_order_id_fkey (
+    order_number,
+    buyer:profiles!orders_buyer_id_fkey ( full_name, username )
+  )
+`;
+
+type PaymentRowWithOrder = PaymentRow & {
+  order: {
+    order_number: string;
+    buyer: Pick<ProfileRow, "full_name" | "username"> | null;
+  } | null;
+};
+
+function toPayment(row: PaymentRowWithOrder): Payment {
+  return {
+    id: row.id,
+    orderId: row.order_id,
+    orderNumber: row.order?.order_number ?? "",
+    buyerName: row.order?.buyer?.full_name ?? row.order?.buyer?.username ?? null,
+    amountCents: row.amount_cents,
+    currency: row.currency,
+    status: row.status,
+    receiptPath: row.receipt_path,
+    failureReason: row.failure_reason,
+    verifiedBy: row.verified_by,
+    verifiedAt: row.verified_at,
+    createdAt: row.created_at,
+  };
+}
+
+/**
+ * Uploads a QR payment receipt image to the private `payment-receipts`
+ * bucket. Path is `{orderId}/{uuid}.{ext}` — RLS on `storage.objects` (see
+ * the storage migration) authorizes via the order, not the path alone.
+ * Returns the storage path (not a URL — the bucket is private).
+ */
+export async function uploadPaymentReceipt(
+  orderId: string,
+  file: File,
+): Promise<string> {
+  const supabase = await createSupabaseServerClient();
+  const ext = file.name.split(".").pop() ?? "jpg";
+  const path = `${orderId}/${crypto.randomUUID()}.${ext}`;
+
+  const { error } = await supabase.storage
+    .from("payment-receipts")
+    .upload(path, file, { contentType: file.type });
+
+  if (error) {
+    throw new Error(`Failed to upload receipt: ${error.message}`);
+  }
+  return path;
+}
+
+/**
+ * Records a buyer's QR payment submission via the `submit_qr_payment` RPC —
+ * the sole write path into `payments` for buyers (no direct INSERT grant
+ * exists). Re-prices from the order's own total; ownership and
+ * already-pending checks happen inside the RPC.
+ */
+export async function submitQrPayment(
+  orderId: string,
+  receiptPath: string,
+): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("submit_qr_payment", {
+    p_order_id: orderId,
+    p_receipt_path: receiptPath,
+  });
+
+  if (error) {
+    throw new Error(
+      mapPostgresError(error, "Could not submit your payment receipt."),
+    );
+  }
+}
+
+/**
+ * Seller (of the order) or admin marks a pending payment paid/failed via the
+ * `verify_payment` RPC — the sole write path for verification (no direct
+ * UPDATE grant exists). Also flips the parent order's `payment_status` in the
+ * same RPC transaction.
+ */
+export async function verifyPayment(
+  paymentId: string,
+  decision: PaymentDecision,
+): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("verify_payment", {
+    p_payment_id: paymentId,
+    p_decision: decision,
+  });
+
+  if (error) {
+    throw new Error(mapPostgresError(error, "Could not verify this payment."));
+  }
+}
+
+/**
+ * Short-lived signed URL for a receipt image — the bucket is private, so
+ * there is no public URL to store or render directly.
+ */
+export async function getPaymentReceiptSignedUrl(path: string): Promise<string> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.storage
+    .from("payment-receipts")
+    .createSignedUrl(path, 60 * 10);
+
+  if (error || !data) {
+    throw new Error(`Failed to load receipt: ${error?.message ?? "unknown error"}`);
+  }
+  return data.signedUrl;
+}
+
+/**
+ * Pending payments for the verification queue. No manual `seller_id`
+ * filtering here — RLS alone restricts visible rows to the caller's own
+ * orders-as-seller, or all rows for an admin (same "RLS is the primary
+ * boundary" pattern as everywhere else in this file).
+ */
+export async function listPendingPayments(): Promise<Payment[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PAYMENTS)
+    .select(PAYMENT_COLUMNS)
+    .eq("status", PAYMENT_STATUS.pending)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new Error(`Failed to load pending payments: ${error.message}`);
+  }
+
+  return (data ?? []).map((row) => toPayment(row as PaymentRowWithOrder));
+}
+
+/**
+ * The active (pending) payment for one of the buyer's own orders, or null if
+ * none has been submitted yet. Used by the order detail page to decide
+ * whether to show the receipt-upload prompt or a "submitted" status.
+ */
+export async function getActivePaymentForOrder(
+  orderId: string,
+): Promise<Payment | null> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PAYMENTS)
+    .select(PAYMENT_COLUMNS)
+    .eq("order_id", orderId)
+    .in("status", [PAYMENT_STATUS.pending, PAYMENT_STATUS.paid])
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to load payment: ${error.message}`);
+  }
+  return data ? toPayment(data as PaymentRowWithOrder) : null;
 }
 
 // ============================================================================

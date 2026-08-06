@@ -15,17 +15,12 @@ import { CheckoutGroupCard } from "@/features/checkout/components/CheckoutGroupC
 import { CheckoutTotals } from "@/features/checkout/components/CheckoutTotals";
 import { PaymentMethodCard } from "@/features/checkout/components/PaymentMethodCard";
 import { ShippingAddressForm } from "@/features/checkout/components/ShippingAddressForm";
-import { StripePaymentFlow } from "@/features/checkout/components/StripePaymentFlow";
-import { CHECKOUT_COPY } from "@/features/checkout/constants/checkout.constants";
+import { CHECKOUT_CONSTANTS, CHECKOUT_COPY } from "@/features/checkout/constants/checkout.constants";
 import {
   shippingAddressSchema,
   type ShippingAddressInput,
 } from "@/features/checkout/schemas/checkout.schema";
-import type {
-  PaymentMethod,
-  PlaceOrderResult,
-  PlacedOrder,
-} from "@/features/checkout/types/checkout.types";
+import type { PaymentMethod, PlaceOrderResult } from "@/features/checkout/types/checkout.types";
 import { groupCartBySeller } from "@/features/checkout/utils/groupCartBySeller";
 import type { ActionResult } from "@/types/action.types";
 
@@ -37,7 +32,7 @@ const EMPTY_ADDRESS: ShippingAddressInput = {
   line2: "",
   city: "",
   postalCode: "",
-  country: "",
+  country: CHECKOUT_CONSTANTS.shippingCountry,
   phone: "",
 };
 
@@ -45,7 +40,9 @@ const EMPTY_ADDRESS: ShippingAddressInput = {
  * The checkout flow: reads the guest cart, groups it by seller, collects a
  * shipping address (validated client-side then server-side), and submits to
  * `placeOrderAction`. Handles partial success explicitly — placed groups are
- * removed from the cart, failed groups stay with a clear reason.
+ * removed from the cart, failed groups stay with a clear reason. On full
+ * success, hands off to the order-confirmation page rather than the raw
+ * order-history list.
  */
 export function CheckoutForm() {
   const router = useRouter();
@@ -58,8 +55,6 @@ export function CheckoutForm() {
   const [formError, setFormError] = useState<string | null>(null);
   const [result, setResult] = useState<PlaceOrderResult | null>(null);
   const [method, setMethod] = useState<PaymentMethod>("cod");
-  const [payStage, setPayStage] = useState<"form" | "paying">("form");
-  const [cardOrders, setCardOrders] = useState<PlacedOrder[] | null>(null);
   const [isPending, startTransition] = useTransition();
 
   if (items.length === 0) {
@@ -75,6 +70,9 @@ export function CheckoutForm() {
     0,
   );
   const grandTotalCents = grandSubtotalCents + grandShippingCents;
+  // Assumes every group shares one currency (PHP) — this marketplace is
+  // single-market/PHP-only by design (see siteConfig, README), not a
+  // multi-currency checkout. A cart mixing currencies isn't a supported case.
   const currency = groups[0]?.currency;
 
   function handleChange(field: keyof ShippingAddressInput, value: string) {
@@ -117,37 +115,17 @@ export function CheckoutForm() {
       setResult(actionResult.data);
       const placedProductIds = created.flatMap((order) => order.productIds);
 
-      if (method === "card") {
-        if (created.length > 0) {
-          // Card: orders are placed (payment_status pending). Remove the placed
-          // items so a refresh can't re-place them, then move to Stripe payment.
-          if (placedProductIds.length > 0) removeMany(placedProductIds);
-          setCardOrders(created);
-          setPayStage("paying");
-        }
-        return;
-      }
-
       if (failed.length === 0) {
-        // Full success: clear the cart and land on the order history.
+        // Full success: clear the cart and hand off to the confirmation page.
         clear();
-        router.push(ROUTES.orders);
+        const orderIds = created.map((order) => order.orderId);
+        router.push(`${ROUTES.checkoutConfirmation}?orders=${orderIds.join(",")}`);
         return;
       }
 
       // Partial success: drop only placed items; keep failed ones to fix/retry.
       if (placedProductIds.length > 0) removeMany(placedProductIds);
     });
-  }
-
-  function handleCardComplete() {
-    // Remove only the placed lines. Failed (un-placed) groups must stay in the
-    // cart — clearing the whole cart here would silently drop the items the
-    // placement message just promised are "still in your cart" (audit H2).
-    const placedProductIds =
-      cardOrders?.flatMap((order) => order.productIds) ?? [];
-    if (placedProductIds.length > 0) removeMany(placedProductIds);
-    router.push(ROUTES.orders);
   }
 
   const partialFailed = result?.failed ?? [];
@@ -214,6 +192,9 @@ export function CheckoutForm() {
           />
 
           <PaymentMethodCard method={method} onChange={setMethod} />
+          {method === "qr_upload" ? (
+            <p className="text-xs text-rj-gray-600">{CHECKOUT_COPY.qrNote}</p>
+          ) : null}
         </div>
 
         <aside className="flex flex-col gap-4">
@@ -227,35 +208,23 @@ export function CheckoutForm() {
             />
           </div>
 
-          {payStage === "paying" && cardOrders ? (
-            <StripePaymentFlow orders={cardOrders} onComplete={handleCardComplete} />
-          ) : (
-            <>
-              <Button
-                type="submit"
-                variant="rj"
-                size="rj"
-                isLoading={isPending}
-                className="w-full"
-              >
-                {isPending
-                  ? CHECKOUT_COPY.placingOrder
-                  : method === "card"
-                    ? CHECKOUT_COPY.continueToPayment
-                    : CHECKOUT_COPY.placeOrder}
-              </Button>
+          <Button
+            type="submit"
+            variant="rj"
+            size="rj"
+            isLoading={isPending}
+            className="w-full"
+          >
+            {isPending ? CHECKOUT_COPY.placingOrder : CHECKOUT_COPY.placeOrder}
+          </Button>
 
-              {formError ? (
-                <ErrorState title="Couldn't place your order" message={formError} />
-              ) : null}
+          {formError ? (
+            <ErrorState title="Couldn't place your order" message={formError} />
+          ) : null}
 
-              {method === "cod" ? (
-                <p className="text-center text-xs text-rj-gray-600">
-                  {CHECKOUT_COPY.agreeNote}
-                </p>
-              ) : null}
-            </>
-          )}
+          <p className="text-center text-xs text-rj-gray-600">
+            {CHECKOUT_COPY.agreeNote}
+          </p>
         </aside>
       </div>
     </form>

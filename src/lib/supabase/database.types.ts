@@ -29,6 +29,8 @@ export interface Database {
           avatar_url: string | null;
           phone: string | null;
           bio: string | null;
+          /** Seller's receiving QR code image; null for buyers (also DB-enforced via CHECK). */
+          payment_qr_url: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -40,6 +42,7 @@ export interface Database {
           avatar_url?: string | null;
           phone?: string | null;
           bio?: string | null;
+          payment_qr_url?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -275,36 +278,29 @@ export interface Database {
         Row: {
           id: string;
           order_id: string;
-          provider: string;
-          provider_transaction_id: string;
-          stripe_event_id: string | null;
-          charge_id: string | null;
-          customer_id: string | null;
-          customer_email: string | null;
-          receipt_url: string | null;
+          /** Supabase Storage object path in the private payment-receipts bucket, not a public URL. */
+          receipt_path: string | null;
           failure_reason: string | null;
           payment_method_type: Database["public"]["Enums"]["payment_method_type"];
           amount_cents: number;
           currency: string;
           status: Database["public"]["Enums"]["payment_status"];
+          verified_by: string | null;
+          verified_at: string | null;
           created_at: string;
           updated_at: string;
         };
         Insert: {
           id?: string;
           order_id: string;
-          provider?: string;
-          provider_transaction_id: string;
-          stripe_event_id?: string | null;
-          charge_id?: string | null;
-          customer_id?: string | null;
-          customer_email?: string | null;
-          receipt_url?: string | null;
+          receipt_path?: string | null;
           failure_reason?: string | null;
           payment_method_type?: Database["public"]["Enums"]["payment_method_type"];
           amount_cents: number;
           currency?: string;
           status?: Database["public"]["Enums"]["payment_status"];
+          verified_by?: string | null;
+          verified_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -357,13 +353,27 @@ export interface Database {
         };
         Returns: boolean;
       };
+      submit_qr_payment: {
+        Args: {
+          p_order_id: string;
+          p_receipt_path: string;
+        };
+        Returns: Database["public"]["Tables"]["payments"]["Row"];
+      };
+      verify_payment: {
+        Args: {
+          p_payment_id: string;
+          p_decision: Database["public"]["Enums"]["payment_status"];
+        };
+        Returns: Database["public"]["Tables"]["payments"]["Row"];
+      };
     };
 
     Enums: {
       user_role: "buyer" | "seller" | "admin";
       product_status: "draft" | "active" | "sold" | "archived";
       product_condition: "new" | "like_new" | "good" | "fair" | "poor";
-      payment_method_type: "cod" | "card";
+      payment_method_type: "cod" | "card" | "qr_upload";
       payment_status:
         | "pending"
         | "paid"

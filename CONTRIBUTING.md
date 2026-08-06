@@ -14,7 +14,7 @@
 
 ```bash
 npm install
-cp .env.example .env.local     # fill in your Supabase (and, if needed, Stripe) values
+cp .env.example .env.local     # fill in your Supabase values
 npm run dev
 ```
 
@@ -33,7 +33,7 @@ See [README.md → Getting Started](./README.md#getting-started) for the full en
 | `refactor/` | Non-behavioral restructuring |
 | `docs/` | Documentation-only changes |
 | `chore/` | Tooling, dependencies, config |
-| `spike/` | Explicitly experimental/provisional work (see [DECISIONS.md → ADR-014](./DECISIONS.md#adr-014-stripe-integration-is-a-provisional-spike) for what a spike looks like) |
+| `spike/` | Explicitly experimental/provisional work (see [DECISIONS.md → ADR-014](./DECISIONS.md#adr-014-stripe-integration-is-a-provisional-spike) for what a spike looked like, and how/why it was retired) |
 
 Keep the description short, kebab-case, and scoped to one module where possible (matches [MODULES.md](./MODULES.md) module names).
 
@@ -104,14 +104,14 @@ npm run build       # production build — the strongest local signal something 
 There is **no automated test runner** installed today — this is a recorded, deliberate decision, not an oversight (see [DECISIONS.md → ADR-015](./DECISIONS.md#adr-015-no-automated-test-runner-yet)). Until one is adopted:
 
 - Manually exercise the flow you changed in the browser (`npm run dev`).
-- For checkout/order/payment changes, also run the relevant script in `scripts/` (`e2e-flow.mjs`, `e2e-stripe.mjs`) if applicable.
+- For checkout/order/payment changes, also run `scripts/e2e-flow.mjs` if applicable.
 - Do **not** add a test framework unilaterally — it requires a new ADR (see [CLAUDE.md → AI Non-Negotiable Rules](./CLAUDE.md#ai-non-negotiable-rules): no new libraries without clear value and approval).
 
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| App throws `Invalid environment configuration` on startup | Missing/invalid `.env.local` values | `cp .env.example .env.local` and fill in Supabase (and Stripe, currently required — see [README.md](./README.md#environment-variables)) keys; restart the dev server. |
+| App throws `Invalid environment configuration` on startup | Missing/invalid `.env.local` values | `cp .env.example .env.local` and fill in your Supabase keys (see [README.md](./README.md#environment-variables)); restart the dev server. |
 | `npm run typecheck` fails after pulling schema changes | `database.types.ts` is stale vs. the migrations you pulled | Regenerate: `npx supabase gen types typescript --project-id <project-id> > src/lib/supabase/database.types.ts`. |
 | A query returns fewer/no rows than expected, no error thrown | RLS policy is silently filtering rows for your current role | Check the relevant policy in `supabase/migrations/*.sql`; confirm you're testing as the intended role (`current_user_role()`), not accidentally as `anon`. |
 | "Only sign in with the wrong role" / dashboard 404s | `DASHBOARD_ROLES` gate (`src/constants/roles.ts`) — you're signed in as `buyer` | Sign in as a `seller`/`admin` profile, or check role via `get_my_profile()`. |

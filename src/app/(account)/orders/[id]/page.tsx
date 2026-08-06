@@ -8,7 +8,12 @@ import { OrderSummary } from "@/features/orders/components/OrderSummary";
 import { OrderTimeline } from "@/features/orders/components/OrderTimeline";
 import { PaymentStatusBadge } from "@/features/orders/components/PaymentStatusBadge";
 import { ShippingAddressCard } from "@/features/orders/components/ShippingAddressCard";
-import { getBuyerOrder, requireSessionUser } from "@/lib/supabase/queries";
+import { ReceiptUpload } from "@/features/payments/components/ReceiptUpload";
+import {
+  getActivePaymentForOrder,
+  getBuyerOrder,
+  requireSessionUser,
+} from "@/lib/supabase/queries";
 
 interface OrderDetailPageProps {
   params: Promise<{ id: string }>;
@@ -32,12 +37,39 @@ export default async function OrderDetailPage({
 
   if (!order) notFound();
 
+  // Only relevant while payment is undecided — once paid/failed, the
+  // PaymentStatusBadge below already reflects the outcome.
+  const activePayment =
+    order.paymentStatus === "pending" ? await getActivePaymentForOrder(order.id) : null;
+
   return (
     <article className="flex flex-col gap-8">
       <OrderHeader order={order} />
       <OrderTimeline status={order.status} />
       {order.cancellable ? (
         <CancelOrderButton orderId={order.id} orderNumber={order.orderNumber} />
+      ) : null}
+
+      {order.paymentStatus === "pending" ? (
+        activePayment ? (
+          <section
+            aria-label="Payment"
+            className="rounded-2xl border border-rj-gray-100 bg-rj-gray-50 p-5"
+          >
+            <p className="text-sm font-semibold text-rj-black">
+              Receipt submitted — awaiting verification.
+            </p>
+            <p className="mt-1 text-xs text-rj-gray-600">
+              {order.sellerName ?? "The seller"} will confirm your payment shortly.
+            </p>
+          </section>
+        ) : (
+          <ReceiptUpload
+            orderId={order.id}
+            sellerName={order.sellerName}
+            sellerPaymentQrUrl={order.sellerPaymentQrUrl}
+          />
+        )
       ) : null}
 
       <div className="grid gap-8 lg:grid-cols-3">

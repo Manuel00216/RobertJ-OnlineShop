@@ -49,7 +49,6 @@ Full detail and diagrams: [ARCHITECTURE.md → RBAC Model](./ARCHITECTURE.md#rba
 - All environment variables are read **only** through `src/config/env.ts`, which validates them at startup with Zod and fails fast (see [CLAUDE.md → Repository Conventions](./CLAUDE.md#repository-conventions)).
 - `SUPABASE_SERVICE_ROLE_KEY` bypasses RLS entirely — it is server-only, used exclusively for trusted server-side jobs, and must never be imported into client code or logged.
 - `.env.local` is gitignored; only `.env.example` (with empty placeholder values) is committed.
-- Stripe keys currently required by `env.ts` belong to the experimental payments spike (see [DECISIONS.md → ADR-014](./DECISIONS.md#adr-014-stripe-integration-is-a-provisional-spike)) — treat them with the same care as any live payment credential even though the integration is provisional.
 
 ## Dependency policy
 
@@ -60,7 +59,7 @@ Full detail and diagrams: [ARCHITECTURE.md → RBAC Model](./ARCHITECTURE.md#rba
 
 See [ARCHITECTURE.md → Technical Debt Register](./ARCHITECTURE.md#technical-debt-register) for the full, current list. Of particular security relevance:
 
-- **TD-3** — the Stripe spike introduces a payment code path outside the SAD's official manual-verification scope; it should not be treated as production-hardened.
+- ~~**TD-3**~~ — resolved: the Stripe-specific `payments` columns were dropped when QR receipt upload + manual verification (ADR-008) was implemented.
 - **TD-6** — no automated regression test suite; security-relevant regressions rely on manual verification and RLS as a backstop, not CI-enforced tests.
 
 ---

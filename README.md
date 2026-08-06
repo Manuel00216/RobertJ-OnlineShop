@@ -183,10 +183,10 @@ Detailed purpose, boundaries, and interactions for each module are in [`ARCHITEC
 | Cart | ✅ Completed | `src/features/cart`, `src/app/(shop)/cart` |
 | Customer Account | ✅ Completed | `src/features/account`, `src/app/(account)` |
 | Orders | ✅ Completed | `src/features/orders`, `src/app/(account)/orders` |
-| Checkout | 🚧 In Progress | `src/features/checkout`, `src/app/(shop)/checkout` |
+| Checkout | ✅ Completed (COD only — QR payment method is Phase 7/Payments scope) | `src/features/checkout`, `src/app/(shop)/checkout` |
 | Shops (multi-shop model) | ⏳ Upcoming | *(target schema; not yet built)* |
 | Inventory (dedicated module) | ⏳ Upcoming | `src/features/inventory` *(stub)* |
-| Payments (COD + QR verification) | ⏳ Upcoming | `src/features/checkout` (Stripe spike present — see below) |
+| Payments (COD + QR verification) | ✅ Completed | `src/features/payments`; receipt upload on the order detail page; verification queue at `/dashboard/payments` |
 | Reports | ⏳ Upcoming | `src/features/reports` *(stub)* |
 | Guided Product Selection | ⏳ Upcoming | `src/features/assistant` *(stub; landing preview only)* |
 
@@ -204,7 +204,7 @@ flowchart LR
     P2["Phase 2<br/>Landing Page"]
     P3["Phase 3<br/>Authentication"]
     P4["Phase 4<br/>Customer Account<br/>& Orders"]
-    P5["Phase 5<br/>Checkout<br/>(current)"]
+    P5["Phase 5<br/>Checkout"]
     P6["Phase 6<br/>Shops & Inventory"]
     P7["Phase 7<br/>Payments<br/>(COD + QR)"]
     P8["Phase 8<br/>Reports"]
@@ -213,12 +213,15 @@ flowchart LR
     P1 --> P2 --> P3 --> P4 --> P5 --> P6 --> P7 --> P8 --> P9
 
     classDef done fill:#1f7a3d,stroke:#0d3d1f,color:#fff;
-    classDef active fill:#b8860b,stroke:#6b4e06,color:#fff;
     classDef todo fill:#3a3f4b,stroke:#20242c,color:#fff;
-    class P1,P2,P3,P4 done;
-    class P5 active;
-    class P6,P7,P8,P9 todo;
+    class P1,P2,P3,P4,P5,P7 done;
+    class P6,P8,P9 todo;
 ```
+
+> [!NOTE]
+> Phase 7 (Payments) landed before Phase 6 (Shops & Inventory) — it had no dependency on the
+> shops/inventory schema work, so it wasn't blocked on phase order. Noted here rather than
+> silently reordering the roadmap.
 
 | Phase | Focus | State |
 |-------|-------|-------|
@@ -226,9 +229,9 @@ flowchart LR
 | 2 | Landing Page | ✅ |
 | 3 | Authentication (UI + flows) | ✅ |
 | 4 | Customer Account & Order Tracking | ✅ |
-| 5 | **Checkout** | 🚧 |
+| 5 | **Checkout** | ✅ |
 | 6 | Shops & Inventory (align to SAD multi-shop model) | ⏳ |
-| 7 | Payments — COD + QR receipt upload + manual verification | ⏳ |
+| 7 | Payments — COD + QR receipt upload + manual verification | ✅ |
 | 8 | Reports & analytics | ⏳ |
 | 9 | Guided Product Selection (rule-based) | ⏳ |
 
@@ -314,7 +317,7 @@ roberj-onlineshop/
 ├── .env.example           ← environment template
 ├── next.config.ts         ← Next.js config (image remote patterns, turbopack root)
 ├── supabase/migrations/   ← SQL migrations (schema, RLS, functions, triggers)
-├── scripts/               ← Node E2E helper scripts (e2e-flow, e2e-stripe)
+├── scripts/               ← Node E2E helper scripts (e2e-flow)
 ├── public/                ← static assets
 └── src/
     ├── app/               ← App Router routes ONLY (pages orchestrate; never touch the DB)
@@ -391,12 +394,10 @@ Defined and validated in [`src/config/env.ts`](./src/config/env.ts):
 | `NEXT_PUBLIC_SUPABASE_URL` | ✅ | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | ✅ | Supabase anon/public key |
 | `NEXT_PUBLIC_SITE_URL` | ➖ | Defaults to `http://localhost:3000` |
-| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | ➖ | Optional — part of the **Stripe spike**, not the official payment path; card payments stay unavailable (COD-only) until set |
-| `STRIPE_SECRET_KEY` | ➖ | Optional — server-only; part of the **Stripe spike** |
 | `SUPABASE_SERVICE_ROLE_KEY` | ➖ | Optional; trusted server-side jobs only |
 
 > [!NOTE]
-> The app boots on **Supabase credentials alone**. The Stripe keys are optional — leave them blank to run Checkout with COD only (Checkout's "Card" option is hidden automatically when unset), or set them to enable the experimental Stripe spike. Stripe is **not** the SAD's official payment path — that's **COD + QR receipt upload + manual verification**. See [Implementation Status](#implementation-status-target-vs-current).
+> The app boots on **Supabase credentials alone**. The former Stripe spike (ADR-014) has been **retired and removed** — Checkout offers **COD only** until the target QR-receipt-upload path (ADR-008) ships. See [Implementation Status](#implementation-status-target-vs-current).
 
 > [!TIP]
 > This is a **modified Next.js 16**. Its APIs and file conventions differ from older Next.js knowledge (e.g. middleware is `src/proxy.ts`, not `middleware.ts`). Before writing framework code, read the in-repo guides at `node_modules/next/dist/docs/`, as required by [`AGENTS.md`](./AGENTS.md).
@@ -434,7 +435,7 @@ The interface follows modern marketplace best practices, inspired by **Lazada, S
 | `recommendation_rules` table | ❌ Not implemented | Guided Product Selection is a landing **preview** only; `features/assistant` is a stub. |
 | `reports` table | ❌ Not implemented | `features/reports` is a stub. |
 | Unified **cart** | Client-side cart (localStorage + `useReducer`) | Guest cart is client-only by design; committed at checkout. |
-| **Payments:** COD + QR receipt upload, manual verification | **Stripe** integration (card + COD) present | ⚠️ **Stripe is an experimental spike, NOT the official capstone path.** Target remains COD + QR + manual verification. |
+| **Payments:** COD + QR receipt upload, manual verification | ✅ **Implemented** — COD (no action needed) + QR (buyer uploads a receipt, seller/admin verifies at `/dashboard/payments`) | Matches target. Stripe/card spike removed (ADR-014); its columns were dropped from `payments` when this landed. |
 
 ---
 
@@ -478,7 +479,7 @@ Beyond the current capstone scope (kept clearly separate from committed scope):
 - Richer analytics and exportable reports.
 
 > [!NOTE]
-> These are **not** in scope for the capstone and must not be implemented without explicit approval. The Stripe code currently in the repo is a spike toward a possible future gateway, not a committed feature.
+> These are **not** in scope for the capstone and must not be implemented without explicit approval. A Stripe spike toward a possible future gateway previously lived in the repo (ADR-014) and has since been removed — it was never committed scope.
 
 ---
 

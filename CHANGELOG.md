@@ -7,26 +7,64 @@ All notable changes to RoberJ Online Shop are documented here, newest first. For
 
 ## [Unreleased]
 
-### Added
-- Enterprise documentation suite: `DECISIONS.md`, `MODULES.md`, `CONTRIBUTING.md`, `SECURITY.md`, this `CHANGELOG.md`.
-- Cross-linking and governance sections added across `README.md`, `ARCHITECTURE.md`, `CLAUDE.md`.
-- `isStripeConfigured` export (`src/config/env.ts`) — client-safe check for whether the Stripe spike is available.
-
-### Fixed
-- `src/config/env.ts`: `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` and `STRIPE_SECRET_KEY` are now optional. The app boots on Supabase credentials alone, matching what the docs already claimed (see `DECISIONS.md` → ADR-014, `ARCHITECTURE.md` → TD-3, both now resolved on this point).
-- `src/lib/stripe.ts`: `getStripe()` now throws a clear, actionable error when `STRIPE_SECRET_KEY` is missing instead of passing `undefined` into the Stripe SDK.
-- `src/features/checkout/components/PaymentMethodCard.tsx`: the "Card" payment option is hidden automatically when Stripe isn't configured, so Checkout never offers a method guaranteed to fail.
-- `src/features/checkout/components/StripePaymentFlow.tsx`: guards against an unconfigured Stripe key (defensive fallback; `PaymentMethodCard` already prevents reaching this state in normal use).
-
-### Changed
-- Deduplicated the Target-vs-Current mapping across docs: `README.md → Implementation Status` is now the single canonical source; `ARCHITECTURE.md`, `MODULES.md`, and `DECISIONS.md` (ADR-014) reference it instead of restating it.
-
 ### Known gaps (tracked, not resolved)
-- Target COD + QR receipt-upload payment path not yet implemented (`payments` module remains ⏳ Upcoming for its official scope).
 - `shops` / `shop_users` / `recommendation_rules` / `reports` tables not yet implemented.
 - No automated test runner (see `DECISIONS.md` → ADR-015).
+- No Admin/Shop Owner dashboard shell beyond the single `/dashboard/payments` page (Payments module).
 
 Full current-vs-target status: [README.md → Implementation Status](./README.md#implementation-status-target-vs-current) · [ARCHITECTURE.md → Technical Debt Register](./ARCHITECTURE.md#technical-debt-register).
+
+---
+
+## 2026-08-07 — Payments: QR receipt upload + manual verification (Phase 7)
+
+### Added
+- The SAD's target payment path is now fully implemented: COD (unchanged) and QR Transfer (new).
+  A buyer selects QR at checkout (informational only — `create_order` is deliberately unchanged),
+  then uploads a receipt from their order detail page (`submitQrPaymentAction`) once they've sent
+  payment via the seller's own receiving QR code (new `profiles.payment_qr_url`, seller-editable
+  via the existing `ProfileForm`). The order's seller (or an admin) verifies or rejects it from a
+  new minimal `/dashboard/payments` page — the **first real page** under `/dashboard`.
+- `submit_qr_payment`/`verify_payment` `SECURITY DEFINER` RPCs — the sole write path into
+  `payments`, mirroring `create_order`'s chokepoint pattern (no direct INSERT/UPDATE grant on the
+  table). A narrow, in-place fix to `enforce_order_update_rules` lets a seller move their own
+  order's `payment_status` from `pending` to `paid`/`failed` (previously admin-only), matching the
+  SAD's "Administrator **or** Shop Owner" language.
+- The `payment-receipts` Supabase Storage bucket — the **first Storage feature in this repo**.
+  Private, RLS-gated via a subquery against `orders` (buyer/seller/admin of that order), path
+  convention `{order_id}/{uuid}.{ext}` (deliberately not buyer-id-in-path, to avoid a spoofable
+  policy).
+- New `features/payments/` module (actions, schemas, types, components) and
+  `PAYMENTS: "payments"` added to `DATABASE_TABLES`.
+
+### Changed
+- `payments` table evolved: Stripe-only columns (`provider`, `provider_transaction_id`,
+  `stripe_event_id`, `charge_id`, `customer_id`, `customer_email`) dropped — **resolves TD-3**.
+  `receipt_url` renamed to `receipt_path` (a private Storage object path, not a public URL).
+  Added `verified_by`/`verified_at` (manual-verification audit trail). `payment_method_type` gains
+  `qr_upload` (`card` stays as inert legacy).
+- `database.types.ts` (hand-written — TD-8) updated to match.
+
+### Migrations
+- `20260807010000_evolve_payments_for_qr.sql`, `20260807020000_qr_payment_rpcs.sql`,
+  `20260807030000_payment_receipts_storage.sql`, `20260807040000_profiles_payment_qr_url.sql`.
+
+---
+
+## 2026-08-07 — Checkout audit fixes & Stripe spike retirement
+
+### Fixed
+- `checkout.schema.ts`: the optional `phone` field rejected the empty string it defaults to (regex validation ran on `""` since the field is never actually `undefined`), blocking checkout for anyone who left it blank. Now matches `account.schema.ts`'s `.or(z.literal(""))` pattern.
+
+### Added
+- Order-confirmation page (`/checkout/confirmation`) — full checkout success now hands off to a summary of the order(s) just placed instead of the raw order-history list.
+- Shipping address "Country" is now locked to Philippines (domestic-only marketplace, no courier/shipping API), enforced both in the UI and server-side (`z.literal(...)`).
+
+### Removed
+- The Stripe/card payment spike (`DECISIONS.md` → ADR-014, now retired): `stripe.actions.ts`, `StripePaymentFlow.tsx`, `lib/stripe.ts`, `scripts/e2e-stripe.mjs`, the `stripe`/`@stripe/*` npm packages, and the Stripe env vars. Audit found it had no webhook to ever move `payment_status` out of `pending` — a "successful" card payment never actually recorded as paid — so retiring it outright was safer than building the missing webhook for unsanctioned scope. Checkout is COD-only until the target QR-upload path (ADR-008) ships. The `payments` table's Stripe-specific columns remain in the schema pending a dedicated cleanup migration (TD-3).
+
+### Changed
+- Documented the checkout total's single-currency (PHP-only) assumption inline (`CheckoutForm.tsx`) rather than implementing multi-currency conversion — this marketplace is domestic/single-market by design.
 
 ---
 

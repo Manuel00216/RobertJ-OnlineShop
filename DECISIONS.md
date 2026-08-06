@@ -34,7 +34,7 @@ Every decision is a numbered ADR with a fixed shape: **Context → Problem → O
 | [ADR-011](#adr-011-money-stored-as-integer-cents) | Money stored as integer cents | ✅ Accepted |
 | [ADR-012](#adr-012-one-order-per-seller-cart-split-at-checkout) | One order per seller; cart split at checkout | ✅ Accepted |
 | [ADR-013](#adr-013-guest-cart-is-client-side-only) | Guest cart is client-side only | ✅ Accepted |
-| [ADR-014](#adr-014-stripe-integration-is-a-provisional-spike) | Stripe integration is a provisional spike | 🧪 Provisional |
+| [ADR-014](#adr-014-stripe-integration-is-a-provisional-spike) | Stripe integration is a provisional spike | ⛔ Retired |
 | [ADR-015](#adr-015-no-automated-test-runner-yet) | No automated test runner yet | ✅ Accepted (deferred) |
 
 ---
@@ -220,14 +220,14 @@ Every decision is a numbered ADR with a fixed shape: **Context → Problem → O
 2. **Manual verification**: buyer chooses COD, or uploads a QR-transfer receipt image; an admin/shop owner manually confirms payment.
 3. No payment tracking at all (trust-based).
 
-**Decision:** Option 2, per the SAD. This is the **official, committed payment path** for the capstone.
+**Decision:** Option 2, per the SAD. This is the **official, committed payment path** for the capstone. **Implemented**: `submit_qr_payment`/`verify_payment` RPCs (see [ARCHITECTURE.md → Payments RPCs](./ARCHITECTURE.md#payments-rpcs-qr-receipt-upload-manual-verification)), the private `payment-receipts` Storage bucket, and the verification queue at `/dashboard/payments`.
 
 **Consequences:**
 - No PCI compliance burden; no gateway fees; no external payment API dependency.
-- Payment confirmation has a human-in-the-loop step and corresponding `pending → paid` transition, owned by staff, not automated.
-- Receipt images need Supabase Storage with appropriate access policies (buyer can upload/view own; shop owner/admin can view; no public access).
+- Payment confirmation has a human-in-the-loop step and corresponding `pending → paid` transition, owned by staff (seller of the order, or admin — not automated).
+- Receipt images live in Supabase Storage with the access policy this ADR specified: buyer can upload/view own; shop owner/admin can view; no public access.
 
-**Future Revisit:** If transaction volume outgrows manual verification, revisit — but this is explicitly **out of scope** for the current capstone (see [README.md → Future Enhancements](./README.md#future-enhancements)). See also **ADR-014** for the current Stripe spike, which is not this decision.
+**Future Revisit:** If transaction volume outgrows manual verification, revisit — but this is explicitly **out of scope** for the current capstone (see [README.md → Future Enhancements](./README.md#future-enhancements)). See also **ADR-014** for the (now-retired) Stripe spike, which was never this decision.
 
 ---
 
@@ -353,25 +353,31 @@ Every decision is a numbered ADR with a fixed shape: **Context → Problem → O
 
 ## ADR-014: Stripe integration is a provisional spike
 
-**Status:** 🧪 Provisional — not committed scope
+**Status:** ⛔ Retired — spike removed, not adopted
 
-**Context:** The SAD's official payment path is COD + QR receipt upload with manual verification ([ADR-008](#adr-008-manual-payment-verification-cod--qr-receipt-no-gateway)). The current codebase nonetheless contains a working Stripe integration (`stripe.actions.ts`, `payments` table with Stripe-specific columns, `scripts/e2e-stripe.mjs`).
+**Context:** The SAD's official payment path is COD + QR receipt upload with manual verification ([ADR-008](#adr-008-manual-payment-verification-cod--qr-receipt-no-gateway)). The codebase previously contained a working Stripe integration (`stripe.actions.ts`, `StripePaymentFlow.tsx`, `lib/stripe.ts`, `scripts/e2e-stripe.mjs`), gated behind optional env keys.
 
 **Problem:** Document this honestly: is Stripe the payment system, or an experiment that happened to get committed?
 
 **Options Considered:**
 1. Treat Stripe as the real, sanctioned payment path (would require amending the SAD).
-2. **Treat Stripe as a provisional spike** — useful exploration, not official scope — and keep building the target COD/QR path.
-3. Delete the Stripe code immediately.
+2. Treat Stripe as a provisional spike — useful exploration, not official scope — and keep building the target COD/QR path.
+3. **Delete the Stripe code once its absence stops being a regression.**
 
-**Decision:** Option 2. The Stripe code stays in the repo (it's real, working code and removing it destroys information), but is explicitly labeled **not the official capstone path** everywhere it's referenced. See [README.md → Implementation Status](./README.md#implementation-status-target-vs-current) and [ARCHITECTURE.md → Technical Debt Register (TD-3)](./ARCHITECTURE.md#technical-debt-register).
+**Decision:** Option 3 (superseding the original Option 2 decision below, kept for history). The spike surfaced a real gap during audit: it had no webhook/callback to ever move `payment_status` out of `pending`, so a "successful" card payment never recorded as paid in the DB — worse than merely provisional, it was silently misleading. Rather than build the missing webhook for code that was never sanctioned scope, the Stripe code (`stripe.actions.ts`, `StripePaymentFlow.tsx`, `lib/stripe.ts`, `scripts/e2e-stripe.mjs`, the Stripe npm packages, and the Stripe env vars) was removed. Checkout now offers COD only. The `payments` table's Stripe-specific columns (`provider_transaction_id`, `stripe_event_id`, `charge_id`, …) remain in the schema — a DB migration to drop them is a separate, deliberate decision, not bundled into this removal (see [ARCHITECTURE.md → Technical Debt Register (TD-3)](./ARCHITECTURE.md#technical-debt-register)).
 
-**Consequences:**
-- ~~`src/config/env.ts` made Stripe keys required to boot~~ — **resolved**: Stripe keys are now optional (`env.ts`), `getStripe()` fails clearly instead of booting broken, and Checkout's Card option is hidden automatically via `isStripeConfigured` when unset. The app runs on Supabase credentials alone, matching this ADR's intent. Remaining TD-3 impact (see [ARCHITECTURE.md → Technical Debt Register](./ARCHITECTURE.md#technical-debt-register)) is scope-only, not a boot blocker.
-- New payments work should build the **target** COD/QR flow, not extend the Stripe branch, unless a new ADR supersedes ADR-008.
-- Do not present Stripe as done/shippable in demos or documentation without this caveat attached.
+<details>
+<summary>Original decision (superseded, kept for history)</summary>
 
-**Future Revisit:** Either (a) a new ADR formally adopts a payment gateway (requires SAD amendment / stakeholder sign-off), in which case this ADR is superseded, or (b) the Stripe code is retired once the COD/QR path ships, in which case this ADR is closed as "spike concluded, not adopted."
+Original decision: Option 2. The Stripe code stayed in the repo (real, working code; removing it would destroy information), explicitly labeled **not the official capstone path** everywhere it was referenced.
+
+**Consequences (at the time):**
+- `src/config/env.ts` made Stripe keys optional; `getStripe()` failed clearly instead of booting broken; Checkout's Card option was hidden automatically via `isStripeConfigured` when unset.
+- New payments work was directed to build the **target** COD/QR flow, not extend the Stripe branch.
+
+</details>
+
+**Future Revisit:** A new ADR would be required to formally adopt a payment gateway (requires SAD amendment / stakeholder sign-off) — this ADR does not preclude that, it only closes the unsanctioned spike.
 
 ---
 
@@ -379,7 +385,7 @@ Every decision is a numbered ADR with a fixed shape: **Context → Problem → O
 
 **Status:** ✅ Accepted (deferred, not rejected)
 
-**Context:** The project has no Jest/Vitest/Playwright/RTL installed. The only automated verification is two Node scripts (`scripts/e2e-flow.mjs`, `scripts/e2e-stripe.mjs`) plus `lint`/`typecheck`.
+**Context:** The project has no Jest/Vitest/Playwright/RTL installed. The only automated verification is a Node script (`scripts/e2e-flow.mjs`; the former `scripts/e2e-stripe.mjs` was removed with the Stripe spike, ADR-014) plus `lint`/`typecheck`.
 
 **Problem:** Should the team invest in a test framework now, mid-capstone, or continue relying on manual verification plus typecheck/lint/build?
 

@@ -8,6 +8,13 @@
  */
 export const CHECKOUT_CONSTANTS = {
   shippingFeeCentsPerSeller: 0,
+  /**
+   * This marketplace is domestic-only (no courier/shipping API — see SAD Out
+   * of Scope), so the shipping-address "Country" field is locked to this
+   * value rather than free text. Single source of truth for the schema
+   * (`checkout.schema.ts`) and the form's default/locked value.
+   */
+  shippingCountry: "Philippines",
 } as const;
 
 export const CHECKOUT_COPY = {
@@ -15,13 +22,9 @@ export const CHECKOUT_COPY = {
   placingOrder: "Placing order…",
   codLabel: "Cash on Delivery",
   codDescription: "Pay when your order arrives. Verification happens on delivery.",
-  cardLabel: "Card",
-  cardDescription: "Pay now securely with Stripe.",
-  continueToPayment: "Continue to payment",
-  payNow: "Pay now",
-  processingPayment: "Processing payment…",
-  paymentPending:
-    "Your payment is still being processed. We'll confirm it by email and update your order shortly.",
+  qrLabel: "QR Transfer",
+  qrDescription: "Scan the seller's QR code and upload your receipt after placing your order.",
+  qrNote: "You'll get payment instructions and can upload your receipt once your order is placed.",
   paymentSectionTitle: "Payment",
   emptyTitle: "Your cart is empty",
   emptyDescription: "Add items to your cart before checking out.",

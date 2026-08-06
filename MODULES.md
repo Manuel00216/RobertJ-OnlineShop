@@ -108,15 +108,15 @@
 |---|---|
 | **Purpose** | Convert a cart spanning multiple shops into one order per shop, capturing shipping details and a payment method. |
 | **Responsibilities** | Group cart by seller; collect shipping address; select payment method; invoke order creation; surface per-shop totals. |
-| **Features** | Shipping address form, per-shop order grouping, payment method selection, order totals, empty-cart handling. |
-| **Pages** | `src/app/(shop)/checkout/page.tsx` (protected route). |
-| **Components** | `features/checkout/components/{CheckoutEmptyState,CheckoutForm,CheckoutGroupCard,CheckoutItemsList,CheckoutTotals,PaymentMethodCard,ShippingAddressForm,StripePaymentFlow}`. |
-| **Server Actions** | `features/checkout/actions/checkout.actions.ts` — `placeOrderAction`; `features/checkout/actions/stripe.actions.ts` — `createCheckoutIntentAction` (🧪 spike — see [DECISIONS.md → ADR-014](./DECISIONS.md#adr-014-stripe-integration-is-a-provisional-spike)). |
-| **Services** | `lib/supabase/queries.ts` — `createOrder` (wraps the `create_order` RPC); `features/checkout/utils/groupCartBySeller`. |
+| **Features** | Shipping address form (country locked to Philippines — domestic-only, no courier API), per-shop order grouping, payment method selection (COD or QR Transfer — QR is informational only at this step, see Payments), order totals, order-confirmation page, empty-cart handling. |
+| **Pages** | `src/app/(shop)/checkout/page.tsx`, `checkout/confirmation/page.tsx` (both protected routes). |
+| **Components** | `features/checkout/components/{CheckoutEmptyState,CheckoutForm,CheckoutGroupCard,CheckoutItemsList,CheckoutTotals,PaymentMethodCard,ShippingAddressForm}`. |
+| **Server Actions** | `features/checkout/actions/checkout.actions.ts` — `placeOrderAction`. |
+| **Services** | `lib/supabase/queries.ts` — `createOrder` (wraps the `create_order` RPC), `getBuyerOrder` (confirmation page); `features/checkout/utils/groupCartBySeller`. |
 | **Database Tables** | Writes `orders`, `order_items` via `create_order`; reads `products` for price/stock validation. |
-| **Dependencies** | Cart (source), Orders (target of creation), Payments (method selection). |
-| **Current Status** | 🚧 In Progress — the current, active development phase. |
-| **Future Work** | Wire the **target** COD + QR-upload payment path (currently the UI offers a card/Stripe path alongside COD); retire the Stripe branch per ADR-014 once the target path ships. |
+| **Dependencies** | Cart (source), Orders (target of creation), Payments (method selection + the actual receipt-upload/verification flow, which lives entirely in the Payments module, not here). |
+| **Current Status** | ✅ Completed (the Stripe/card spike, ADR-014, was removed — see [DECISIONS.md → ADR-014](./DECISIONS.md#adr-014-stripe-integration-is-a-provisional-spike)). |
+| **Future Work** | None outstanding — `create_order` is deliberately unchanged by the QR payment work; payment method is not persisted at order-placement time (see Payments module). Assumes a single currency (PHP) across a cart — documented assumption, not a supported multi-currency checkout. |
 
 ---
 
@@ -142,18 +142,17 @@
 
 | Field | Detail |
 |---|---|
-| **Purpose** (target) | Manual, verifiable payment confirmation via **Cash on Delivery** and **QR receipt upload** — no payment gateway, per the SAD. |
-| **Responsibilities** (target) | Capture payment method at checkout; store/display uploaded QR receipts; let staff mark a payment verified/rejected; keep `payment_status` server-controlled. |
-| **Features** (target) | COD selection, QR receipt image upload, admin/owner manual verification queue, payment status on order detail. |
-| **Features** (current) | Card payment via Stripe PaymentIntents (🧪 spike) + COD selection. |
-| **Pages** | No dedicated payments page yet; payment method selection lives inside Checkout; status is surfaced on Order detail. |
-| **Components** | `features/checkout/components/{PaymentMethodCard,StripePaymentFlow}`. |
-| **Server Actions** | `features/checkout/actions/stripe.actions.ts` — `createCheckoutIntentAction` (spike). Target-path manual-verification actions do not exist yet. |
-| **Services** | `lib/stripe.ts` (spike); `payments` table access in `lib/supabase/queries.ts`. |
-| **Database Tables** | `payments` (current schema includes Stripe-specific columns: `provider_transaction_id`, `stripe_event_id`, `charge_id` — these belong to the spike, not the target). |
-| **Dependencies** | Checkout (method selection), Orders (`payment_status` surfaced there), Supabase Storage (target: receipt images). |
-| **Current Status** | ⏳ Upcoming for the **target** COD/QR path. 🧪 Provisional for the Stripe/card path — explicitly not official scope (see [DECISIONS.md → ADR-008](./DECISIONS.md#adr-008-manual-payment-verification-cod--qr-receipt-no-gateway) and [ADR-014](./DECISIONS.md#adr-014-stripe-integration-is-a-provisional-spike)). |
-| **Future Work** | Build QR upload + Storage policies + manual-verification action + verification queue UI for Admin/Shop Owner; add `qr_upload` to `payment_method_type`; retire Stripe columns/branch. |
+| **Purpose** | Manual, verifiable payment confirmation via **Cash on Delivery** and **QR receipt upload** — no payment gateway, per the SAD. |
+| **Responsibilities** | Capture payment method at checkout; store/display uploaded QR receipts; let staff mark a payment verified/rejected; keep `payment_status` server-controlled. |
+| **Features** | COD (no action needed — pay on delivery, no `payments` row). QR: buyer uploads a receipt from the order detail page; seller (of that order) or admin manually verifies/rejects from `/dashboard/payments`; buyer sees the seller's receiving QR code (`profiles.payment_qr_url`, seller-editable) once they choose QR at checkout. |
+| **Pages** | `src/app/dashboard/payments/page.tsx` — the verification queue, and the **first real page** under `/dashboard` (previously an empty stub). Receipt upload lives on the order detail page (Orders module), not a dedicated Payments page. |
+| **Components** | `features/payments/components/{ReceiptUpload,VerificationQueue,VerificationCard}`; `features/checkout/components/PaymentMethodCard` (method selection, informational only). |
+| **Server Actions** | `features/payments/actions/payment.actions.ts` — `submitQrPaymentAction`, `verifyPaymentAction`. |
+| **Services** | `lib/supabase/queries.ts` — `uploadPaymentReceipt`, `submitQrPayment`, `verifyPayment`, `getPaymentReceiptSignedUrl`, `listPendingPayments`, `getActivePaymentForOrder`. All writes go through the `submit_qr_payment`/`verify_payment` `SECURITY DEFINER` RPCs (see [ARCHITECTURE.md → Payments RPCs](./ARCHITECTURE.md#payments-rpcs-qr-receipt-upload-manual-verification)) — no direct table grant exists. |
+| **Database Tables** | `payments` (Stripe-specific columns dropped — resolved TD-3; now `receipt_path`, `verified_by`, `verified_at`); `profiles.payment_qr_url`; the private `payment-receipts` Storage bucket (first Storage feature in this repo). |
+| **Dependencies** | Checkout (method selection UI only — no data dependency, `create_order` is unchanged), Orders (`payment_status` surfaced there; receipt upload lives on the order detail page), Supabase Storage. |
+| **Current Status** | ✅ Completed for the SAD's full target scope (COD + QR receipt upload + manual verification). The Stripe/card spike is retired, not provisional (see [DECISIONS.md → ADR-008](./DECISIONS.md#adr-008-manual-payment-verification-cod--qr-receipt-no-gateway) and [ADR-014](./DECISIONS.md#adr-014-stripe-integration-is-a-provisional-spike)). |
+| **Future Work** | The verification queue is a single page, not a full Admin/Shop Owner dashboard shell (Inventory/Reports/etc. still don't exist) — a fuller shell is Shops & Inventory / Reports phase work, not a Payments gap. |
 
 ---
 
@@ -200,14 +199,14 @@
 |---|---|
 | **Purpose** | Full platform administration: users, shops, products, inventory, payments, reports, settings — the Administrator's SAD scope. |
 | **Responsibilities** (target) | Cross-shop oversight; user/role management; payment verification authority; platform settings. |
-| **Pages** | Reserved under `/dashboard` (shared prefix with Shop Owner; `DASHBOARD_ROLES = [seller, admin]`); no admin-specific pages built. |
-| **Components** | None — `src/features/dashboard/` is a stub shared by both Admin and Shop Owner. |
-| **Server Actions** | None yet; will call into existing module services (Products, Orders, Payments) rather than duplicating their logic. |
-| **Services** | Will reuse `lib/supabase/queries.ts` functions already guarded by `requireRole(DASHBOARD_ROLES)`/`is_admin()` — see `product.actions.ts` for the existing pattern. |
+| **Pages** | `/dashboard/payments` (see Payments module) is the **first real page** under `/dashboard` — admin sees every pending payment there, per the module's own scope, not a general admin surface. No other admin-specific pages built. |
+| **Components** | `src/app/dashboard/layout.tsx` — minimal chrome only (`SiteHeader` + `requireRole` guard), not a sidebar shell; `src/features/dashboard/` is still an empty stub. |
+| **Server Actions** | `features/payments/actions/payment.actions.ts` — `verifyPaymentAction` is usable by admin today (scoped to Payments, not general admin authority). Nothing else yet; future admin actions should call into existing module services (Products, Orders) rather than duplicating their logic. |
+| **Services** | Will reuse `lib/supabase/queries.ts` functions already guarded by `requireRole(DASHBOARD_ROLES)`/`is_admin()` — see `product.actions.ts` and `payment.actions.ts` for the existing pattern. |
 | **Database Tables** | Cross-cutting: `profiles` (users), `products`, `orders`, `payments`; target: `shops`. |
 | **Dependencies** | Every other module — Admin is an oversight layer, not a data owner of its own. |
-| **Current Status** | ⏳ Upcoming (stub). RBAC scaffolding (`DASHBOARD_ROLES`, `is_admin()`, RLS admin policies) already exists and is ready to be built against. |
-| **Future Work** | Build the admin dashboard shell distinct in density/design from the customer-facing UI (denser tables — noted in `customer-account-architecture-plan.md`); user management; shop management (once `shops` exists); payment verification queue. |
+| **Current Status** | ⏳ Upcoming (stub) for general admin authority — user management, shop management, platform settings are all unbuilt. RBAC scaffolding (`DASHBOARD_ROLES`, `is_admin()`, RLS admin policies) already exists and is proven working by the one real page that does exist (`/dashboard/payments`). |
+| **Future Work** | Build the admin dashboard shell distinct in density/design from the customer-facing UI (denser tables — noted in `customer-account-architecture-plan.md`); user management; shop management (once `shops` exists). |
 
 ---
 
@@ -217,13 +216,13 @@
 |---|---|
 | **Purpose** | Let each sibling shop manage its own products, inventory, orders, and reports — the Shop Owner's SAD scope. |
 | **Responsibilities** (target) | Manage **own** products/inventory only (RLS-scoped); fulfil own orders; view own sales reports. |
-| **Pages** | Reserved under `/dashboard` (shared prefix with Admin); no shop-owner-specific pages built. |
-| **Components** | None — shares the `src/features/dashboard/` stub with Admin. |
-| **Server Actions** | Will reuse `features/products/actions/product.actions.ts` (already guarded for `seller`/`admin`) and `features/orders/actions/order.actions.ts` for fulfilment. |
-| **Services** | Same centralized `queries.ts` functions as Products/Orders/Inventory — **no separate seller-only service layer**. |
-| **Database Tables** | `products` (own, via `seller_id` / future `shop_id`), `orders` (own, via seller-scoped RLS), target `inventory`. |
-| **Dependencies** | Products, Inventory, Orders, Reports — Shop Owner is a **role-scoped view** over those modules, not a new data domain. |
-| **Current Status** | ⏳ Upcoming (stub). Underlying RLS/role guards already scope data correctly (`current_user_role() in ('seller','admin')`); only the UI is missing. |
+| **Pages** | `/dashboard/payments` (see Payments module) is usable by a seller today — scoped to their own orders via RLS (`seller_id = auth.uid()`), not a general shop-owner surface. No products/inventory/reports pages built. |
+| **Components** | Shares `src/app/dashboard/layout.tsx` (minimal chrome) with Admin; `src/features/dashboard/` is still an empty stub. |
+| **Server Actions** | `features/payments/actions/payment.actions.ts` — `verifyPaymentAction` is usable by a seller today for their own orders' payments. Will reuse `features/products/actions/product.actions.ts` (already guarded for `seller`/`admin`) and `features/orders/actions/order.actions.ts` for fulfilment. |
+| **Services** | Same centralized `queries.ts` functions as Products/Orders/Inventory/Payments — **no separate seller-only service layer**. |
+| **Database Tables** | `products` (own, via `seller_id` / future `shop_id`), `orders` (own, via seller-scoped RLS), `payments` (own orders' payments, via `verify_payment`), target `inventory`. |
+| **Dependencies** | Products, Inventory, Orders, Payments, Reports — Shop Owner is a **role-scoped view** over those modules, not a new data domain. |
+| **Current Status** | ⏳ Upcoming (stub) for products/inventory/reports management. Payment verification for own orders already works (`/dashboard/payments`) — proof the underlying RLS/role guards (`current_user_role() in ('seller','admin')`) are correctly scoped; the rest of the UI is what's missing. |
 | **Future Work** | Build the seller dashboard shell (products table, inventory editor, incoming orders, basic sales report) by **composing existing Products/Orders components**, not rebuilding them. |
 
 ---

@@ -47,6 +47,8 @@ export interface Order {
   sellerId: string;
   /** Seller display name (full name, falling back to username), or null. */
   sellerName: string | null;
+  /** Seller's receiving QR code image, shown to the buyer for a QR payment. */
+  sellerPaymentQrUrl: string | null;
   items: OrderItem[];
   placedAt: string;
   paidAt: string | null;

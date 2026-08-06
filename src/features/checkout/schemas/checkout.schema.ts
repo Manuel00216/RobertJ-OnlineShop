@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { CHECKOUT_CONSTANTS } from "@/features/checkout/constants/checkout.constants";
 import { uuidSchema } from "@/lib/validations/common.schema";
 
 /**
@@ -25,12 +26,18 @@ export const shippingAddressSchema = z.object({
     .trim()
     .min(1, "Postal code is required.")
     .max(20, "Postal code must be 20 characters or fewer."),
-  country: z.string().trim().min(1, "Country is required.").max(60),
+  // Domestic-only marketplace (no courier/shipping API) — locked server-side,
+  // not just in the UI, since the client is never trusted for this.
+  country: z.literal(CHECKOUT_CONSTANTS.shippingCountry),
   phone: z
     .string()
     .trim()
     .regex(/^\+?[0-9 ()-]{7,20}$/, "Enter a valid phone number.")
-    .optional()
+    // Without this, an empty string (the field's own default/empty state,
+    // not `undefined`) fails the regex instead of being treated as "not
+    // provided" — matches account.schema.ts's `phone`, the same fix already
+    // established in this codebase.
+    .or(z.literal(""))
     .default(""),
 });
 
