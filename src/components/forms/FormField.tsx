@@ -104,7 +104,7 @@ export function FormField({
         <p
           id={errorId}
           role="alert"
-          className={cn("text-xs", brand ? "text-rj-red" : "text-danger")}
+          className={cn("text-xs", brand ? "text-rj-red-dark" : "text-danger")}
         >
           {errors?.[0]}
         </p>

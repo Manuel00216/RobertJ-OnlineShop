@@ -23,6 +23,8 @@ import type { ActionResult } from "@/types/action.types";
 import { AUTH_INPUT_CLASS } from "../fields/field-classes";
 import { EmailInput } from "../fields/EmailInput";
 import { PasswordInput } from "../fields/PasswordInput";
+import { Divider } from "../social/Divider";
+import { SocialLoginButtons } from "../social/SocialLoginButtons";
 
 /**
  * `/sign-up` form (frozen spec §4), wired to the existing `signUpAction`.
@@ -115,7 +117,7 @@ export function RegisterForm() {
       <AuthHeader
         title={AUTH_COPY.signUp.cardTitle}
         switchLink={
-          <p className="text-sm text-rj-gray-600">
+          <p className="text-base text-rj-gray-600">
             {AUTH_COPY.signUp.signInPromptPrefix}{" "}
             <Link
               href={ROUTES.signIn}
@@ -126,6 +128,8 @@ export function RegisterForm() {
           </p>
         }
       />
+      <SocialLoginButtons />
+      <Divider />
       <form
         action={formAction}
         onSubmit={handleSubmit}

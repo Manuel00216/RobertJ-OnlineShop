@@ -15,6 +15,8 @@ import type { ActionResult } from "@/types/action.types";
 
 import { EmailInput } from "../fields/EmailInput";
 import { PasswordInput } from "../fields/PasswordInput";
+import { Divider } from "../social/Divider";
+import { SocialLoginButtons } from "../social/SocialLoginButtons";
 
 /**
  * `/sign-in` form (frozen spec §3), wired to the existing `signInAction`.
@@ -33,7 +35,10 @@ export function LoginForm() {
   useEffect(() => {
     if (state?.success) {
       const redirectTo = new URLSearchParams(window.location.search).get("redirectTo");
-      router.replace(redirectTo ?? ROUTES.home);
+      // Only navigate to internal paths — never an external / open-redirect target.
+      const isInternal =
+        redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//");
+      router.replace(isInternal ? redirectTo : ROUTES.home);
     }
   }, [state, router]);
 
@@ -45,7 +50,7 @@ export function LoginForm() {
       <AuthHeader
         title={AUTH_COPY.signIn.cardTitle}
         switchLink={
-          <p className="text-sm text-rj-gray-600">
+          <p className="text-base text-rj-gray-600">
             {AUTH_COPY.signIn.registerPromptPrefix}{" "}
             <Link
               href={ROUTES.signUp}
@@ -56,6 +61,8 @@ export function LoginForm() {
           </p>
         }
       />
+      <SocialLoginButtons />
+      <Divider />
       <form action={formAction} noValidate aria-busy={isPending} className="flex flex-col gap-5">
         {formError ? <ErrorState title="Unable to sign in" message={formError} /> : null}
 
@@ -73,7 +80,7 @@ export function LoginForm() {
           labelAction={
             <Link
               href={ROUTES.forgotPassword}
-              className="text-xs font-semibold text-rj-red-dark hover:underline"
+              className="text-sm font-semibold text-rj-red-dark hover:underline"
             >
               {AUTH_COPY.signIn.forgotPassword}
             </Link>

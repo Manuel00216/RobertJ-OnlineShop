@@ -36,6 +36,7 @@ export function ProductFilters({ categories = [] }: ProductFiltersProps) {
   const sort: ProductSort = SORT_OPTIONS.some((o) => o.value === rawSort)
     ? (rawSort as ProductSort)
     : "newest";
+  const onSale = searchParams.get("onSale") === "true";
 
   function updateParams(updates: Record<string, string | null>) {
     const params = new URLSearchParams(searchParams.toString());
@@ -73,18 +74,29 @@ export function ProductFilters({ categories = [] }: ProductFiltersProps) {
         </div>
       ) : null}
 
-      <select
-        value={sort}
-        onChange={(event) => updateParams({ sort: event.target.value })}
-        aria-label="Sort products"
-        className="h-9 rounded-full border-[1.5px] border-rj-gray-200 bg-transparent px-3 text-[11px] font-bold text-rj-black outline-none transition-colors focus-visible:border-rj-black"
-      >
-        {SORT_OPTIONS.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          aria-pressed={onSale}
+          onClick={() => updateParams({ onSale: onSale ? null : "true" })}
+          className={onSale ? CHIP_ACTIVE : CHIP_IDLE}
+        >
+          On Sale
+        </button>
+
+        <select
+          value={sort}
+          onChange={(event) => updateParams({ sort: event.target.value })}
+          aria-label="Sort products"
+          className="h-9 rounded-full border-[1.5px] border-rj-gray-200 bg-transparent px-3 text-[11px] font-bold text-rj-black outline-none transition-colors focus-visible:border-rj-black"
+        >
+          {SORT_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
     </div>
   );
 }

@@ -18,8 +18,10 @@ export interface AuthHeaderProps {
  */
 export function AuthHeader({ eyebrow, title, description, switchLink }: AuthHeaderProps) {
   return (
-    <header className="flex flex-col gap-2">
-      <Wordmark className="mb-1 lg:hidden" />
+    <header className="flex flex-col gap-3">
+      <div className="flex justify-center lg:hidden">
+        <Wordmark className="mb-4" />
+      </div>
       {eyebrow ? (
         <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-rj-red-dark">
           {eyebrow}
@@ -29,7 +31,7 @@ export function AuthHeader({ eyebrow, title, description, switchLink }: AuthHead
         {title}
       </h2>
       {description ? <p className="text-sm text-rj-gray-600">{description}</p> : null}
-      {switchLink ? <div className="mt-1.5">{switchLink}</div> : null}
+      {switchLink ? <div className="mt-3">{switchLink}</div> : null}
     </header>
   );
 }

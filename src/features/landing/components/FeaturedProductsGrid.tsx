@@ -17,6 +17,10 @@ function formatPeso(cents: number) {
   return `₱${Math.round(cents / 100).toLocaleString("en-US")}`;
 }
 
+/** Matches ProductCard's threshold — see its comment for why. Placeholders
+ * (productId === null) never trigger stock badges; only real products do. */
+const LOW_STOCK_THRESHOLD = 5;
+
 export interface FeaturedProductsGridProps {
   products: FeaturedProductView[];
 }
@@ -40,6 +44,10 @@ export function FeaturedProductsGrid({ products }: FeaturedProductsGridProps) {
       router.push(ROUTES.products);
       return;
     }
+    // Guard against the cart reducer's clampQuantity flooring to 1 even when
+    // maxQuantity is 0 — without this, a sold-out featured product could be
+    // silently added with quantity 1.
+    if (item.maxQuantity <= 0) return;
     addItem({
       productId: item.productId,
       slug: item.slug ?? "",
@@ -50,6 +58,8 @@ export function FeaturedProductsGrid({ products }: FeaturedProductsGridProps) {
       quantity: 1,
       maxQuantity: item.maxQuantity,
       sellerId: item.sellerId,
+      // Marketing quick-add has no seller name; checkout falls back to "Seller".
+      sellerName: null,
     });
     setAddedKey(item.key);
     window.setTimeout(() => setAddedKey(null), 2000);
@@ -96,6 +106,12 @@ export function FeaturedProductsGrid({ products }: FeaturedProductsGridProps) {
               ? Math.round((1 - item.priceCents / item.originalPriceCents) * 100)
               : null;
           const isAdded = addedKey === item.key;
+          // Placeholders (productId === null) have maxQuantity 0 by convention
+          // but aren't real stock — only gate on it for real products.
+          const isRealProduct = item.productId !== null;
+          const isOutOfStock = isRealProduct && item.maxQuantity <= 0;
+          const isLowStock =
+            isRealProduct && !isOutOfStock && item.maxQuantity <= LOW_STOCK_THRESHOLD;
 
           return (
             <div
@@ -122,16 +138,24 @@ export function FeaturedProductsGrid({ products }: FeaturedProductsGridProps) {
 
                 {/* Badges */}
                 <div className="absolute left-3 top-3 flex flex-col gap-1.5">
-                  {item.isNew ? (
+                  {isOutOfStock ? (
                     <span className="rounded-full bg-rj-black px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-rj-white">
-                      New
+                      Sold out
                     </span>
-                  ) : null}
-                  {item.isSale ? (
-                    <span className="rounded-full bg-rj-red px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
-                      Sale
-                    </span>
-                  ) : null}
+                  ) : (
+                    <>
+                      {item.isNew ? (
+                        <span className="rounded-full bg-rj-black px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-rj-white">
+                          New
+                        </span>
+                      ) : null}
+                      {item.isSale ? (
+                        <span className="rounded-full bg-rj-red px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
+                          Sale
+                        </span>
+                      ) : null}
+                    </>
+                  )}
                 </div>
 
                 {discount !== null ? (
@@ -140,22 +164,25 @@ export function FeaturedProductsGrid({ products }: FeaturedProductsGridProps) {
                   </div>
                 ) : null}
 
-                {/* Quick add */}
-                <div
-                  className={`absolute inset-x-0 bottom-0 p-3 transition-all duration-300 ${
-                    hoveredKey === item.key
-                      ? "translate-y-0 opacity-100"
-                      : "translate-y-3 opacity-0"
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => handleQuickAdd(item)}
-                    className="w-full rounded-full bg-rj-white/95 py-2.5 text-[11px] font-bold text-rj-black backdrop-blur-sm transition-colors hover:bg-rj-red hover:text-white"
+                {/* Quick add — hidden for real, sold-out products; the marketing
+                    placeholder path always routes to the catalog instead. */}
+                {!isOutOfStock ? (
+                  <div
+                    className={`absolute inset-x-0 bottom-0 p-3 transition-all duration-300 ${
+                      hoveredKey === item.key
+                        ? "translate-y-0 opacity-100"
+                        : "translate-y-3 opacity-0"
+                    }`}
                   >
-                    <span aria-live="polite">{isAdded ? "Added to Cart" : "+ Add to Cart"}</span>
-                  </button>
-                </div>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickAdd(item)}
+                      className="w-full rounded-full bg-rj-white/95 py-2.5 text-[11px] font-bold text-rj-black backdrop-blur-sm transition-colors hover:bg-rj-red hover:text-white"
+                    >
+                      <span aria-live="polite">{isAdded ? "Added to Cart" : "+ Add to Cart"}</span>
+                    </button>
+                  </div>
+                ) : null}
               </div>
 
               <Link href={item.href} className="block">
@@ -165,13 +192,18 @@ export function FeaturedProductsGrid({ products }: FeaturedProductsGridProps) {
                 <h4 className="mb-1 text-[13px] font-medium leading-snug text-rj-black">
                   {item.name}
                 </h4>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                   <span className="text-[14px] font-bold text-rj-black">
                     {formatPeso(item.priceCents)}
                   </span>
                   {item.originalPriceCents ? (
                     <span className="text-[11px] text-rj-gray-400 line-through">
                       {formatPeso(item.originalPriceCents)}
+                    </span>
+                  ) : null}
+                  {isLowStock ? (
+                    <span className="text-[10px] font-bold text-rj-gold">
+                      Only {item.maxQuantity} left
                     </span>
                   ) : null}
                 </div>

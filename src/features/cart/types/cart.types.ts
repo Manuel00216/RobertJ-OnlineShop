@@ -13,6 +13,11 @@ export interface CartItem {
    * order per seller, so a mixed cart becomes several orders.
    */
   sellerId: string;
+  /**
+   * Seller display name, carried so checkout can label order groups. Older
+   * carts may lack it (localStorage migration note) — treat as null.
+   */
+  sellerName: string | null;
 }
 
 export interface CartState {
@@ -22,6 +27,7 @@ export interface CartState {
 export type CartAction =
   | { type: "add"; item: CartItem }
   | { type: "remove"; productId: string }
+  | { type: "removeMany"; productIds: string[] }
   | { type: "setQuantity"; productId: string; quantity: number }
   | { type: "clear" }
   | { type: "hydrate"; state: CartState };

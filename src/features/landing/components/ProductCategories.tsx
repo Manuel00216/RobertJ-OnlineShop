@@ -1,16 +1,13 @@
-import Image from "next/image";
-import Link from "next/link";
-import { ArrowRight } from "lucide-react";
-
 import { ROUTES } from "@/constants/routes";
 import { listActiveCategories } from "@/lib/supabase/queries";
+import { CategoryTile } from "@/features/categories/components/CategoryTile";
 import { Reveal } from "@/features/landing/components/Reveal";
 import {
   CATEGORY_FALLBACK_IMAGES,
   CATEGORY_PLACEHOLDERS,
 } from "@/features/landing/constants/landing.constants";
 
-interface CategoryCard {
+interface CategoryTileData {
   key: string;
   name: string;
   countLabel: string;
@@ -24,7 +21,7 @@ interface CategoryCard {
  * clearly-marked placeholder tiles so the section never renders empty.
  */
 export async function ProductCategories() {
-  let cards: CategoryCard[];
+  let cards: CategoryTileData[];
 
   try {
     const categories = await listActiveCategories(4);
@@ -72,37 +69,14 @@ export async function ProductCategories() {
 
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           {cards.map((card, i) => (
-            <Link
+            <CategoryTile
               key={card.key}
               href={card.href}
-              className={`group relative overflow-hidden rounded-2xl ${
-                i === 0 ? "md:col-span-2 md:row-span-2" : ""
-              }`}
-              style={{ minHeight: i === 0 ? 440 : 210 }}
-            >
-              <div className="absolute inset-0 bg-rj-gray-800">
-                <Image
-                  src={card.imageUrl}
-                  alt={card.name}
-                  fill
-                  sizes={i === 0 ? "(min-width: 768px) 50vw, 50vw" : "(min-width: 768px) 25vw, 50vw"}
-                  className="object-cover opacity-65 transition-all duration-500 group-hover:scale-105 group-hover:opacity-85"
-                />
-              </div>
-              <div className="absolute inset-0 bg-gradient-to-t from-rj-black/85 via-rj-black/20 to-transparent" />
-              <div className="absolute inset-0 rounded-2xl border-2 border-rj-red/0 transition-all duration-300 group-hover:border-rj-red/40" />
-              <div className="absolute bottom-0 left-0 p-5">
-                <div className="mb-1 text-[10px] font-medium tracking-widest text-rj-gray-400">
-                  {card.countLabel}
-                </div>
-                <h3 className="font-serif text-2xl text-rj-white transition-colors group-hover:text-rj-red">
-                  {card.name}
-                </h3>
-                <div className="mt-2 flex translate-y-1 items-center gap-1 text-[11px] font-bold text-rj-red opacity-0 transition-all group-hover:translate-y-0 group-hover:opacity-100">
-                  Shop now <ArrowRight className="h-2.5 w-2.5" aria-hidden="true" />
-                </div>
-              </div>
-            </Link>
+              imageUrl={card.imageUrl}
+              name={card.name}
+              countLabel={card.countLabel}
+              featured={i === 0}
+            />
           ))}
         </div>
       </div>

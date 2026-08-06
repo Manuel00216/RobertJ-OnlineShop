@@ -147,6 +147,11 @@ export async function listProducts(
   if (params.categoryId) {
     query = query.eq("category_id", params.categoryId);
   }
+  if (params.onSale) {
+    // Same seller-set "sale" tag convention ProductCard/FeaturedProductsGrid
+    // already read — no compare-at-price column exists to filter on instead.
+    query = query.contains("tags", ["sale"]);
+  }
   if (params.sellerId) {
     query = query.eq("seller_id", params.sellerId);
   }
@@ -216,6 +221,7 @@ export const getProductBySlug = cache(
       .from(DATABASE_TABLES.PRODUCTS)
       .select(PRODUCT_COLUMNS)
       .eq("slug", slug)
+      .eq("status", PRODUCT_STATUS.active)
       .maybeSingle();
 
     if (error) {
@@ -714,6 +720,52 @@ export async function cancelBuyerOrder(
   }
 }
 
+/** One seller-order to create. `shippingAddress` uses the DB's snake_case keys. */
+export interface CreateOrderInput {
+  sellerId: string;
+  items: { productId: string; quantity: number }[];
+  shippingAddress: Json;
+  shippingFeeCents: number;
+  notes?: string | null;
+}
+
+/**
+ * Creates one seller's order via the `create_order` RPC — the only sanctioned
+ * order path (`database.md` §3.7). It is atomic (`FOR UPDATE`), re-prices from
+ * live `products.price_cents`, decrements stock, and sets `sold` at 0; `buyer_id`
+ * always comes from `auth.uid()`. Returns a light handle for the checkout result;
+ * RPC errors (e.g. "Only 2 left of X") surface as thrown messages.
+ */
+export async function createOrder(
+  input: CreateOrderInput,
+): Promise<{ orderId: string; orderNumber: string; sellerId: string }> {
+  const supabase = await createSupabaseServerClient();
+
+  const { data, error } = await supabase.rpc("create_order", {
+    p_seller_id: input.sellerId,
+    p_items: input.items.map((item) => ({
+      product_id: item.productId,
+      quantity: item.quantity,
+    })),
+    p_shipping_address: input.shippingAddress,
+    p_shipping_fee_cents: input.shippingFeeCents,
+    p_notes: input.notes ?? null,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+  if (!data) {
+    throw new Error("Could not create the order.");
+  }
+
+  return {
+    orderId: data.id,
+    orderNumber: data.order_number,
+    sellerId: data.seller_id,
+  };
+}
+
 // ============================================================================
 // Profile (buyer account)
 // ============================================================================
@@ -743,16 +795,13 @@ function toProfile(
 }
 
 /**
- * The signed-in user's own profile row, including `phone` (readable because the
- * authenticated role holds a full-row SELECT grant — no RPC needed).
+ * The signed-in user's own profile row, including `phone`. Read via the
+ * `get_my_profile()` SECURITY DEFINER RPC — the only path to `phone`, because
+ * the column is not granted for direct SELECT (audit H1 remediation).
  */
-export async function getMyProfile(userId: string): Promise<Profile | null> {
+export async function getMyProfile(): Promise<Profile | null> {
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase
-    .from(DATABASE_TABLES.PROFILES)
-    .select("id, full_name, username, avatar_url, phone, bio, role")
-    .eq("id", userId)
-    .maybeSingle();
+  const { data, error } = await supabase.rpc("get_my_profile");
 
   if (error) {
     throw new Error(`Failed to load profile: ${error.message}`);
@@ -771,7 +820,7 @@ export async function updateMyProfile(
   input: UpdateProfileInput,
 ): Promise<Profile> {
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from(DATABASE_TABLES.PROFILES)
     .update({
       full_name: input.fullName || null,
@@ -780,15 +829,21 @@ export async function updateMyProfile(
       phone: input.phone || null,
       bio: input.bio || null,
     })
-    .eq("id", userId)
-    .select("id, full_name, username, avatar_url, phone, bio, role")
-    .single();
+    .eq("id", userId);
 
   if (error) {
     throw new Error(`Failed to update profile: ${error.message}`);
   }
 
-  return toProfile(data);
+  // Re-read the authoritative row via the get_my_profile() RPC — the only path
+  // that may return `phone`, which is withheld from direct SELECT for
+  // authenticated (audit H1). Requesting it from this UPDATE's RETURNING clause
+  // would be denied by the same column grant, so the update must not select it.
+  const profile = await getMyProfile();
+  if (!profile) {
+    throw new Error("Failed to load your profile after saving.");
+  }
+  return profile;
 }
 
 // ============================================================================
@@ -801,29 +856,35 @@ function callbackUrl(next?: string) {
   return next ? `${base}?next=${encodeURIComponent(next)}` : base;
 }
 
-/** Current user with the profile row merged in, or null when signed out. */
-export async function getSessionUser(): Promise<SessionUser | null> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+/**
+ * Current user with the profile row merged in, or null when signed out.
+ * `cache()`-wrapped so the layout, page, and metadata share one auth + profile
+ * round-trip per request (audit H3 remediation).
+ */
+export const getSessionUser = cache(
+  async (): Promise<SessionUser | null> => {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  if (!user) return null;
+    if (!user) return null;
 
-  const { data: profile } = await supabase
-    .from(DATABASE_TABLES.PROFILES)
-    .select("full_name, avatar_url, role")
-    .eq("id", user.id)
-    .maybeSingle();
+    const { data: profile } = await supabase
+      .from(DATABASE_TABLES.PROFILES)
+      .select("full_name, avatar_url, role")
+      .eq("id", user.id)
+      .maybeSingle();
 
-  return {
-    id: user.id,
-    email: user.email ?? "",
-    fullName: profile?.full_name ?? null,
-    avatarUrl: profile?.avatar_url ?? null,
-    role: profile?.role ?? USER_ROLES.buyer,
-  };
-}
+    return {
+      id: user.id,
+      email: user.email ?? "",
+      fullName: profile?.full_name ?? null,
+      avatarUrl: profile?.avatar_url ?? null,
+      role: profile?.role ?? USER_ROLES.buyer,
+    };
+  },
+);
 
 /** Throws when unauthenticated — use at the top of protected Server Actions. */
 export async function requireSessionUser(): Promise<SessionUser> {

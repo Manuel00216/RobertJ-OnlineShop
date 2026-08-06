@@ -6,7 +6,9 @@ import type { SessionUser } from "@/types/common.types";
 /**
  * Shared customer-account chrome: a responsive sidebar + main grid on `rj-*`
  * surfaces (a seamless extension of the Landing design system — never an admin
- * surface). The sidebar collapses to a horizontal nav on mobile.
+ * surface). The sidebar collapses to a horizontal nav on mobile. The site-wide
+ * SiteHeader (mounted by the layout) already provides a way back to the shop,
+ * so this no longer duplicates that link.
  */
 export function AccountShell({
   user,

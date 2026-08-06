@@ -1,38 +1,17 @@
-import Link from "next/link";
+import { SiteHeaderClient } from "@/components/layout/SiteHeaderClient";
+import { getSessionUser, listActiveCategories } from "@/lib/supabase/queries";
 
-import { AccountMenu } from "@/features/account/components/AccountMenu";
-import { Button } from "@/components/ui/button";
-import { CartIndicator } from "@/components/navigation/CartIndicator";
-import { MainNav } from "@/components/navigation/MainNav";
-import { ROUTES } from "@/constants/routes";
-import { siteConfig } from "@/config/site";
-import { getSessionUser } from "@/lib/supabase/queries";
-
-/** Server Component: reads the session directly, no client fetch needed. */
+/**
+ * The single site-wide header — mounted by every route group's layout
+ * (marketing, shop, account) so navigation, search, and cart/account access
+ * are identical everywhere. Server Component: reads the session and category
+ * list directly so no route group needs to fetch/pass them itself.
+ */
 export async function SiteHeader() {
-  const user = await getSessionUser();
+  const [user, categories] = await Promise.all([
+    getSessionUser(),
+    listActiveCategories().catch(() => []),
+  ]);
 
-  return (
-    <header className="border-b border-border bg-background">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4">
-        <div className="flex items-center gap-6">
-          <Link href={ROUTES.home} className="text-sm font-semibold">
-            {siteConfig.name}
-          </Link>
-          <MainNav />
-        </div>
-
-        <div className="flex items-center gap-2">
-          <CartIndicator />
-          {user ? (
-            <AccountMenu user={user} />
-          ) : (
-            <Link href={ROUTES.signIn}>
-              <Button size="sm">Sign in</Button>
-            </Link>
-          )}
-        </div>
-      </div>
-    </header>
-  );
+  return <SiteHeaderClient user={user} categories={categories} />;
 }

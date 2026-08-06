@@ -1,8 +1,11 @@
 // Public surface of the landing feature. Consumed only by the marketing route
 // group (Server Components), so it is safe to co-export the server sections
 // (which import server-only services) alongside the client chrome.
+//
+// Header/footer chrome moved to the shared, site-wide `SiteHeader`/`SiteFooter`
+// (src/components/layout) — see ARCHITECTURE.md. LandingNavbar/LandingFooter
+// were retired, not exported here.
 export { AnnouncementBar } from "./components/AnnouncementBar";
-export { LandingNavbar } from "./components/LandingNavbar";
 export { Hero } from "./components/Hero";
 export { MarqueeBand } from "./components/MarqueeBand";
 export { FeaturedShops } from "./components/FeaturedShops";
@@ -12,5 +15,4 @@ export { EditorialBanner } from "./components/EditorialBanner";
 export { AboutSection } from "./components/AboutSection";
 export { MarketplaceFeatures } from "./components/MarketplaceFeatures";
 export { SmartAssistantPreview } from "./components/SmartAssistantPreview";
-export { LandingFooter } from "./components/LandingFooter";
 export { BackToTop } from "./components/BackToTop";

@@ -40,15 +40,9 @@ export async function ProductListSection({
   let result: PaginatedResult<Product>;
   try {
     result = await listProducts(params);
-  } catch (error) {
+  } catch {
     return (
-      <ErrorState
-        message={
-          error instanceof Error
-            ? error.message
-            : "We couldn't load products right now."
-        }
-      />
+      <ErrorState message="We couldn't load products right now." />
     );
   }
 

@@ -1,37 +1,28 @@
-import type { ReactNode } from "react";
+import Image from "next/image";
 
-import { Wordmark } from "@/components/brand/Wordmark";
+import { CalloutBubble } from "./CalloutBubble";
 
 export interface EditorialPanelProps {
-  eyebrow: string;
-  title: ReactNode;
-  description?: string;
+  imageSrc?: string;
 }
 
+const DEFAULT_IMAGE_SRC = "/landing/editorial-banner.jpg";
+
+/** Evergreen trust copy, shared with `SiteFooter.tsx`'s `TRUST_BADGES`. */
+const CALLOUTS = ["Verified Sellers", "Buyer Protected", "Secure Payments"];
+
 /**
- * Desktop-only left panel (frozen spec §2.1). Mirrors `Hero.tsx`'s
- * editorial column: `bg-rj-black`, ambient red glow, serif display headline.
- * Hidden below `lg:` — mobile/tablet use the card's own `AuthHeader`.
+ * Desktop-only photo block: a contained (not full-bleed/full-height) square
+ * lifestyle image with floating trust-badge callouts, matching the reference
+ * sign-in layout's inset photo treatment.
  */
-export function EditorialPanel({ eyebrow, title, description }: EditorialPanelProps) {
+export function EditorialPanel({ imageSrc = DEFAULT_IMAGE_SRC }: EditorialPanelProps) {
   return (
-    <aside className="relative hidden w-[45%] flex-col justify-between overflow-hidden bg-rj-black p-10 text-rj-white lg:flex">
-      <Wordmark onDark />
-
-      <div className="relative z-10 flex flex-col gap-4 py-8">
-        <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-rj-gray-200">
-          {eyebrow}
-        </p>
-        <h2 className="max-w-md font-serif text-[clamp(2.5rem,5vw,4rem)] leading-[1.05] text-rj-white">
-          {title}
-        </h2>
-        {description ? <p className="max-w-sm text-sm text-rj-gray-400">{description}</p> : null}
-      </div>
-
-      <div
-        className="pointer-events-none absolute bottom-0 left-0 h-72 w-72 rounded-full bg-rj-red/10 blur-[120px]"
-        aria-hidden="true"
-      />
-    </aside>
+    <div className="relative aspect-square w-full overflow-hidden rounded-3xl">
+      <Image src={imageSrc} alt="" fill priority sizes="58vw" className="object-cover" />
+      <CalloutBubble label={CALLOUTS[0]} className="absolute left-6 top-[16%]" />
+      <CalloutBubble label={CALLOUTS[1]} className="absolute right-6 top-[46%]" />
+      <CalloutBubble label={CALLOUTS[2]} className="absolute bottom-[12%] left-8" />
+    </div>
   );
 }

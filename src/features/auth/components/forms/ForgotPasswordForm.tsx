@@ -63,7 +63,7 @@ export function ForgotPasswordForm() {
     <>
       <Link
         href={ROUTES.signIn}
-        className="inline-flex items-center gap-1.5 self-start text-xs font-semibold text-rj-red-dark hover:underline"
+        className="inline-flex items-center gap-1.5 self-start text-sm font-semibold text-rj-red-dark hover:underline"
       >
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
         {AUTH_COPY.forgotPassword.backToSignIn}

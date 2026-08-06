@@ -23,6 +23,8 @@ export interface CartContextValue {
   subtotalCents: number;
   addItem: (item: CartItem) => void;
   removeItem: (productId: string) => void;
+  /** Removes several lines at once — used by checkout to clear only placed items. */
+  removeMany: (productIds: string[]) => void;
   setQuantity: (productId: string, quantity: number) => void;
   clear: () => void;
 }
@@ -55,6 +57,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       subtotalCents,
       addItem: (item) => dispatch({ type: "add", item }),
       removeItem: (productId) => dispatch({ type: "remove", productId }),
+      removeMany: (productIds) => dispatch({ type: "removeMany", productIds }),
       setQuantity: (productId, quantity) =>
         dispatch({ type: "setQuantity", productId, quantity }),
       clear: () => dispatch({ type: "clear" }),

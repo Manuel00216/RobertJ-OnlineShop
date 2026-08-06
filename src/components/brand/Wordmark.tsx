@@ -22,7 +22,7 @@ export function Wordmark({ onDark = false, className }: WordmarkProps) {
     >
       <span
         className={cn(
-          "font-serif text-[22px] tracking-tight transition-colors",
+          "font-serif text-[32px] tracking-tight transition-colors",
           onDark ? "text-rj-white group-hover:text-rj-gray-200" : "text-rj-black group-hover:text-rj-red",
         )}
       >
@@ -30,11 +30,11 @@ export function Wordmark({ onDark = false, className }: WordmarkProps) {
       </span>
       <span
         className={cn(
-          "ml-1.5 text-[9px] font-bold uppercase leading-none tracking-[0.22em]",
+          "ml-2 text-[12px] font-bold uppercase leading-none tracking-[0.22em]",
           onDark ? "text-rj-gray-200" : "text-rj-red",
         )}
       >
-        Marketplace
+        ONLINESHOP
       </span>
     </Link>
   );

@@ -271,6 +271,53 @@ export interface Database {
           },
         ];
       };
+      payments: {
+        Row: {
+          id: string;
+          order_id: string;
+          provider: string;
+          provider_transaction_id: string;
+          stripe_event_id: string | null;
+          charge_id: string | null;
+          customer_id: string | null;
+          customer_email: string | null;
+          receipt_url: string | null;
+          failure_reason: string | null;
+          payment_method_type: Database["public"]["Enums"]["payment_method_type"];
+          amount_cents: number;
+          currency: string;
+          status: Database["public"]["Enums"]["payment_status"];
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          order_id: string;
+          provider?: string;
+          provider_transaction_id: string;
+          stripe_event_id?: string | null;
+          charge_id?: string | null;
+          customer_id?: string | null;
+          customer_email?: string | null;
+          receipt_url?: string | null;
+          failure_reason?: string | null;
+          payment_method_type?: Database["public"]["Enums"]["payment_method_type"];
+          amount_cents: number;
+          currency?: string;
+          status?: Database["public"]["Enums"]["payment_status"];
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["payments"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "payments_order_id_fkey";
+            columns: ["order_id"];
+            referencedRelation: "orders";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
 
     Views: Record<string, never>;
@@ -294,6 +341,10 @@ export interface Database {
         Args: Record<PropertyKey, never>;
         Returns: Database["public"]["Enums"]["user_role"];
       };
+      get_my_profile: {
+        Args: Record<PropertyKey, never>;
+        Returns: Database["public"]["Tables"]["profiles"]["Row"];
+      };
       slugify: {
         Args: { value: string };
         Returns: string;
@@ -304,6 +355,7 @@ export interface Database {
       user_role: "buyer" | "seller" | "admin";
       product_status: "draft" | "active" | "sold" | "archived";
       product_condition: "new" | "like_new" | "good" | "fair" | "poor";
+      payment_method_type: "cod" | "card";
       payment_status:
         | "pending"
         | "paid"

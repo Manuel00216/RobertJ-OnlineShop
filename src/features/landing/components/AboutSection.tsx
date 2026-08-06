@@ -18,7 +18,19 @@ export async function AboutSection() {
 
   return (
     <section className="bg-rj-gray-50 py-24">
-      <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-16 px-5 md:px-8 lg:grid-cols-2">
+      <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-10 px-5 md:px-8 lg:grid-cols-2 lg:gap-16">
+        {/* Simplified image — mobile/tablet only; the full collage (below) is
+            desktop-only, but the section shouldn't be text-only for most visitors. */}
+        <Reveal direction="left" className="relative h-64 overflow-hidden rounded-2xl shadow-xl lg:hidden">
+          <Image
+            src="/landing/about-boutique.jpg"
+            alt="Independent boutique interior"
+            fill
+            sizes="100vw"
+            className="object-cover"
+          />
+        </Reveal>
+
         {/* Image collage */}
         <Reveal direction="left" className="relative hidden h-[500px] lg:block">
           <div className="absolute left-0 top-0 h-[68%] w-[58%] overflow-hidden rounded-2xl shadow-xl">

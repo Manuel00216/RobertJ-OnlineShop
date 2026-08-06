@@ -7,16 +7,9 @@ import { AuthButton } from "@/features/auth/components/AuthButton";
 import { AuthSuccessState } from "@/features/auth/components/feedback/AuthSuccessState";
 import { AuthLayout } from "@/features/auth/components/layout/AuthLayout";
 import { ResetPasswordForm } from "@/features/auth/components/forms/ResetPasswordForm";
-import { AUTH_COPY } from "@/features/auth/constants/auth.constants";
 import { getSessionUser } from "@/lib/supabase/queries";
 
 export const metadata: Metadata = { title: "Reset password" };
-
-const editorial = {
-  eyebrow: AUTH_COPY.resetPassword.eyebrow,
-  title: <>Almost There.</>,
-  description: AUTH_COPY.resetPassword.supporting,
-} as const;
 
 /**
  * Reached only via the PKCE callback after a recovery-link click. Without an
@@ -28,7 +21,7 @@ export default async function ResetPasswordPage() {
 
   if (!user) {
     return (
-      <AuthLayout editorial={editorial}>
+      <AuthLayout>
         <AuthSuccessState
           icon={TriangleAlert}
           tone="danger"
@@ -46,7 +39,7 @@ export default async function ResetPasswordPage() {
   }
 
   return (
-    <AuthLayout editorial={editorial}>
+    <AuthLayout>
       <ResetPasswordForm />
     </AuthLayout>
   );

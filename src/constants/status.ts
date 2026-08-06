@@ -50,7 +50,7 @@ export const PAYMENT_STATUS = {
 } as const satisfies Record<string, PaymentStatus>;
 
 export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
-  pending: "Awaiting payment",
+  pending: "Payment pending",
   paid: "Paid",
   failed: "Payment failed",
   refunded: "Refunded",

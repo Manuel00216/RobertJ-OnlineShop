@@ -38,6 +38,7 @@ export function AddToCartButton({
       quantity,
       maxQuantity: product.quantity,
       sellerId: product.sellerId,
+      sellerName: product.sellerName,
     });
     setJustAdded(true);
     setTimeout(() => setJustAdded(false), 2000);

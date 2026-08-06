@@ -45,6 +45,8 @@ export interface ProductListParams {
   status?: ProductStatus;
   sellerId?: string;
   sort?: ProductSort;
+  /** Matches products tagged "sale" — the same seller-set tag convention ProductCard already reads. */
+  onSale?: boolean;
 }
 
 export type ProductSort = "newest" | "price-asc" | "price-desc" | "title-asc";

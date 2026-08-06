@@ -53,7 +53,7 @@ export async function Hero() {
             curated, verified, and brought together in one seamless experience.
           </p>
 
-          <div className="mb-14 flex flex-wrap gap-3">
+          <div className="mb-10 flex flex-wrap gap-3">
             <Link
               href={ROUTES.products}
               className="rounded-full bg-rj-red px-7 py-3.5 text-sm font-bold text-white shadow-lg shadow-rj-red/25 transition-all hover:bg-rj-red-dark active:scale-95"
@@ -67,6 +67,30 @@ export async function Hero() {
               Explore Shops
               <ArrowRight className="h-[13px] w-[13px]" aria-hidden="true" />
             </a>
+          </div>
+
+          {/* Simplified editorial image — mobile/tablet only; the full stacked
+              composition (below) is desktop-only, but the brand moment shouldn't
+              disappear entirely for the majority-mobile audience. */}
+          <div
+            className="relative mb-10 h-56 w-full overflow-hidden rounded-2xl shadow-2xl sm:h-64 lg:hidden"
+            style={{ animation: "fadeSlideIn 0.7s ease 0.15s both" }}
+          >
+            <Image
+              src="/landing/hero-card-main.jpg"
+              alt="Featured Autumn Linen collection"
+              fill
+              sizes="100vw"
+              className="object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-rj-black/70 via-transparent to-transparent" />
+            <div className="absolute inset-x-5 bottom-4">
+              <div className="mb-1 text-[10px] font-medium uppercase tracking-widest text-rj-gray-200">
+                Featured Drop
+              </div>
+              <div className="font-semibold text-rj-white">Autumn Linen Edit</div>
+              <div className="mt-1 text-sm font-bold text-rj-red">From ₱1,200</div>
+            </div>
           </div>
 
           {/* Stats */}

@@ -34,11 +34,15 @@ export const productListParamsSchema = z.object({
     .min(1)
     .max(PAGINATION.maxPageSize)
     .default(PAGINATION.defaultPageSize),
-  search: z.string().trim().min(1).max(120).optional(),
+  search: z.string().trim().max(120).optional(),
   categoryId: z.uuid().optional(),
-  status: productStatusSchema.optional(),
-  sellerId: z.uuid().optional(),
   sort: productSortSchema.default("newest"),
+  // Deliberately not z.coerce.boolean() — Boolean("false") is true, which
+  // would make ?onSale=false behave identically to ?onSale=true.
+  onSale: z
+    .string()
+    .optional()
+    .transform((value) => value === "true"),
 });
 
 /**

@@ -20,7 +20,16 @@ export function SmartAssistantPreview() {
   ]);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // No standalone /assistant page exists yet (features/assistant is a stub),
+  // so "Try the Assistant" points at the one real, working thing on this
+  // page — the demo chat right here — instead of a route that would 404.
+  const focusDemo = useCallback(() => {
+    inputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    inputRef.current?.focus();
+  }, []);
 
   const send = useCallback(() => {
     const text = input.trim();
@@ -35,7 +44,13 @@ export function SmartAssistantPreview() {
   }, [input]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Scroll only this chat's own message list — never the outer page.
+    // `Element.scrollIntoView()` walks every scrollable ancestor by default
+    // (including the document), which previously yanked the whole homepage
+    // down to this section on mount. Setting `scrollTop` directly is scoped
+    // to this element only.
+    const el = messagesRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [messages, typing]);
 
   return (
@@ -71,6 +86,7 @@ export function SmartAssistantPreview() {
           </ul>
           <button
             type="button"
+            onClick={focusDemo}
             className="rounded-full bg-rj-red px-7 py-3.5 text-[13px] font-bold text-white shadow-lg shadow-rj-red/25 transition-colors hover:bg-rj-red-dark"
           >
             Try the Assistant
@@ -100,7 +116,7 @@ export function SmartAssistantPreview() {
             </div>
 
             {/* Messages */}
-            <div className="h-72 space-y-4 overflow-y-auto px-4 py-5">
+            <div ref={messagesRef} className="h-72 space-y-4 overflow-y-auto px-4 py-5">
               {messages.map((msg, i) => (
                 <div
                   key={i}
@@ -139,12 +155,12 @@ export function SmartAssistantPreview() {
                   </div>
                 </div>
               ) : null}
-              <div ref={bottomRef} />
             </div>
 
             {/* Input */}
             <div className="flex items-center gap-3 border-t border-rj-gray-800 bg-[#1A1A1A] px-4 py-4">
               <input
+                ref={inputRef}
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}

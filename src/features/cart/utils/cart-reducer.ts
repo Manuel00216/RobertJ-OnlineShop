@@ -62,6 +62,13 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
         items: state.items.filter((item) => item.productId !== action.productId),
       };
 
+    case "removeMany":
+      return {
+        items: state.items.filter(
+          (item) => !action.productIds.includes(item.productId),
+        ),
+      };
+
     case "clear":
       return initialCartState;
 
