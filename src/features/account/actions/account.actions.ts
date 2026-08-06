@@ -19,6 +19,7 @@ export async function updateProfileAction(
 
   try {
     const user = await queries.requireSessionUser();
+    await queries.requireRateLimit(`updateProfile:${user.id}`, 5, 60);
     const profile = await queries.updateMyProfile(user.id, parsed.data);
     // Re-render the profile page and the shared header/identity surfaces.
     revalidatePath(ROUTES.profile, "layout");

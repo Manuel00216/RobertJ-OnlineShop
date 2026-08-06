@@ -26,6 +26,11 @@ export interface CartContextValue {
   /** Removes several lines at once — used by checkout to clear only placed items. */
   removeMany: (productIds: string[]) => void;
   setQuantity: (productId: string, quantity: number) => void;
+  /** Applies a server-confirmed price/stock correction to one line (user-triggered only). */
+  updateItem: (
+    productId: string,
+    patch: Partial<Pick<CartItem, "unitPriceCents" | "maxQuantity">>,
+  ) => void;
   clear: () => void;
 }
 
@@ -60,6 +65,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
       removeMany: (productIds) => dispatch({ type: "removeMany", productIds }),
       setQuantity: (productId, quantity) =>
         dispatch({ type: "setQuantity", productId, quantity }),
+      updateItem: (productId, patch) =>
+        dispatch({ type: "updateItem", productId, patch }),
       clear: () => dispatch({ type: "clear" }),
     };
   }, [state]);

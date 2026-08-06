@@ -5,10 +5,12 @@ import type { Metadata } from "next";
 import { ROUTES } from "@/constants/routes";
 import { PRODUCT_CONDITION_LABELS } from "@/constants/status";
 import { formatCurrency } from "@/lib/utils/currency";
+import { absoluteUrl } from "@/lib/utils/url";
 import { getProductBySlug } from "@/lib/supabase/queries";
-import { AddToCartButton } from "@/features/cart/components/AddToCartButton";
 import { Breadcrumbs } from "@/features/products/components/Breadcrumbs";
 import { ProductGallery } from "@/features/products/components/ProductGallery";
+import { ProductJsonLd } from "@/features/products/components/ProductJsonLd";
+import { ProductQuantityAndAddToCart } from "@/features/products/components/ProductQuantityAndAddToCart";
 import { RelatedProducts } from "@/features/products/components/RelatedProducts";
 
 interface ProductDetailPageProps {
@@ -52,6 +54,10 @@ export default async function ProductDetailPage({
 
   return (
     <article className="flex flex-col gap-10">
+      <ProductJsonLd
+        product={product}
+        url={absoluteUrl(ROUTES.productDetail(product.slug))}
+      />
       <Breadcrumbs items={breadcrumbItems} />
 
       <div className="grid gap-8 md:grid-cols-2 lg:gap-12">
@@ -97,7 +103,7 @@ export default async function ProductDetailPage({
             </p>
           ) : null}
 
-          <AddToCartButton product={product} buttonVariant="rj" className="w-full sm:w-auto" />
+          <ProductQuantityAndAddToCart product={product} />
         </div>
       </div>
 

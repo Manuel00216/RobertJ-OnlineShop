@@ -29,5 +29,15 @@ export type CartAction =
   | { type: "remove"; productId: string }
   | { type: "removeMany"; productIds: string[] }
   | { type: "setQuantity"; productId: string; quantity: number }
+  /**
+   * Applies a server-confirmed price/stock correction to one line. Requires
+   * an explicit user action (e.g. clicking "Update") — never dispatched
+   * automatically just because a mismatch was detected.
+   */
+  | {
+      type: "updateItem";
+      productId: string;
+      patch: Partial<Pick<CartItem, "unitPriceCents" | "maxQuantity">>;
+    }
   | { type: "clear" }
   | { type: "hydrate"; state: CartState };

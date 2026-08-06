@@ -23,6 +23,7 @@ export async function cancelOrderAction(
 
   try {
     const user = await queries.requireSessionUser();
+    await queries.requireRateLimit(`cancelOrder:${user.id}`, 10, 60);
     await queries.cancelBuyerOrder(parsed.data.orderId, user.id);
     // Re-render the history list and the detail page so the timeline updates.
     revalidatePath(ROUTES.orders, "layout");

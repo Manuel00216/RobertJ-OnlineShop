@@ -47,6 +47,9 @@ export interface ProductListParams {
   sort?: ProductSort;
   /** Matches products tagged "sale" — the same seller-set tag convention ProductCard already reads. */
   onSale?: boolean;
+  /** Major-unit pesos (not cents) — converted to price_cents inside listProducts. */
+  minPrice?: number;
+  maxPrice?: number;
 }
 
 export type ProductSort = "newest" | "price-asc" | "price-desc" | "title-asc";

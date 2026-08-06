@@ -1,7 +1,9 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import type { Category } from "@/features/categories/types/category.types";
 import type { ProductSort } from "@/features/products/types/product.types";
 
@@ -25,7 +27,7 @@ const CHIP_ACTIVE =
 const CHIP_IDLE =
   "rounded-full border-[1.5px] border-rj-gray-200 bg-transparent px-4 py-1.5 text-[11px] font-bold text-rj-gray-600 transition-all hover:border-rj-black hover:text-rj-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30";
 
-/** Category chips + sort control for the product listing. */
+/** Category chips + price range + sort control for the product listing. */
 export function ProductFilters({ categories = [] }: ProductFiltersProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -38,6 +40,11 @@ export function ProductFilters({ categories = [] }: ProductFiltersProps) {
     : "newest";
   const onSale = searchParams.get("onSale") === "true";
 
+  const [minPrice, setMinPrice] = useState(searchParams.get("minPrice") ?? "");
+  const [maxPrice, setMaxPrice] = useState(searchParams.get("maxPrice") ?? "");
+  const debouncedMinPrice = useDebouncedValue(minPrice, 400);
+  const debouncedMaxPrice = useDebouncedValue(maxPrice, 400);
+
   function updateParams(updates: Record<string, string | null>) {
     const params = new URLSearchParams(searchParams.toString());
     for (const [key, value] of Object.entries(updates)) {
@@ -47,6 +54,38 @@ export function ProductFilters({ categories = [] }: ProductFiltersProps) {
     params.delete("page");
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }
+
+  // Push the debounced price values to the URL once they settle, so a drag/
+  // keystroke doesn't trigger a navigation per tick (mirrors ProductSearchInput's
+  // inline-params pattern, not the shared `updateParams` closure, so the effect's
+  // dependency list stays exact).
+  useEffect(() => {
+    const current = searchParams.get("minPrice") ?? "";
+    if (current === debouncedMinPrice) return;
+    const params = new URLSearchParams(searchParams.toString());
+    if (debouncedMinPrice) params.set("minPrice", debouncedMinPrice);
+    else params.delete("minPrice");
+    params.delete("page");
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [debouncedMinPrice, pathname, router, searchParams]);
+
+  useEffect(() => {
+    const current = searchParams.get("maxPrice") ?? "";
+    if (current === debouncedMaxPrice) return;
+    const params = new URLSearchParams(searchParams.toString());
+    if (debouncedMaxPrice) params.set("maxPrice", debouncedMaxPrice);
+    else params.delete("maxPrice");
+    params.delete("page");
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [debouncedMaxPrice, pathname, router, searchParams]);
+
+  function resetPrice() {
+    setMinPrice("");
+    setMaxPrice("");
+    updateParams({ minPrice: null, maxPrice: null });
+  }
+
+  const hasPriceFilter = minPrice !== "" || maxPrice !== "";
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -74,7 +113,7 @@ export function ProductFilters({ categories = [] }: ProductFiltersProps) {
         </div>
       ) : null}
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
           aria-pressed={onSale}
@@ -83,6 +122,47 @@ export function ProductFilters({ categories = [] }: ProductFiltersProps) {
         >
           On Sale
         </button>
+
+        <div className="flex items-center gap-1.5" role="group" aria-label="Filter by price">
+          <label htmlFor="filter-min-price" className="sr-only">
+            Minimum price
+          </label>
+          <input
+            id="filter-min-price"
+            type="number"
+            inputMode="decimal"
+            min={0}
+            placeholder="Min ₱"
+            value={minPrice}
+            onChange={(event) => setMinPrice(event.target.value)}
+            className="h-9 w-20 rounded-full border-[1.5px] border-rj-gray-200 bg-transparent px-3 text-[11px] font-bold text-rj-black outline-none transition-colors placeholder:text-rj-gray-400 placeholder:font-medium focus-visible:border-rj-black"
+          />
+          <span className="text-rj-gray-400" aria-hidden="true">
+            –
+          </span>
+          <label htmlFor="filter-max-price" className="sr-only">
+            Maximum price
+          </label>
+          <input
+            id="filter-max-price"
+            type="number"
+            inputMode="decimal"
+            min={0}
+            placeholder="Max ₱"
+            value={maxPrice}
+            onChange={(event) => setMaxPrice(event.target.value)}
+            className="h-9 w-20 rounded-full border-[1.5px] border-rj-gray-200 bg-transparent px-3 text-[11px] font-bold text-rj-black outline-none transition-colors placeholder:text-rj-gray-400 placeholder:font-medium focus-visible:border-rj-black"
+          />
+          {hasPriceFilter ? (
+            <button
+              type="button"
+              onClick={resetPrice}
+              className="text-[11px] font-semibold text-rj-red-dark hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30"
+            >
+              Reset
+            </button>
+          ) : null}
+        </div>
 
         <select
           value={sort}

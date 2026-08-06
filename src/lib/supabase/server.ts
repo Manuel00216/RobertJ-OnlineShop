@@ -37,6 +37,23 @@ export async function createSupabaseServerClient() {
 }
 
 /**
+ * Supabase client with no cookie/session binding. Use only for data RLS
+ * already exposes to `anon` (e.g. active products/categories for the
+ * sitemap) — never where a session matters. Deliberately avoids `cookies()`
+ * (unlike `createSupabaseServerClient`) so callers like `sitemap.ts` stay
+ * static/ISR-eligible instead of being forced fully dynamic on every request.
+ */
+export function createSupabaseAnonClient() {
+  return createServerClient<Database>(
+    publicEnv.NEXT_PUBLIC_SUPABASE_URL,
+    publicEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    {
+      cookies: { getAll: () => [], setAll: () => {} },
+    },
+  );
+}
+
+/**
  * Privileged client that bypasses RLS.
  * Only for trusted server-side jobs — never expose its results directly.
  */

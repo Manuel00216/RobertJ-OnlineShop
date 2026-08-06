@@ -1,6 +1,6 @@
 export { CatalogHeader } from "./components/CatalogHeader";
-export { ProductCard } from "./components/ProductCard";
 export { ProductGrid } from "./components/ProductGrid";
+export { ProductTile, type ProductTileItem } from "./components/ProductTile";
 export { ProductGridSkeleton } from "./components/ProductGridSkeleton";
 export { ProductSearchInput } from "./components/ProductSearchInput";
 export { ProductFilters } from "./components/ProductFilters";

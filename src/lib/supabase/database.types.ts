@@ -349,6 +349,14 @@ export interface Database {
         Args: { value: string };
         Returns: string;
       };
+      check_rate_limit: {
+        Args: {
+          p_key: string;
+          p_max_hits: number;
+          p_window_seconds: number;
+        };
+        Returns: boolean;
+      };
     };
 
     Enums: {

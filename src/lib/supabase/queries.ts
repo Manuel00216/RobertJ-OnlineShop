@@ -13,7 +13,11 @@ import {
   type ProductCondition,
   type ProductStatus,
 } from "@/constants/status";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import {
+  createSupabaseAnonClient,
+  createSupabaseServerClient,
+} from "@/lib/supabase/server";
+import { mapPostgresError } from "@/lib/supabase/postgres-errors";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { slugify } from "@/lib/utils/format";
 import { toCents } from "@/lib/utils/currency";
@@ -141,8 +145,20 @@ export async function listProducts(
     .eq("status", params.status ?? PRODUCT_STATUS.active);
 
   if (params.search) {
-    // Backed by the GIN trigram index on products.title.
-    query = query.ilike("title", `%${params.search}%`);
+    // Postgres's `.or()` filter mini-DSL treats "," and "()" as syntax, not
+    // literal characters, so strip them before interpolating — otherwise a
+    // search term containing one would break the filter string.
+    const term = params.search.replace(/[,()]/g, " ").trim();
+    if (term) {
+      // Trigram substring match on the title (typo/partial-tolerant, backed
+      // by products_title_trgm_idx) OR'd with full-text search across the
+      // generated `search_vector` column (title + description, backed by
+      // products_search_vector_idx — see initial_schema.sql), so a
+      // description-only match is now findable too.
+      query = query.or(
+        `title.ilike.%${term}%,search_vector.wfts(english).${term}`,
+      );
+    }
   }
   if (params.categoryId) {
     query = query.eq("category_id", params.categoryId);
@@ -154,6 +170,13 @@ export async function listProducts(
   }
   if (params.sellerId) {
     query = query.eq("seller_id", params.sellerId);
+  }
+  if (params.minPrice !== undefined) {
+    // Backed by products_active_price_idx (price_cents where status='active').
+    query = query.gte("price_cents", toCents(params.minPrice));
+  }
+  if (params.maxPrice !== undefined) {
+    query = query.lte("price_cents", toCents(params.maxPrice));
   }
 
   switch (params.sort) {
@@ -257,6 +280,74 @@ export async function listRelatedProducts(
   }
 
   return (data ?? []).map((row) => toProduct(row as ProductRowWithImages));
+}
+
+/** Live price/stock snapshot for one product, used to revalidate a cached cart line. */
+export interface ProductPriceAndStock {
+  id: string;
+  priceCents: number;
+  quantity: number;
+  status: ProductStatus;
+}
+
+/**
+ * Batch re-check of current price/stock/status for a set of product ids — the
+ * read-side counterpart to `create_order`'s re-pricing, used to flag stale
+ * cart lines before checkout. Public (no auth): the cart is a guest-accessible
+ * client-side feature (ADR-013), so this must work without a session.
+ *
+ * The `products` SELECT RLS policy scopes anonymous/non-owner reads to
+ * `status = 'active'` (see initial_schema.sql), so a product that has sold
+ * out, been archived, or gone back to draft simply will not come back in the
+ * result set — callers must treat an id **missing** from the returned array
+ * as "no longer available," not as a fetch bug.
+ */
+export async function getProductsPriceAndStock(
+  ids: string[],
+): Promise<ProductPriceAndStock[]> {
+  if (ids.length === 0) return [];
+
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PRODUCTS)
+    .select("id, price_cents, quantity, status")
+    .in("id", ids);
+
+  if (error) {
+    throw new Error(`Failed to check product availability: ${error.message}`);
+  }
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    priceCents: row.price_cents,
+    quantity: row.quantity,
+    status: row.status as ProductStatus,
+  }));
+}
+
+/**
+ * Slug + last-modified for every active product, for `sitemap.ts` only.
+ * Uses the cookie-free `createSupabaseAnonClient()` (not the usual
+ * cookie-bound client) so the sitemap route stays static/ISR-eligible — see
+ * that function's doc comment.
+ */
+export async function listActiveProductSlugsForSitemap(): Promise<
+  { slug: string; updatedAt: string }[]
+> {
+  const supabase = createSupabaseAnonClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PRODUCTS)
+    .select("slug, updated_at")
+    .eq("status", PRODUCT_STATUS.active);
+
+  if (error) {
+    throw new Error(`Failed to load product slugs: ${error.message}`);
+  }
+
+  return (data ?? []).map((row) => ({
+    slug: row.slug,
+    updatedAt: row.updated_at,
+  }));
 }
 
 /** Inserts a product owned by the given seller. */
@@ -430,6 +521,30 @@ export async function getCategoryBySlug(slug: string): Promise<Category | null> 
         productCount: 0,
       }
     : null;
+}
+
+/**
+ * Slug + last-modified for every active category, for `sitemap.ts` only.
+ * Uses the cookie-free `createSupabaseAnonClient()` — see that function's
+ * doc comment for why.
+ */
+export async function listActiveCategorySlugsForSitemap(): Promise<
+  { slug: string; updatedAt: string }[]
+> {
+  const supabase = createSupabaseAnonClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.CATEGORIES)
+    .select("slug, updated_at")
+    .eq("active", true);
+
+  if (error) {
+    throw new Error(`Failed to load category slugs: ${error.message}`);
+  }
+
+  return (data ?? []).map((row) => ({
+    slug: row.slug,
+    updatedAt: row.updated_at,
+  }));
 }
 
 // ============================================================================
@@ -832,7 +947,9 @@ export async function updateMyProfile(
     .eq("id", userId);
 
   if (error) {
-    throw new Error(`Failed to update profile: ${error.message}`);
+    throw new Error(
+      mapPostgresError(error, "Failed to update profile. Please try again."),
+    );
   }
 
   // Re-read the authoritative row via the get_my_profile() RPC — the only path
@@ -904,6 +1021,35 @@ export async function requireRole(
     throw new Error("You do not have permission to perform this action.");
   }
   return user;
+}
+
+/**
+ * Throws when `key` has been hit more than `maxHits` times within
+ * `windowSeconds` — use at the top of a Server Action, after
+ * `requireSessionUser()`/`requireRole()`, right before the mutation. Backed
+ * by the `check_rate_limit` Postgres function (fixed-window counter; see its
+ * migration for the concurrency/tradeoff notes).
+ */
+export async function requireRateLimit(
+  key: string,
+  maxHits: number,
+  windowSeconds: number,
+): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("check_rate_limit", {
+    p_key: key,
+    p_max_hits: maxHits,
+    p_window_seconds: windowSeconds,
+  });
+
+  if (error) {
+    // Fail open on infrastructure errors — a broken rate limiter should never
+    // itself take down profile updates/order cancellation/cart checks.
+    return;
+  }
+  if (data === false) {
+    throw new Error("Too many attempts. Please try again in a moment.");
+  }
 }
 
 export async function signInWithPassword(email: string, password: string) {

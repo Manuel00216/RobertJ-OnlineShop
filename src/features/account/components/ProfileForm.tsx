@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { FormField } from "@/components/forms/FormField";
 import { ROUTES } from "@/constants/routes";
+import { AvatarPreview } from "@/features/account/components/AvatarPreview";
 import { updateProfileAction } from "@/features/account/actions/account.actions";
 import type { Profile } from "@/features/account/types/account.types";
 import type { ActionResult } from "@/types/action.types";
@@ -28,6 +29,7 @@ export function ProfileForm({
     ActionResult<Profile> | null,
     FormData
   >(updateProfileAction, null);
+  const [avatarUrl, setAvatarUrl] = useState(profile.avatarUrl ?? "");
 
   const fieldErrors =
     state && !state.success ? state.fieldErrors : undefined;
@@ -80,12 +82,14 @@ export function ProfileForm({
         placeholder="+63 912 345 6789"
         errors={fieldErrors?.phone}
       />
+      <AvatarPreview url={avatarUrl} name={profile.fullName ?? email} />
       <FormField
         name="avatarUrl"
         label="Avatar URL"
         type="url"
         tone="brand"
         defaultValue={profile.avatarUrl ?? ""}
+        onChange={(event) => setAvatarUrl(event.target.value)}
         placeholder="https://…"
         hint="A hosted image link — uploads aren't available yet."
         errors={fieldErrors?.avatarUrl}

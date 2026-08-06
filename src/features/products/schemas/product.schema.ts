@@ -26,24 +26,39 @@ export const productSortSchema = z.enum([
 ]);
 
 /** Validates and normalises search params for the product listing. */
-export const productListParamsSchema = z.object({
-  page: z.coerce.number().int().min(1).default(PAGINATION.defaultPage),
-  pageSize: z.coerce
-    .number()
-    .int()
-    .min(1)
-    .max(PAGINATION.maxPageSize)
-    .default(PAGINATION.defaultPageSize),
-  search: z.string().trim().max(120).optional(),
-  categoryId: z.uuid().optional(),
-  sort: productSortSchema.default("newest"),
-  // Deliberately not z.coerce.boolean() — Boolean("false") is true, which
-  // would make ?onSale=false behave identically to ?onSale=true.
-  onSale: z
-    .string()
-    .optional()
-    .transform((value) => value === "true"),
-});
+export const productListParamsSchema = z
+  .object({
+    page: z.coerce.number().int().min(1).default(PAGINATION.defaultPage),
+    pageSize: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(PAGINATION.maxPageSize)
+      .default(PAGINATION.defaultPageSize),
+    search: z.string().trim().max(120).optional(),
+    categoryId: z.uuid().optional(),
+    sort: productSortSchema.default("newest"),
+    // Deliberately not z.coerce.boolean() — Boolean("false") is true, which
+    // would make ?onSale=false behave identically to ?onSale=true.
+    onSale: z
+      .string()
+      .optional()
+      .transform((value) => value === "true"),
+    // Major-unit pesos from the URL; converted to price_cents in listProducts
+    // (queries.ts), matching how createProductSchema's `price` is handled.
+    minPrice: z.coerce.number().min(0).optional(),
+    maxPrice: z.coerce.number().min(0).optional(),
+  })
+  .refine(
+    (value) =>
+      value.minPrice === undefined ||
+      value.maxPrice === undefined ||
+      value.minPrice <= value.maxPrice,
+    {
+      message: "Minimum price must be less than maximum price.",
+      path: ["minPrice"],
+    },
+  );
 
 /**
  * Payload for creating a product. `price` arrives in major units from the form

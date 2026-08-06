@@ -1,8 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
+import { ProductLightbox } from "@/features/products/components/ProductLightbox";
 import type { ProductImage } from "@/features/products/types/product.types";
 
 export interface ProductGalleryProps {
@@ -10,14 +11,28 @@ export interface ProductGalleryProps {
   title: string;
 }
 
-/** Main image + thumbnail switcher (frozen-consistent rj styling). */
+/** Main image + thumbnail switcher, with a click-to-open full-screen lightbox. */
 export function ProductGallery({ images, title }: ProductGalleryProps) {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const active = images[activeIndex] ?? null;
+
+  function closeLightbox() {
+    setLightboxOpen(false);
+    triggerRef.current?.focus();
+  }
 
   return (
     <div role="group" aria-label="Product images">
-      <div className="relative mb-3 aspect-[3/4] overflow-hidden rounded-xl bg-rj-gray-100">
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => active && setLightboxOpen(true)}
+        disabled={!active}
+        aria-label="View full image"
+        className="relative mb-3 block aspect-[3/4] w-full overflow-hidden rounded-xl bg-rj-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30 disabled:cursor-default"
+      >
         {active ? (
           <Image
             src={active.url}
@@ -32,7 +47,7 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
             No image available
           </span>
         )}
-      </div>
+      </button>
 
       {images.length > 1 ? (
         <div className="flex flex-wrap gap-2" role="list" aria-label="Product image thumbnails">
@@ -59,6 +74,16 @@ export function ProductGallery({ images, title }: ProductGalleryProps) {
             </button>
           ))}
         </div>
+      ) : null}
+
+      {lightboxOpen ? (
+        <ProductLightbox
+          images={images}
+          activeIndex={activeIndex}
+          onIndexChange={setActiveIndex}
+          onClose={closeLightbox}
+          title={title}
+        />
       ) : null}
     </div>
   );

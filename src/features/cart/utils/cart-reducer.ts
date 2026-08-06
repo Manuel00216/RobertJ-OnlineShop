@@ -57,6 +57,16 @@ export function cartReducer(state: CartState, action: CartAction): CartState {
       };
     }
 
+    case "updateItem": {
+      return {
+        items: state.items.map((item) => {
+          if (item.productId !== action.productId) return item;
+          const patched = { ...item, ...action.patch };
+          return { ...patched, quantity: clampQuantity(patched, item.quantity) };
+        }),
+      };
+    }
+
     case "remove":
       return {
         items: state.items.filter((item) => item.productId !== action.productId),
