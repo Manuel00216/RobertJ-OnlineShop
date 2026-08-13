@@ -182,10 +182,10 @@ Detailed purpose, boundaries, and interactions for each module are in [`ARCHITEC
 | Categories | ✅ Completed | `src/features/categories`, `src/app/(shop)/categories` |
 | Cart | ✅ Completed | `src/features/cart`, `src/app/(shop)/cart` |
 | Customer Account | ✅ Completed | `src/features/account`, `src/app/(account)` |
-| Orders | ✅ Completed | `src/features/orders`, `src/app/(account)/orders` |
+| Orders | ✅ Completed — buyer history/detail *and* Shop Owner/Admin fulfilment management | `src/features/orders`, `src/app/(account)/orders`, `src/app/dashboard/orders` |
 | Checkout | ✅ Completed (COD only — QR payment method is Phase 7/Payments scope) | `src/features/checkout`, `src/app/(shop)/checkout` |
-| Shops (multi-shop model) | 🚧 In Progress (schema foundation only — `shops`/`shop_users` exist and are backfilled; `products`/`orders` still key off `seller_id`, not `shop_id`) | `supabase/migrations/20260813000000_shops_and_shop_users.sql`, `src/features/shops` *(types only)* |
-| Inventory (dedicated module) | ⏳ Upcoming | `src/features/inventory` *(stub)* |
+| Shops (multi-shop model) | 🚧 In Progress (`shops`/`shop_users` exist and are backfilled; `products.shop_id` exists — `20260814000000_products_shop_scoping.sql`; admin can now create/manage shops and onboard sellers with no direct SQL — `20260816000000_admin_user_shop_management.sql`; `orders` still keys off `seller_id` only, no `shop_id` bridge yet) | `supabase/migrations/{20260813000000,20260814000000,20260816000000}_*.sql`, `src/features/shops`, `src/features/users`, `src/app/dashboard/{shops,users}` |
+| Inventory (dedicated module) | ✅ Completed | `supabase/migrations/20260815000000_inventory_and_stock_history.sql`, `src/features/inventory`, `src/app/dashboard/inventory` |
 | Payments (COD + QR verification) | ✅ Completed | `src/features/payments`; receipt upload on the order detail page; verification queue at `/dashboard/payments` |
 | Reports | ⏳ Upcoming | `src/features/reports` *(stub)* |
 | Guided Product Selection | ⏳ Upcoming | `src/features/assistant` *(stub; landing preview only)* |
@@ -225,10 +225,15 @@ flowchart LR
 > shops/inventory schema work, so it wasn't blocked on phase order. Noted here rather than
 > silently reordering the roadmap.
 >
-> Phase 6 is **partially done**: the `shops`/`shop_users` schema foundation landed
+> Phase 6 is **mostly done**: the `shops`/`shop_users` schema foundation landed
 > (tables, RLS, backfill — see [Implementation Status](#implementation-status-target-vs-current)),
-> but `products`/`orders` still key off `seller_id` directly (no `shop_id` FK bridge yet), and
-> Inventory hasn't started. See [ARCHITECTURE.md → TD-1](./ARCHITECTURE.md#technical-debt-register).
+> `products.shop_id` now exists (`products` is shop-scoped), Inventory is fully built
+> (dedicated `inventory`/`stock_adjustments` tables — see
+> [ARCHITECTURE.md → Architecture Evolution Strategy](./ARCHITECTURE.md#architecture-evolution-strategy)),
+> and Admin can now manage users/shops and onboard sellers with no direct SQL
+> (`admin_assign_seller_shop`/`admin_list_users` RPCs, `/dashboard/{users,shops}`).
+> What's left: `orders` still keys off `seller_id` only, no `shop_id` bridge yet.
+> See [ARCHITECTURE.md → TD-1](./ARCHITECTURE.md#technical-debt-register).
 
 | Phase | Focus | State |
 |-------|-------|-------|
@@ -237,7 +242,7 @@ flowchart LR
 | 3 | Authentication (UI + flows) | ✅ |
 | 4 | Customer Account & Order Tracking | ✅ |
 | 5 | **Checkout** | ✅ |
-| 6 | Shops & Inventory (align to SAD multi-shop model) | 🚧 (Shops schema foundation done; `products`/`orders` FK bridge + Inventory not started) |
+| 6 | Shops & Inventory (align to SAD multi-shop model) | 🚧 (Shops + `products.shop_id` + Inventory + Admin Users/Shops onboarding done; `orders.shop_id` bridge not started) |
 | 7 | Payments — COD + QR receipt upload + manual verification | ✅ |
 | 8 | Reports & analytics | ⏳ |
 | 9 | Guided Product Selection (rule-based) | ⏳ |
@@ -436,9 +441,9 @@ The interface follows modern marketplace best practices, inspired by **Lazada, S
 | **Administrator** role | `admin` role | Matches. |
 | **Guest** | Unauthenticated visitor (no profile) | Matches. |
 | `shops` table | 🚧 **Foundation implemented** | Table + RLS + backfill exist (one shop per seller). Products still attach to a **seller** (`products.seller_id`), not a `shop_id` — no FK bridge yet. |
-| `shop_users` table | 🚧 **Foundation implemented** | Proper junction table (supports >1 staff per shop later); today exactly one member per shop, admin-managed only (no self-service join). |
+| `shop_users` table | 🚧 **Foundation implemented** | Proper junction table (supports >1 staff per shop later); today exactly one member per shop (DB-enforced via `unique (user_id)`), admin-managed via `/dashboard/users` (no self-service join). |
 | `roles` table | Role stored on `profiles.role` (enum) | Roles are an enum column, not a separate table. |
-| `inventory` table | `products.quantity` column | Stock is a column on `products`, not a dedicated table. |
+| `inventory` table | ✅ **Implemented** — dedicated `inventory` + `stock_adjustments` tables | `products.quantity` is now a trigger-synced mirror, not the source of truth. See [ARCHITECTURE.md → Architecture Evolution Strategy](./ARCHITECTURE.md#architecture-evolution-strategy). |
 | `recommendation_rules` table | ❌ Not implemented | Guided Product Selection is a landing **preview** only; `features/assistant` is a stub. |
 | `reports` table | ❌ Not implemented | `features/reports` is a stub. |
 | Unified **cart** | Client-side cart (localStorage + `useReducer`) | Guest cart is client-only by design; committed at checkout. |

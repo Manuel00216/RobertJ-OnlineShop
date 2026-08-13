@@ -23,6 +23,9 @@ export const DATABASE_TABLES = {
   PAYMENTS: "payments",
   SHOPS: "shops",
   SHOP_USERS: "shop_users",
+  INVENTORY: "inventory",
+  STOCK_ADJUSTMENTS: "stock_adjustments",
+  ADMIN_ACTION_LOG: "admin_action_log",
 } as const;
 
 /** Union of every table name in the schema. */

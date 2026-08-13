@@ -15,6 +15,7 @@ export const ROUTES = {
   dashboard: "/dashboard",
   dashboardProducts: "/dashboard/products",
   dashboardOrders: "/dashboard/orders",
+  dashboardOrderDetail: (id: string) => `/dashboard/orders/${id}`,
   inventory: "/dashboard/inventory",
   paymentVerification: "/dashboard/payments",
   reports: "/dashboard/reports",

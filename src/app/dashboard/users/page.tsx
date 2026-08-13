@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 
 import { ADMIN_ONLY_ROLES } from "@/constants/roles";
-import { DashboardComingSoon } from "@/features/dashboard/components/DashboardComingSoon";
-import { requireRole } from "@/lib/supabase/queries";
+import { CatalogHeader } from "@/features/products/components/CatalogHeader";
+import { UsersTable } from "@/features/users/components/UsersTable";
+import { listAdminUsers, listShops, requireRole } from "@/lib/supabase/queries";
 
 export const metadata: Metadata = { title: "Users — Dashboard" };
 
@@ -10,11 +11,17 @@ export const metadata: Metadata = { title: "Users — Dashboard" };
 export default async function DashboardUsersPage() {
   await requireRole(ADMIN_ONLY_ROLES);
 
+  const [users, shops] = await Promise.all([listAdminUsers(), listShops()]);
+  const activeShops = shops.filter((shop) => shop.active);
+
   return (
-    <DashboardComingSoon
-      eyebrow="Dashboard"
-      title="Users"
-      description="Platform-wide user and role management will appear here once this section ships."
-    />
+    <div className="flex flex-col gap-8">
+      <CatalogHeader
+        eyebrow="Dashboard"
+        title="Users"
+        description="Promote a buyer to Seller and assign them to a shop."
+      />
+      <UsersTable users={users} shops={activeShops} />
+    </div>
   );
 }

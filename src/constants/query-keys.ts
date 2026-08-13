@@ -14,4 +14,9 @@ export const QUERY_KEYS = {
     all: ["orders"] as const,
     detail: (id: string) => ["orders", "detail", id] as const,
   },
+  inventory: {
+    all: ["inventory"] as const,
+    detail: (productId: string) => ["inventory", "detail", productId] as const,
+    history: (productId: string) => ["inventory", "history", productId] as const,
+  },
 } as const;

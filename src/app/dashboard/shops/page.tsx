@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 
 import { ADMIN_ONLY_ROLES } from "@/constants/roles";
-import { DashboardComingSoon } from "@/features/dashboard/components/DashboardComingSoon";
-import { requireRole } from "@/lib/supabase/queries";
+import { AdminShopsPanel } from "@/features/shops/components/AdminShopsPanel";
+import { CatalogHeader } from "@/features/products/components/CatalogHeader";
+import { listShopsWithMembers, requireRole } from "@/lib/supabase/queries";
 
 export const metadata: Metadata = { title: "Shops — Dashboard" };
 
@@ -10,11 +11,16 @@ export const metadata: Metadata = { title: "Shops — Dashboard" };
 export default async function DashboardShopsPage() {
   await requireRole(ADMIN_ONLY_ROLES);
 
+  const shops = await listShopsWithMembers();
+
   return (
-    <DashboardComingSoon
-      eyebrow="Dashboard"
-      title="Shops"
-      description="Shop management will appear here once the shops model ships."
-    />
+    <div className="flex flex-col gap-8">
+      <CatalogHeader
+        eyebrow="Dashboard"
+        title="Shops"
+        description="Create and manage shops. Assign a seller to a shop from the Users screen."
+      />
+      <AdminShopsPanel shops={shops} />
+    </div>
   );
 }

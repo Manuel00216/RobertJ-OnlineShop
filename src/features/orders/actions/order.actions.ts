@@ -2,11 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 
+import { DASHBOARD_ROLES } from "@/constants/roles";
 import { ROUTES } from "@/constants/routes";
-import { fail, ok } from "@/lib/utils/result";
+import { fail, fromZodError, ok } from "@/lib/utils/result";
 import * as queries from "@/lib/supabase/queries";
 import type { ActionResult } from "@/types/action.types";
-import { cancelOrderSchema } from "@/features/orders/schemas/order.schema";
+import {
+  advanceOrderStatusSchema,
+  cancelOrderSchema,
+} from "@/features/orders/schemas/order.schema";
+import type { Order } from "@/features/orders/types/order.types";
 
 /**
  * Cancels one of the signed-in buyer's own orders. Ownership + the
@@ -33,6 +38,39 @@ export async function cancelOrderAction(
   } catch (error) {
     return fail(
       error instanceof Error ? error.message : "Could not cancel the order.",
+    );
+  }
+}
+
+/**
+ * Advances (or cancels) an order's fulfilment status from the dashboard.
+ * One action for both: cancelling is just another legal transition target
+ * per `ORDER_STATUS_TRANSITIONS`. Revalidates the dashboard list/detail *and*
+ * the buyer-facing detail page, so the buyer's already-rendered order view
+ * doesn't show a stale status.
+ */
+export async function advanceOrderStatusAction(
+  orderId: string,
+  newStatus: string,
+): Promise<ActionResult<Order>> {
+  const parsed = advanceOrderStatusSchema.safeParse({ orderId, newStatus });
+  if (!parsed.success) return fromZodError(parsed.error);
+
+  try {
+    const user = await queries.requireRole(DASHBOARD_ROLES);
+    await queries.requireRateLimit(`advanceOrderStatus:${user.id}`, 30, 60);
+    const order = await queries.advanceOrderStatus(
+      parsed.data.orderId,
+      parsed.data.newStatus,
+    );
+    revalidatePath(ROUTES.dashboardOrders, "layout");
+    revalidatePath(ROUTES.dashboardOrderDetail(order.id), "layout");
+    revalidatePath(ROUTES.orderDetail(order.id), "layout");
+    revalidatePath(ROUTES.orders, "layout");
+    return ok(order);
+  } catch (error) {
+    return fail(
+      error instanceof Error ? error.message : "Could not update the order.",
     );
   }
 }

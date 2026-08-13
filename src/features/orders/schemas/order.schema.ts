@@ -25,5 +25,12 @@ export const cancelOrderSchema = z.object({
   orderId: uuidSchema,
 });
 
+/** Payload for a seller/admin advancing (or cancelling) an order from the dashboard. */
+export const advanceOrderStatusSchema = z.object({
+  orderId: uuidSchema,
+  newStatus: orderStatusSchema,
+});
+
 export type BuyerOrderListParamsInput = z.input<typeof buyerOrderListParamsSchema>;
 export type CancelOrderInput = z.infer<typeof cancelOrderSchema>;
+export type AdvanceOrderStatusInput = z.infer<typeof advanceOrderStatusSchema>;

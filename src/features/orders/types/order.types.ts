@@ -44,6 +44,9 @@ export interface Order {
   currency: string;
   shippingAddress: ShippingAddress | null;
   notes: string | null;
+  buyerId: string;
+  /** Buyer display name (full name, falling back to username), or null — shown on the dashboard, not the buyer's own view. */
+  buyerName: string | null;
   sellerId: string;
   /** Seller display name (full name, falling back to username), or null. */
   sellerName: string | null;

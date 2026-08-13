@@ -37,6 +37,8 @@ import type { LandingStat } from "@/features/landing/types/landing.types";
 import {
   CANCELLABLE_ORDER_STATUSES,
   ORDER_STATUS_FLOW,
+  ORDER_STATUS_TRANSITIONS,
+  getOrderStatusLabel,
 } from "@/features/orders/constants/order.constants";
 import type {
   Order,
@@ -47,7 +49,14 @@ import type {
 import type { UpdateProfileInput } from "@/features/account/schemas/account.schema";
 import type { Profile } from "@/features/account/types/account.types";
 import type { Payment, PaymentDecision } from "@/features/payments/types/payment.types";
-import type { Shop } from "@/features/shops/types/shop.types";
+import type { Shop, ShopWithMember } from "@/features/shops/types/shop.types";
+import type { AdminUser } from "@/features/users/types/user.types";
+import type { AdjustStockInput } from "@/features/inventory/schemas/inventory.schema";
+import {
+  getStockStatus,
+  type InventoryItem,
+  type StockAdjustment,
+} from "@/features/inventory/types/inventory.types";
 
 /**
  * Centralized, reusable Supabase data-access layer.
@@ -393,12 +402,30 @@ export async function createProduct(
   return toProduct(data as ProductRowWithImages);
 }
 
-/** Applies a partial update. RLS enforces seller ownership. */
+/**
+ * Applies a partial update. RLS enforces seller ownership.
+ *
+ * `quantity` is handled separately: `products.quantity` is a trigger-synced
+ * mirror of `inventory.quantity` (see the Inventory module's migration), and
+ * `authenticated` no longer has UPDATE privilege on that column directly. A
+ * submitted `quantity` is converted to a delta against the current stock and
+ * routed through `adjustStock()` — the audited, authorization-checked RPC —
+ * *before* the rest of the row is updated, so a partial failure never leaves
+ * stock silently wrong while cosmetic fields succeed.
+ */
 export async function updateProduct(
   input: UpdateProductInput,
 ): Promise<Product> {
   const supabase = await createSupabaseServerClient();
-  const { id, price, categoryId, description, location, ...rest } = input;
+  const { id, price, categoryId, description, location, quantity, ...rest } = input;
+
+  if (quantity !== undefined) {
+    const current = await getInventoryForProduct(id);
+    const delta = quantity - (current?.quantity ?? 0);
+    if (delta !== 0) {
+      await adjustStock({ productId: id, delta, reason: "correction" });
+    }
+  }
 
   const { data, error } = await supabase
     .from(DATABASE_TABLES.PRODUCTS)
@@ -639,9 +666,10 @@ type OrderItemRow = Database["public"]["Tables"]["order_items"]["Row"];
  * items keep their immutable title/price snapshots either way.
  */
 const ORDER_COLUMNS = `
-  id, order_number, seller_id, subtotal_cents, shipping_fee_cents, total_cents,
-  currency, payment_status, order_status, shipping_address, notes, placed_at,
-  paid_at, shipped_at, delivered_at, cancelled_at,
+  id, order_number, buyer_id, seller_id, subtotal_cents, shipping_fee_cents,
+  total_cents, currency, payment_status, order_status, shipping_address, notes,
+  placed_at, paid_at, shipped_at, delivered_at, cancelled_at,
+  buyer:profiles!orders_buyer_id_fkey ( full_name, username ),
   seller:profiles!orders_seller_id_fkey ( full_name, username, payment_qr_url ),
   order_items (
     id, product_id, product_title, quantity, unit_price_cents, subtotal_cents,
@@ -651,6 +679,7 @@ const ORDER_COLUMNS = `
 
 type OrderRowWithItems = Omit<OrderRow, "shipping_address"> & {
   shipping_address: Json;
+  buyer: Pick<ProfileRow, "full_name" | "username"> | null;
   seller: Pick<ProfileRow, "full_name" | "username" | "payment_qr_url"> | null;
   order_items: Array<
     OrderItemRow & {
@@ -692,6 +721,8 @@ function toOrder(row: OrderRowWithItems): Order {
     currency: row.currency,
     shippingAddress: toShippingAddress(row.shipping_address),
     notes: row.notes,
+    buyerId: row.buyer_id,
+    buyerName: row.buyer?.full_name ?? row.buyer?.username ?? null,
     sellerId: row.seller_id,
     sellerName: row.seller?.full_name ?? row.seller?.username ?? null,
     sellerPaymentQrUrl: row.seller?.payment_qr_url ?? null,
@@ -846,6 +877,131 @@ export async function cancelBuyerOrder(
   if (error) {
     throw new Error(`Failed to cancel order: ${error.message}`);
   }
+}
+
+/**
+ * Every order visible to the caller for management purposes — no manual
+ * seller/admin filtering, matching `listDashboardProducts()`/
+ * `listDashboardInventory()`'s "RLS is the primary boundary" pattern: a
+ * seller sees their own orders (`seller_id = auth.uid()`), an admin sees
+ * every order.
+ */
+export async function listDashboardOrders(
+  params: OrderListParams,
+): Promise<PaginatedResult<Order>> {
+  const supabase = await createSupabaseServerClient();
+
+  let query = supabase
+    .from(DATABASE_TABLES.ORDERS)
+    .select(ORDER_COLUMNS, { count: "exact" });
+
+  if (params.search) {
+    query = query.ilike("order_number", `%${params.search}%`);
+  }
+  if (params.status) {
+    query = query.eq("order_status", params.status);
+  }
+
+  query = query.order("placed_at", { ascending: false });
+
+  const { from, to } = toRange(params);
+  const { data, error, count } = await query.range(from, to);
+
+  if (error) {
+    throw new Error(`Failed to load orders: ${error.message}`);
+  }
+
+  const total = count ?? 0;
+  return {
+    items: (data ?? []).map((row) => toOrder(row as OrderRowWithItems)),
+    total,
+    page: params.page,
+    pageSize: params.pageSize,
+    totalPages: Math.max(1, Math.ceil(total / params.pageSize)),
+  };
+}
+
+/**
+ * Single order by id for the dashboard (seller/admin) — no ownership filter;
+ * RLS alone determines visibility. Kept distinct from `getBuyerOrder`, which
+ * deliberately narrows to "orders where I'm the buyer" even though RLS would
+ * already scope it — collapsing them would blur that intent.
+ */
+export const getDashboardOrder = cache(
+  async (orderId: string): Promise<Order | null> => {
+    const supabase = await createSupabaseServerClient();
+    const { data, error } = await supabase
+      .from(DATABASE_TABLES.ORDERS)
+      .select(ORDER_COLUMNS)
+      .eq("id", orderId)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Failed to load order: ${error.message}`);
+    }
+
+    return data ? toOrder(data as OrderRowWithItems) : null;
+  },
+);
+
+/**
+ * Advances (or cancels) an order's fulfilment status from the dashboard.
+ * Validates the transition against `ORDER_STATUS_TRANSITIONS` — the DB
+ * trigger permits the seller/admin to set `order_status` to anything, so this
+ * app-level check is the actual forward-flow guard (same shape as
+ * `cancelBuyerOrder`'s `CANCELLABLE_ORDER_STATUSES` check). The second
+ * `.eq("order_status", currentStatus)` on the write is a cheap optimistic-
+ * concurrency guard: 0 rows affected means the status already changed
+ * (e.g. a double-click), surfaced as a friendly retry error rather than a
+ * silent no-op. Cancelling an order (newStatus = 'cancelled') restocks
+ * automatically via the `orders_restock_on_cancel` trigger — no extra code
+ * needed here.
+ */
+export async function advanceOrderStatus(
+  orderId: string,
+  newStatus: OrderStatus,
+): Promise<Order> {
+  const supabase = await createSupabaseServerClient();
+
+  const { data: existing, error: readError } = await supabase
+    .from(DATABASE_TABLES.ORDERS)
+    .select("order_status")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (readError) {
+    throw new Error(`Failed to load order: ${readError.message}`);
+  }
+  if (!existing) {
+    throw new Error("Order not found.");
+  }
+
+  const currentStatus = existing.order_status;
+  const allowed = ORDER_STATUS_TRANSITIONS[currentStatus];
+  if (!allowed.includes(newStatus)) {
+    throw new Error(
+      `Cannot move an order from "${getOrderStatusLabel(currentStatus)}" to "${getOrderStatusLabel(newStatus)}".`,
+    );
+  }
+
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.ORDERS)
+    .update({ order_status: newStatus })
+    .eq("id", orderId)
+    .eq("order_status", currentStatus)
+    .select(ORDER_COLUMNS)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to update order status: ${error.message}`);
+  }
+  if (!data) {
+    throw new Error(
+      "This order's status has already changed. Refresh and try again.",
+    );
+  }
+
+  return toOrder(data as OrderRowWithItems);
 }
 
 /** One seller-order to create. `shippingAddress` uses the DB's snake_case keys. */
@@ -1166,6 +1322,154 @@ export async function listShops(): Promise<Shop[]> {
   return (data ?? []).map((row) => toShop(row as ShopRow));
 }
 
+/** Payload for creating a shop — `slug` is always server-derived from `name`, never client-submitted. */
+export interface CreateShopInput {
+  name: string;
+}
+
+/** Admin-only: creates a shop. RLS (`is_admin()`) is the authorization boundary — no RPC needed, unlike cross-user writes. */
+export async function createShop(input: CreateShopInput): Promise<Shop> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.SHOPS)
+    .insert({
+      name: input.name,
+      slug: `${slugify(input.name)}-${Date.now().toString(36)}`,
+    })
+    .select("id, name, slug, active, created_at, updated_at")
+    .single();
+
+  if (error) {
+    throw new Error(mapPostgresError(error, "Failed to create shop."));
+  }
+
+  return toShop(data as ShopRow);
+}
+
+/** Payload for editing a shop's name and/or active status. */
+export interface UpdateShopInput {
+  id: string;
+  name?: string;
+  active?: boolean;
+}
+
+/** Admin-only: edits a shop. RLS (`is_admin()`) is the authorization boundary. */
+export async function updateShop(input: UpdateShopInput): Promise<Shop> {
+  const supabase = await createSupabaseServerClient();
+  const { id, ...rest } = input;
+
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.SHOPS)
+    .update(rest)
+    .eq("id", id)
+    .select("id, name, slug, active, created_at, updated_at")
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to update shop: ${error.message}`);
+  }
+
+  return toShop(data as ShopRow);
+}
+
+type ShopRowWithMembers = ShopRow & {
+  shop_users: Array<{
+    user_id: string;
+    member: Pick<ProfileRow, "full_name" | "username"> | null;
+  }>;
+};
+
+function toShopWithMember(row: ShopRowWithMembers): ShopWithMember {
+  const membership = row.shop_users?.[0] ?? null;
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    active: row.active,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    memberId: membership?.user_id ?? null,
+    memberName: membership?.member?.full_name ?? membership?.member?.username ?? null,
+  };
+}
+
+/**
+ * Every shop plus its current member, for the admin Shops management screen —
+ * distinct from `listShops()` (kept unchanged, id/name/slug/active only, used
+ * by the Products/Inventory admin shop-picker) so that screen's shape never
+ * has to change to support this one's richer needs.
+ */
+export async function listShopsWithMembers(): Promise<ShopWithMember[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.SHOPS)
+    .select(`
+      id, name, slug, active, created_at, updated_at,
+      shop_users ( user_id, member:profiles!shop_users_user_id_fkey ( full_name, username ) )
+    `)
+    .order("name", { ascending: true });
+
+  if (error) {
+    throw new Error(`Failed to load shops: ${error.message}`);
+  }
+
+  return (data ?? []).map((row) => toShopWithMember(row as ShopRowWithMembers));
+}
+
+// ============================================================================
+// Admin: Users
+// ============================================================================
+
+/**
+ * Every user, admin-only, via the `admin_list_users` RPC — the sole path to
+ * see email (never otherwise joinable from `public.profiles`; mirrors
+ * `get_my_profile()`'s shape but admin- rather than self-scoped). Authorization
+ * is re-checked inside the RPC itself, not just relied on via the caller's
+ * `requireRole` gate.
+ */
+export async function listAdminUsers(): Promise<AdminUser[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("admin_list_users");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    email: row.email,
+    fullName: row.full_name,
+    username: row.username,
+    role: row.role,
+    avatarUrl: row.avatar_url,
+    createdAt: row.created_at,
+    shopId: row.shop_id,
+    shopName: row.shop_name,
+  }));
+}
+
+/**
+ * Promotes a buyer to seller and/or (re)assigns their shop via the
+ * `admin_assign_seller_shop` RPC — the sole write path (no direct UPDATE
+ * grant exists for writing another user's `profiles.role`, and RLS never
+ * exposes another user's row to an admin for a plain client update). Atomic:
+ * role change + shop membership + audit log row, one transaction.
+ */
+export async function assignSellerShop(
+  userId: string,
+  shopId: string,
+): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("admin_assign_seller_shop", {
+    p_user_id: userId,
+    p_shop_id: shopId,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
 /**
  * Every product visible to the caller for management purposes — no status
  * filter (unlike `listProducts`, built for the storefront) and no manual
@@ -1232,6 +1536,165 @@ export async function getActivePaymentForOrder(
     throw new Error(`Failed to load payment: ${error.message}`);
   }
   return data ? toPayment(data as PaymentRowWithOrder) : null;
+}
+
+// ============================================================================
+// Inventory
+// ============================================================================
+
+type InventoryRow = Database["public"]["Tables"]["inventory"]["Row"];
+type StockAdjustmentRow = Database["public"]["Tables"]["stock_adjustments"]["Row"];
+
+/**
+ * Inventory columns plus the parent product's title/slug/status and the
+ * owning shop's name — everything the dashboard list needs in one round
+ * trip. Literal for the same reason as `PRODUCT_COLUMNS`/`PAYMENT_COLUMNS`.
+ */
+const INVENTORY_COLUMNS = `
+  id, product_id, shop_id, quantity, low_stock_threshold, created_at, updated_at,
+  product:products!inventory_product_id_fkey ( title, slug, status ),
+  shop:shops!inventory_shop_id_fkey ( name )
+`;
+
+type InventoryRowWithJoins = InventoryRow & {
+  product: Pick<ProductRow, "title" | "slug" | "status"> | null;
+  shop: { name: string } | null;
+};
+
+function toInventoryItem(row: InventoryRowWithJoins): InventoryItem {
+  return {
+    id: row.id,
+    productId: row.product_id,
+    productTitle: row.product?.title ?? "",
+    productSlug: row.product?.slug ?? "",
+    productStatus: (row.product?.status ?? PRODUCT_STATUS.draft) as ProductStatus,
+    shopId: row.shop_id,
+    shopName: row.shop?.name ?? null,
+    quantity: row.quantity,
+    lowStockThreshold: row.low_stock_threshold,
+    stockStatus: getStockStatus(row.quantity, row.low_stock_threshold),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+/**
+ * Every inventory row visible to the caller — no manual shop/seller
+ * filtering, matching `listDashboardProducts()`'s "RLS is the primary
+ * boundary" pattern: a shop member sees their own shop's stock, an admin
+ * sees every shop's.
+ */
+export async function listDashboardInventory(): Promise<InventoryItem[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.INVENTORY)
+    .select(INVENTORY_COLUMNS)
+    .order("updated_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`Failed to load inventory: ${error.message}`);
+  }
+
+  return (data ?? []).map((row) => toInventoryItem(row as InventoryRowWithJoins));
+}
+
+/** Single inventory row for one product, or null if none exists yet. */
+export async function getInventoryForProduct(
+  productId: string,
+): Promise<InventoryItem | null> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.INVENTORY)
+    .select(INVENTORY_COLUMNS)
+    .eq("product_id", productId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to load inventory: ${error.message}`);
+  }
+  return data ? toInventoryItem(data as InventoryRowWithJoins) : null;
+}
+
+/**
+ * Manually adjusts one product's stock via the `adjust_stock` RPC — the sole
+ * write path for restock/correction/shrinkage/other changes (no direct
+ * UPDATE grant exists on `inventory`). Authorization (shop membership or
+ * admin) is re-checked inside the RPC itself, not just by RLS. The RPC's
+ * raised messages (e.g. "Cannot reduce stock below zero") are already
+ * friendly, so the error is surfaced as-is, mirroring `createOrder()`.
+ */
+export async function adjustStock(input: AdjustStockInput): Promise<InventoryItem> {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("adjust_stock", {
+    p_product_id: input.productId,
+    p_delta: input.delta,
+    p_reason: input.reason,
+    p_note: input.note ?? null,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const item = await getInventoryForProduct(input.productId);
+  if (!item) {
+    throw new Error("Could not load the updated inventory record.");
+  }
+  return item;
+}
+
+/**
+ * Stock adjustment columns plus the acting profile's display name — the
+ * `note` explains *why* an adjustment happened, this explains *who* made it
+ * (null for system-driven rows: sale, cancellation restock).
+ */
+const STOCK_ADJUSTMENT_COLUMNS = `
+  id, product_id, shop_id, delta, previous_quantity, new_quantity, reason,
+  note, related_order_id, created_by, created_at,
+  actor:profiles!stock_adjustments_created_by_fkey ( full_name, username )
+`;
+
+type StockAdjustmentRowWithActor = StockAdjustmentRow & {
+  actor: Pick<ProfileRow, "full_name" | "username"> | null;
+};
+
+function toStockAdjustment(row: StockAdjustmentRowWithActor): StockAdjustment {
+  return {
+    id: row.id,
+    productId: row.product_id,
+    shopId: row.shop_id,
+    delta: row.delta,
+    previousQuantity: row.previous_quantity,
+    newQuantity: row.new_quantity,
+    reason: row.reason,
+    note: row.note,
+    relatedOrderId: row.related_order_id,
+    createdBy: row.created_by,
+    createdByName: row.actor?.full_name ?? row.actor?.username ?? null,
+    createdAt: row.created_at,
+  };
+}
+
+/** Recent stock movement history for one product, newest first. RLS scopes it identically to `inventory`. */
+export async function listStockAdjustments(
+  productId: string,
+  limit = 20,
+): Promise<StockAdjustment[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.STOCK_ADJUSTMENTS)
+    .select(STOCK_ADJUSTMENT_COLUMNS)
+    .eq("product_id", productId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    throw new Error(`Failed to load stock history: ${error.message}`);
+  }
+
+  return (data ?? []).map((row) =>
+    toStockAdjustment(row as StockAdjustmentRowWithActor),
+  );
 }
 
 // ============================================================================

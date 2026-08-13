@@ -373,6 +373,141 @@ export interface Database {
           },
         ];
       };
+
+      inventory: {
+        Row: {
+          id: string;
+          product_id: string;
+          shop_id: string | null;
+          quantity: number;
+          low_stock_threshold: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          product_id: string;
+          shop_id?: string | null;
+          quantity?: number;
+          low_stock_threshold?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["inventory"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "inventory_product_id_fkey";
+            columns: ["product_id"];
+            referencedRelation: "products";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "inventory_shop_id_fkey";
+            columns: ["shop_id"];
+            referencedRelation: "shops";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+
+      stock_adjustments: {
+        Row: {
+          id: string;
+          product_id: string;
+          shop_id: string | null;
+          delta: number;
+          previous_quantity: number;
+          new_quantity: number;
+          reason: Database["public"]["Enums"]["stock_adjustment_reason"];
+          note: string | null;
+          related_order_id: string | null;
+          /** Null = system-driven (sale, cancellation restock); set = a manual adjustment. */
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          product_id: string;
+          shop_id?: string | null;
+          delta: number;
+          previous_quantity: number;
+          new_quantity: number;
+          reason: Database["public"]["Enums"]["stock_adjustment_reason"];
+          note?: string | null;
+          related_order_id?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["stock_adjustments"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "stock_adjustments_product_id_fkey";
+            columns: ["product_id"];
+            referencedRelation: "products";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "stock_adjustments_shop_id_fkey";
+            columns: ["shop_id"];
+            referencedRelation: "shops";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "stock_adjustments_related_order_id_fkey";
+            columns: ["related_order_id"];
+            referencedRelation: "orders";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "stock_adjustments_created_by_fkey";
+            columns: ["created_by"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+
+      admin_action_log: {
+        Row: {
+          id: string;
+          actor_id: string | null;
+          action: string;
+          target_user_id: string | null;
+          target_shop_id: string | null;
+          metadata: Json | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          actor_id?: string | null;
+          action: string;
+          target_user_id?: string | null;
+          target_shop_id?: string | null;
+          metadata?: Json | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["admin_action_log"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "admin_action_log_actor_id_fkey";
+            columns: ["actor_id"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "admin_action_log_target_user_id_fkey";
+            columns: ["target_user_id"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "admin_action_log_target_shop_id_fkey";
+            columns: ["target_shop_id"];
+            referencedRelation: "shops";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
 
     Views: Record<string, never>;
@@ -430,6 +565,33 @@ export interface Database {
         Args: { p_shop_id: string };
         Returns: boolean;
       };
+      adjust_stock: {
+        Args: {
+          p_product_id: string;
+          p_delta: number;
+          p_reason: Database["public"]["Enums"]["stock_adjustment_reason"];
+          p_note?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["inventory"]["Row"];
+      };
+      admin_assign_seller_shop: {
+        Args: { p_user_id: string; p_shop_id: string };
+        Returns: Database["public"]["Tables"]["profiles"]["Row"];
+      };
+      admin_list_users: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          id: string;
+          email: string | null;
+          full_name: string | null;
+          username: string | null;
+          role: Database["public"]["Enums"]["user_role"];
+          avatar_url: string | null;
+          created_at: string;
+          shop_id: string | null;
+          shop_name: string | null;
+        }[];
+      };
     };
 
     Enums: {
@@ -451,6 +613,14 @@ export interface Database {
         | "delivered"
         | "cancelled"
         | "refunded";
+      stock_adjustment_reason:
+        | "initial_stock"
+        | "restock"
+        | "correction"
+        | "sale"
+        | "cancellation_restock"
+        | "shrinkage"
+        | "other";
     };
 
     CompositeTypes: Record<string, never>;

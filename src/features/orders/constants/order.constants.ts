@@ -67,6 +67,27 @@ export const CANCELLABLE_ORDER_STATUSES: readonly OrderStatus[] = [
   "confirmed",
 ];
 
+/**
+ * Legal next states for a seller/admin advancing (or cancelling) an order
+ * from the dashboard. The DB trigger permits the seller to set `order_status`
+ * to anything — this map is the actual forward-flow guard, enforced in
+ * `queries.advanceOrderStatus()`. Deliberately wider than
+ * `CANCELLABLE_ORDER_STATUSES`: a seller may still call off a `processing`
+ * order (e.g. an item turns out to be unavailable), matching
+ * `CancelOrderButton`'s existing buyer-facing copy ("once packed or shipped
+ * it can no longer be cancelled"). `refunded` is unreachable here — no admin
+ * refund flow exists yet (out of scope).
+ */
+export const ORDER_STATUS_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
+  pending: ["confirmed", "cancelled"],
+  confirmed: ["processing", "cancelled"],
+  processing: ["shipped", "cancelled"],
+  shipped: ["delivered"],
+  delivered: [],
+  cancelled: [],
+  refunded: [],
+};
+
 export function getOrderStatusLabel(status: OrderStatus): string {
   return STATUS_LABEL_MAP[status];
 }
