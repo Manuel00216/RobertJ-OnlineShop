@@ -221,11 +221,14 @@ erDiagram
 
 The live schema (see `supabase/migrations/*.sql` and `src/lib/supabase/database.types.ts`) implements a reviewed subset. Roles are an enum on `profiles`; "shops" are currently **seller accounts**.
 
-**Current tables:** `profiles`, `categories`, `products`, `product_images`, `orders`, `order_items`, `payments`.
+**Current tables:** `profiles`, `categories`, `products`, `product_images`, `orders`, `order_items`, `payments`, `shops`, `shop_users`.
 
 **Current enums:** `user_role (buyer|seller|admin)`, `product_status (draft|active|sold|archived)`, `product_condition (new|like_new|good|fair|poor)`, `payment_method_type (cod|card|qr_upload — `card` is inert legacy from the retired Stripe spike)`, `payment_status (pending|paid|failed|refunded|partially_refunded)`, `order_status (pending|confirmed|processing|shipped|delivered|cancelled|refunded)`.
 
-**Current DB functions:** `create_order`, `is_admin`, `current_user_role`, `get_my_profile`, `slugify`.
+**Current DB functions:** `create_order`, `is_admin`, `current_user_role`, `get_my_profile`, `slugify`, `is_shop_member`.
+
+> [!NOTE]
+> **`shops`/`shop_users` exist as of the Phase 2 migration (`20260813000000_shops_and_shop_users.sql`), but this is a foundation, not a completed cutover.** Each existing `seller` profile was backfilled into exactly one `shops` row via `shop_users` (one shop, one member, today). `products.seller_id` and `orders.seller_id` were deliberately **not** touched — they still directly reference `profiles.id`, and RLS/`create_order`/`submit_qr_payment`/`verify_payment`/`enforce_order_update_rules` all still operate on `seller_id` exactly as before. There is no `products.shop_id` or `orders.shop_id` column yet; "which shop does this seller belong to" is only resolvable via a `shop_users` join today. The `is_shop_member(shop_id)` DEFINER helper mirrors `is_admin()`'s shape specifically so a later migration can reuse it once `shop_id` lands on `products`/`orders`. See TD-1 below.
 
 > [!NOTE]
 > The SAD's payment path — **COD + QR receipt upload + manual verification** — is now implemented. The `payments` table's Stripe-only columns were dropped when QR was built (this closed TD-3); `payments` now holds `receipt_path` (a private Storage object path, not a public URL), `verified_by`/`verified_at` (the manual-verification audit trail), and the `qr_upload` payment method. `submit_qr_payment`/`verify_payment` are the sole write RPCs — see [Payments RPCs](#payments-rpcs-qr-receipt-upload-manual-verification) below.
@@ -487,7 +490,7 @@ src/
 
 The code converges toward the SAD **without breaking the build at any step**. Recommended order (mirrors the roadmap in the README):
 
-1. **Introduce `shops` + `shop_users`.** Add tables; backfill each existing `seller` as a shop owner. Keep `products.seller_id` working via a view or FK bridge during transition.
+1. ~~**Introduce `shops` + `shop_users`.**~~ **Foundation done** (`20260813000000_shops_and_shop_users.sql`) — tables, RLS, `is_shop_member()`, and a backfill exist; each `seller` profile has exactly one `shops` row via `shop_users`. **Remaining:** `products.seller_id`/`orders.seller_id` still reference `profiles.id` directly — no FK bridge or `shop_id` column exists on either table yet. Add `products.shop_id`/`orders.shop_id`, update their RLS/`create_order`/`enforce_order_update_rules` to use it, and migrate checkout/cart's per-seller grouping to per-shop, once a UI (Products/Orders/Inventory dashboard) actually needs shop-scoped product/order data — not speculatively.
 2. **Extract `inventory`.** Move stock from `products.quantity` into an `inventory` table; keep `create_order` atomic (lock inventory rows `FOR UPDATE`).
 3. ~~**Implement Payments (target).** Add `qr_upload` method + receipt storage + manual verification workflow. Drop the now-unused Stripe columns from `payments`.~~ **Done.** See [Payments RPCs](#payments-rpcs-qr-receipt-upload-manual-verification). Remaining Payments-adjacent work: an Admin/Shop Owner dashboard beyond the single `/dashboard/payments` page built for this.
 4. **Add `recommendation_rules`** and build the rule-based Guided Product Selection engine behind `features/assistant`.
@@ -518,6 +521,7 @@ The code converges toward the SAD **without breaking the build at any step**. Re
   10. `20260807020000_qr_payment_rpcs.sql` — `submit_qr_payment()`/`verify_payment()` RPCs; narrow `enforce_order_update_rules` fix for seller self-verification.
   11. `20260807030000_payment_receipts_storage.sql` — private `payment-receipts` Storage bucket + RLS (first Storage feature in this repo).
   12. `20260807040000_profiles_payment_qr_url.sql` — seller's receiving QR code (`profiles.payment_qr_url`).
+  13. `20260813000000_shops_and_shop_users.sql` — `shops`/`shop_users` tables, `is_shop_member()`, RLS, idempotent backfill (one shop per existing `seller`). `products`/`orders`/`payments` untouched — see TD-1.
 - **Type regeneration** after any schema change:
   ```bash
   npx supabase gen types typescript --project-id <project-id> > src/lib/supabase/database.types.ts
@@ -534,7 +538,7 @@ The code converges toward the SAD **without breaking the build at any step**. Re
 
 | # | Item | Impact | Target resolution |
 |---|------|--------|-------------------|
-| TD-1 | **No `shops` / `shop_users`** — sellers stand in for shops | Cannot model true multi-shop ownership/staffing | Evolution step 1 |
+| TD-1 | **`shops`/`shop_users` exist (Phase 2 foundation) but `products`/`orders` still key off `seller_id`, not `shop_id`** — no FK bridge yet | Products/Orders/Inventory cannot yet query "all data for my shop"; multi-staff-per-shop is modelable (`shop_users` is a proper junction) but nothing consumes it yet | Evolution step 1 (partially done — see note above) |
 | TD-2 | **Inventory is `products.quantity`** | No multi-location / dedicated inventory ops | Evolution step 2 |
 | ~~TD-3~~ | ~~Stripe columns on `payments`~~ | **Resolved** — dropped in `20260807010000_evolve_payments_for_qr.sql` when QR payments were built. | — |
 | TD-4 | **No `recommendation_rules`** — Guided Selection is a landing preview only | Core SAD feature unbuilt | Evolution step 4 |

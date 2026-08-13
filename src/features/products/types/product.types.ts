@@ -31,6 +31,8 @@ export interface Product {
   sellerId: string;
   /** Seller's display name (full name, falling back to username), or null. */
   sellerName: string | null;
+  /** Owning shop, or null for a legacy/unassigned product awaiting admin assignment. */
+  shopId: string | null;
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;

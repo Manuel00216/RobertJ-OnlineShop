@@ -203,7 +203,7 @@
 | **Components** | `src/app/dashboard/layout.tsx` — minimal chrome only (`SiteHeader` + `requireRole` guard), not a sidebar shell; `src/features/dashboard/` is still an empty stub. |
 | **Server Actions** | `features/payments/actions/payment.actions.ts` — `verifyPaymentAction` is usable by admin today (scoped to Payments, not general admin authority). Nothing else yet; future admin actions should call into existing module services (Products, Orders) rather than duplicating their logic. |
 | **Services** | Will reuse `lib/supabase/queries.ts` functions already guarded by `requireRole(DASHBOARD_ROLES)`/`is_admin()` — see `product.actions.ts` and `payment.actions.ts` for the existing pattern. |
-| **Database Tables** | Cross-cutting: `profiles` (users), `products`, `orders`, `payments`; target: `shops`. |
+| **Database Tables** | Cross-cutting: `profiles` (users), `products`, `orders`, `payments`; `shops`/`shop_users` now exist (Phase 2 foundation — admin has full read/write via `is_admin()`), but no admin UI consumes them yet. |
 | **Dependencies** | Every other module — Admin is an oversight layer, not a data owner of its own. |
 | **Current Status** | ⏳ Upcoming (stub) for general admin authority — user management, shop management, platform settings are all unbuilt. RBAC scaffolding (`DASHBOARD_ROLES`, `is_admin()`, RLS admin policies) already exists and is proven working by the one real page that does exist (`/dashboard/payments`). |
 | **Future Work** | Build the admin dashboard shell distinct in density/design from the customer-facing UI (denser tables — noted in `customer-account-architecture-plan.md`); user management; shop management (once `shops` exists). |
@@ -220,7 +220,7 @@
 | **Components** | Shares `src/app/dashboard/layout.tsx` (minimal chrome) with Admin; `src/features/dashboard/` is still an empty stub. |
 | **Server Actions** | `features/payments/actions/payment.actions.ts` — `verifyPaymentAction` is usable by a seller today for their own orders' payments. Will reuse `features/products/actions/product.actions.ts` (already guarded for `seller`/`admin`) and `features/orders/actions/order.actions.ts` for fulfilment. |
 | **Services** | Same centralized `queries.ts` functions as Products/Orders/Inventory/Payments — **no separate seller-only service layer**. |
-| **Database Tables** | `products` (own, via `seller_id` / future `shop_id`), `orders` (own, via seller-scoped RLS), `payments` (own orders' payments, via `verify_payment`), target `inventory`. |
+| **Database Tables** | `products` (own, via `seller_id` — not yet `shop_id`), `orders` (own, via seller-scoped RLS), `payments` (own orders' payments, via `verify_payment`), `shops`/`shop_users` (own shop, via `is_shop_member()` — schema exists, no UI yet), target `inventory`. |
 | **Dependencies** | Products, Inventory, Orders, Payments, Reports — Shop Owner is a **role-scoped view** over those modules, not a new data domain. |
 | **Current Status** | ⏳ Upcoming (stub) for products/inventory/reports management. Payment verification for own orders already works (`/dashboard/payments`) — proof the underlying RLS/role guards (`current_user_role() in ('seller','admin')`) are correctly scoped; the rest of the UI is what's missing. |
 | **Future Work** | Build the seller dashboard shell (products table, inventory editor, incoming orders, basic sales report) by **composing existing Products/Orders components**, not rebuilding them. |

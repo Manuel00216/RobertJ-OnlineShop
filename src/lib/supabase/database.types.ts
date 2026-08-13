@@ -92,6 +92,7 @@ export interface Database {
         Row: {
           id: string;
           seller_id: string;
+          shop_id: string | null;
           category_id: string | null;
           title: string;
           slug: string;
@@ -114,6 +115,7 @@ export interface Database {
         Insert: {
           id?: string;
           seller_id: string;
+          shop_id?: string | null;
           category_id?: string | null;
           title: string;
           slug: string;
@@ -137,6 +139,12 @@ export interface Database {
             foreignKeyName: "products_seller_id_fkey";
             columns: ["seller_id"];
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "products_shop_id_fkey";
+            columns: ["shop_id"];
+            referencedRelation: "shops";
             referencedColumns: ["id"];
           },
           {
@@ -314,6 +322,57 @@ export interface Database {
           },
         ];
       };
+
+      shops: {
+        Row: {
+          id: string;
+          name: string;
+          slug: string;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          slug: string;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["shops"]["Insert"]>;
+        Relationships: [];
+      };
+
+      shop_users: {
+        Row: {
+          id: string;
+          shop_id: string;
+          user_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          shop_id: string;
+          user_id: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["shop_users"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "shop_users_shop_id_fkey";
+            columns: ["shop_id"];
+            referencedRelation: "shops";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "shop_users_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
 
     Views: Record<string, never>;
@@ -366,6 +425,10 @@ export interface Database {
           p_decision: Database["public"]["Enums"]["payment_status"];
         };
         Returns: Database["public"]["Tables"]["payments"]["Row"];
+      };
+      is_shop_member: {
+        Args: { p_shop_id: string };
+        Returns: boolean;
       };
     };
 

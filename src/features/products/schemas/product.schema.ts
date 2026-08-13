@@ -75,12 +75,34 @@ export const createProductSchema = z.object({
   location: z.string().trim().max(160).optional(),
   tags: z.array(z.string().trim().min(1).max(30)).max(20).default([]),
   status: productStatusSchema.default(PRODUCT_STATUS.draft),
+  /**
+   * Admin-only field: which shop this new product belongs to. A seller's
+   * submission is always ignored server-side in favor of their own
+   * server-resolved shop (`requireOwnShopId()`) — this field exists purely
+   * for the admin create-form's shop-picker.
+   */
+  shopId: z.uuid().optional(),
 });
 
-export const updateProductSchema = createProductSchema.partial().extend({
-  id: z.uuid(),
+/**
+ * `shopId` is deliberately omitted, not just left unset: a product's shop is
+ * never reassignable through the general edit form (see `assignProductShopSchema`
+ * for the distinct, admin-only reassignment path).
+ */
+export const updateProductSchema = createProductSchema
+  .omit({ shopId: true })
+  .partial()
+  .extend({
+    id: z.uuid(),
+  });
+
+/** Admin-only: assign a shop to a legacy/unassigned product. */
+export const assignProductShopSchema = z.object({
+  productId: z.uuid(),
+  shopId: z.uuid(),
 });
 
 export type ProductListParamsInput = z.input<typeof productListParamsSchema>;
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;
+export type AssignProductShopInput = z.infer<typeof assignProductShopSchema>;

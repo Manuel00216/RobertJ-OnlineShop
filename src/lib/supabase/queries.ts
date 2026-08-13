@@ -47,6 +47,7 @@ import type {
 import type { UpdateProfileInput } from "@/features/account/schemas/account.schema";
 import type { Profile } from "@/features/account/types/account.types";
 import type { Payment, PaymentDecision } from "@/features/payments/types/payment.types";
+import type { Shop } from "@/features/shops/types/shop.types";
 
 /**
  * Centralized, reusable Supabase data-access layer.
@@ -85,7 +86,7 @@ type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
  */
 const PRODUCT_COLUMNS = `
   id, slug, title, description, price_cents, currency, quantity, condition,
-  status, featured, location, tags, category_id, seller_id, published_at,
+  status, featured, location, tags, category_id, seller_id, shop_id, published_at,
   created_at, updated_at,
   product_images ( id, url, alt_text, sort_order ),
   seller:profiles!products_seller_id_fkey ( full_name, username ),
@@ -129,6 +130,7 @@ function toProduct(row: ProductRowWithImages): Product {
     categorySlug: row.category?.slug ?? null,
     sellerId: row.seller_id,
     sellerName: row.seller?.full_name ?? row.seller?.username ?? null,
+    shopId: row.shop_id,
     publishedAt: row.published_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -352,10 +354,17 @@ export async function listActiveProductSlugsForSitemap(): Promise<
   }));
 }
 
-/** Inserts a product owned by the given seller. */
+/**
+ * Inserts a product owned by the given seller, in the given shop. `shopId`
+ * is always a server-resolved value (the caller's own shop via
+ * `requireOwnShopId()`, or an admin's explicit selection from `listShops()`)
+ * — never taken from `input.shopId` directly, so a client can't submit an
+ * arbitrary shop even though RLS would reject a mismatched one anyway.
+ */
 export async function createProduct(
   input: CreateProductInput,
   sellerId: string,
+  shopId: string,
 ): Promise<Product> {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
@@ -372,6 +381,7 @@ export async function createProduct(
       tags: input.tags,
       category_id: input.categoryId ?? null,
       seller_id: sellerId,
+      shop_id: shopId,
     })
     .select(PRODUCT_COLUMNS)
     .single();
@@ -1119,6 +1129,89 @@ export async function listPendingPayments(): Promise<Payment[]> {
   return (data ?? []).map((row) => toPayment(row as PaymentRowWithOrder));
 }
 
+// ============================================================================
+// Shops
+// ============================================================================
+
+type ShopRow = Database["public"]["Tables"]["shops"]["Row"];
+
+function toShop(row: ShopRow): Shop {
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    active: row.active,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+/**
+ * Shops visible to the caller. No manual membership filtering here — RLS
+ * alone restricts visible rows to the caller's own shop(s) via
+ * `is_shop_member()`, or every shop for an admin (same "RLS is the primary
+ * boundary" pattern as `listPendingPayments`).
+ */
+export async function listShops(): Promise<Shop[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.SHOPS)
+    .select("id, name, slug, active, created_at, updated_at")
+    .order("name", { ascending: true });
+
+  if (error) {
+    throw new Error(`Failed to load shops: ${error.message}`);
+  }
+
+  return (data ?? []).map((row) => toShop(row as ShopRow));
+}
+
+/**
+ * Every product visible to the caller for management purposes — no status
+ * filter (unlike `listProducts`, built for the storefront) and no manual
+ * shop/seller filtering. RLS alone determines the result: a shop member sees
+ * their own shop's products at every status, an admin sees everything
+ * (including legacy/unassigned products with `shop_id = null`), the same
+ * "RLS is the primary boundary" pattern as `listShops()`/`listPendingPayments()`.
+ */
+export async function listDashboardProducts(): Promise<Product[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PRODUCTS)
+    .select(PRODUCT_COLUMNS)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`Failed to load products: ${error.message}`);
+  }
+
+  return (data ?? []).map((row) => toProduct(row as ProductRowWithImages));
+}
+
+/**
+ * Admin-only: assigns a shop to a legacy/unassigned product (`shop_id`
+ * currently `null`). Relies on `is_admin()` in RLS — the caller's admin
+ * status is the actual authorization boundary, not this function.
+ */
+export async function assignProductShop(
+  productId: string,
+  shopId: string,
+): Promise<Product> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PRODUCTS)
+    .update({ shop_id: shopId })
+    .eq("id", productId)
+    .select(PRODUCT_COLUMNS)
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to assign shop: ${error.message}`);
+  }
+
+  return toProduct(data as ProductRowWithImages);
+}
+
 /**
  * The active (pending) payment for one of the buyer's own orders, or null if
  * none has been submitted yet. Used by the order detail page to decide
@@ -1199,6 +1292,30 @@ export async function requireRole(
     throw new Error("You do not have permission to perform this action.");
   }
   return user;
+}
+
+/**
+ * Resolves the caller's own shop via `shop_users` — never trusts a
+ * client-submitted shop id. Throws a friendly error for a seller with no
+ * shop membership yet (an admin has no shop of their own; callers needing an
+ * admin-selectable shop should use `listShops()` instead).
+ */
+export async function requireOwnShopId(): Promise<string> {
+  const user = await requireSessionUser();
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.SHOP_USERS)
+    .select("shop_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to resolve your shop: ${error.message}`);
+  }
+  if (!data) {
+    throw new Error("Your account isn't linked to a shop yet. Contact an administrator.");
+  }
+  return data.shop_id;
 }
 
 /**

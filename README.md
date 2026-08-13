@@ -184,7 +184,7 @@ Detailed purpose, boundaries, and interactions for each module are in [`ARCHITEC
 | Customer Account | ✅ Completed | `src/features/account`, `src/app/(account)` |
 | Orders | ✅ Completed | `src/features/orders`, `src/app/(account)/orders` |
 | Checkout | ✅ Completed (COD only — QR payment method is Phase 7/Payments scope) | `src/features/checkout`, `src/app/(shop)/checkout` |
-| Shops (multi-shop model) | ⏳ Upcoming | *(target schema; not yet built)* |
+| Shops (multi-shop model) | 🚧 In Progress (schema foundation only — `shops`/`shop_users` exist and are backfilled; `products`/`orders` still key off `seller_id`, not `shop_id`) | `supabase/migrations/20260813000000_shops_and_shop_users.sql`, `src/features/shops` *(types only)* |
 | Inventory (dedicated module) | ⏳ Upcoming | `src/features/inventory` *(stub)* |
 | Payments (COD + QR verification) | ✅ Completed | `src/features/payments`; receipt upload on the order detail page; verification queue at `/dashboard/payments` |
 | Reports | ⏳ Upcoming | `src/features/reports` *(stub)* |
@@ -214,14 +214,21 @@ flowchart LR
 
     classDef done fill:#1f7a3d,stroke:#0d3d1f,color:#fff;
     classDef todo fill:#3a3f4b,stroke:#20242c,color:#fff;
+    classDef partial fill:#8a6d1f,stroke:#4d3c10,color:#fff;
     class P1,P2,P3,P4,P5,P7 done;
-    class P6,P8,P9 todo;
+    class P6 partial;
+    class P8,P9 todo;
 ```
 
 > [!NOTE]
 > Phase 7 (Payments) landed before Phase 6 (Shops & Inventory) — it had no dependency on the
 > shops/inventory schema work, so it wasn't blocked on phase order. Noted here rather than
 > silently reordering the roadmap.
+>
+> Phase 6 is **partially done**: the `shops`/`shop_users` schema foundation landed
+> (tables, RLS, backfill — see [Implementation Status](#implementation-status-target-vs-current)),
+> but `products`/`orders` still key off `seller_id` directly (no `shop_id` FK bridge yet), and
+> Inventory hasn't started. See [ARCHITECTURE.md → TD-1](./ARCHITECTURE.md#technical-debt-register).
 
 | Phase | Focus | State |
 |-------|-------|-------|
@@ -230,7 +237,7 @@ flowchart LR
 | 3 | Authentication (UI + flows) | ✅ |
 | 4 | Customer Account & Order Tracking | ✅ |
 | 5 | **Checkout** | ✅ |
-| 6 | Shops & Inventory (align to SAD multi-shop model) | ⏳ |
+| 6 | Shops & Inventory (align to SAD multi-shop model) | 🚧 (Shops schema foundation done; `products`/`orders` FK bridge + Inventory not started) |
 | 7 | Payments — COD + QR receipt upload + manual verification | ✅ |
 | 8 | Reports & analytics | ⏳ |
 | 9 | Guided Product Selection (rule-based) | ⏳ |
@@ -428,8 +435,8 @@ The interface follows modern marketplace best practices, inspired by **Lazada, S
 | **Shop Owner** role | `seller` role | Current model has **seller accounts**, not shop entities. |
 | **Administrator** role | `admin` role | Matches. |
 | **Guest** | Unauthenticated visitor (no profile) | Matches. |
-| `shops` table | ❌ Not implemented | Products currently attach to a **seller** (`products.seller_id`), not a shop. |
-| `shop_users` table | ❌ Not implemented | No shop-staffing model yet. |
+| `shops` table | 🚧 **Foundation implemented** | Table + RLS + backfill exist (one shop per seller). Products still attach to a **seller** (`products.seller_id`), not a `shop_id` — no FK bridge yet. |
+| `shop_users` table | 🚧 **Foundation implemented** | Proper junction table (supports >1 staff per shop later); today exactly one member per shop, admin-managed only (no self-service join). |
 | `roles` table | Role stored on `profiles.role` (enum) | Roles are an enum column, not a separate table. |
 | `inventory` table | `products.quantity` column | Stock is a column on `products`, not a dedicated table. |
 | `recommendation_rules` table | ❌ Not implemented | Guided Product Selection is a landing **preview** only; `features/assistant` is a stub. |
