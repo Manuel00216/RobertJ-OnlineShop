@@ -159,17 +159,17 @@
 
 | Field | Detail |
 |---|---|
-| **Purpose** (target) | Sales and operational analytics for Shop Owners (their own shop) and Administrator (platform-wide). |
-| **Responsibilities** (target) | Aggregate order/sales data; present trends and summaries; support the SAD's "orders and sales are not centralized" problem. |
-| **Features** (target) | Sales summaries, order-volume trends, low-stock/inventory reports, exportable views. |
-| **Pages** | Reserved under `/dashboard/reports` (`ROUTES.reports`); no page built. |
-| **Components** | None — `src/features/reports/` is a stub. |
-| **Server Actions** | None. |
-| **Services** | None. |
-| **Database Tables** (target) | Dedicated `reports` table/materialized aggregates per the target schema; realistically may be computed views over `orders`/`order_items` rather than a literal stored table. |
-| **Dependencies** | Orders (primary data source), Products/Inventory (stock reports), Payments (revenue reconciliation). |
-| **Current Status** | ⏳ Upcoming (stub). |
-| **Future Work** | Design the reporting queries against existing `orders`/`order_items` before deciding whether a physical `reports` table is needed — avoid modeling a table that duplicates derivable data. |
+| **Purpose** | Sales and operational analytics for Shop Owners (their own shop) and Administrator (platform-wide, filterable by shop). |
+| **Responsibilities** | Aggregate order/sales data DB-side; present KPIs, trends, and breakdowns; support the SAD's "orders and sales are not centralized" problem. |
+| **Features** | KPI cards (revenue, orders, paid orders, avg order value, units, cancelled); sales-over-time trend (day/week/month); order-status breakdown; COD-vs-QR paid-payment split; top products; low/out-of-stock report; date-range + preset + granularity filters; admin shop filter; CSV export. |
+| **Pages** | `src/app/dashboard/reports/page.tsx` — role-branched copy (`isAdmin`), Zod-coerced `searchParams` filters, per-panel `Suspense`. |
+| **Components** | `features/reports/components/{ReportsFilters,ExportReportButton,SalesSummaryPanel,SalesTrendPanel,OrderStatusPanel,TopProductsPanel,LowStockPanel,ReportSkeletons}`; shared charts `src/components/charts/{TrendChart,BarChart}` (hand-rolled SVG/CSS, no charting dependency). |
+| **Server Actions** | `features/reports/actions/report.actions.ts` — `exportSalesReportAction` (CSV; reuses the same RLS-scoped reads, `requireRole(DASHBOARD_ROLES)`). Reads need no action — panels are async Server Components. |
+| **Services** | `lib/supabase/queries.ts` (Reports section) — `getSalesSummary`/`getSalesTimeseries`/`getOrderStatusBreakdown`/`getTopProducts` (wrap the `report_*` RPCs, `cache()`-wrapped), `getLowStockReport` (reuses `listDashboardInventory`, no new SQL). |
+| **Database Tables** | **None new.** Four read-only `SECURITY DEFINER` RPCs aggregate over existing `orders`/`order_items`/`payments`; a physical `reports` table was deliberately not modelled (derivable data). See [ARCHITECTURE.md → Reporting RPCs](./ARCHITECTURE.md#reporting-rpcs-analytics-over-existing-orders). Two additive `orders` indexes (`orders_seller_placed_idx`, `orders_placed_at_idx`). |
+| **Dependencies** | Orders (primary data source), Payments (`payment_status = 'paid'` is the revenue source of truth; COD-vs-QR split), Inventory (low-stock report, reused), Shops (admin shop filter via `shop_users`). |
+| **Current Status** | ✅ Completed. Resolves ARCHITECTURE.md TD-5. |
+| **Future Work** | An `orders.shop_id` bridge (TD-1) would let admin shop-filtering skip the `shop_users` map; richer/scheduled exports and materialized aggregates are future scaling, not current scope. |
 
 ---
 
@@ -198,7 +198,7 @@
 |---|---|
 | **Purpose** | Full platform administration: users, shops, products, inventory, payments, reports, settings — the Administrator's SAD scope. |
 | **Responsibilities** | Cross-shop oversight; user/role management and seller onboarding; shop creation/management; payment verification authority. Platform settings still unbuilt. |
-| **Pages** | `/dashboard/{payments,products,inventory,orders}` give admin a cross-shop view (role-branched, not admin-specific pages). `/dashboard/users` and `/dashboard/shops` are the first genuinely **admin-only** pages (`requireRole(ADMIN_ONLY_ROLES)`, re-checked beyond the layout's coarse seller-or-admin gate). No Settings page built yet. |
+| **Pages** | `/dashboard/{payments,products,inventory,orders,reports}` give admin a cross-shop view (role-branched, not admin-specific pages; Reports adds an admin-only shop filter). `/dashboard/users` and `/dashboard/shops` are the first genuinely **admin-only** pages (`requireRole(ADMIN_ONLY_ROLES)`, re-checked beyond the layout's coarse seller-or-admin gate). No Settings page built yet. |
 | **Components** | `src/app/dashboard/layout.tsx` — minimal chrome only (`SiteHeader` + `requireRole` guard); `src/features/dashboard/` remains chrome-only (`DashboardShell`/`DashboardSidebar`/`DashboardShortcuts`), not a business domain. `features/users/components/{UsersTable,UserRow}` and `features/shops/components/{AdminShopsPanel,ShopRow,ShopForm}` are the new admin-only screens — two separate feature folders (Users is a distinct business domain from Shops, not shoehorned into either `dashboard/` or `shops/`). |
 | **Server Actions** | `features/payments/actions/payment.actions.ts` — `verifyPaymentAction`; `features/products/actions/product.actions.ts` — create/update/archive/assign-shop; `features/inventory/actions/inventory.actions.ts` — `adjustStockAction`; `features/orders/actions/order.actions.ts` — `advanceOrderStatusAction`, all usable by admin across every shop (role-branched, not admin-forked). New admin-only actions: `features/shops/actions/shop.actions.ts` — `createShopAction`/`updateShopAction`/`toggleShopActiveAction` (RLS-gated, no RPC needed — `shops` already has `is_admin()` in its policies); `features/users/actions/user.actions.ts` — `assignSellerShopAction` (wraps the `admin_assign_seller_shop` RPC — the one privileged, cross-user write in this module). |
 | **Services** | `lib/supabase/queries.ts` — `listAdminUsers()`/`assignSellerShop()` (wrap the `admin_list_users`/`admin_assign_seller_shop` RPCs — see the Seller Onboarding note below); `createShop()`/`updateShop()`/`listShopsWithMembers()` (plain RLS-gated reads/writes, no RPC). `listShops()` itself (used by the Products/Inventory admin shop-picker) is unchanged. |
@@ -218,14 +218,14 @@
 |---|---|
 | **Purpose** | Let each sibling shop manage its own products, inventory, orders, and reports — the Shop Owner's SAD scope. |
 | **Responsibilities** (target) | Manage **own** products/inventory only (RLS-scoped); fulfil own orders; view own sales reports. |
-| **Pages** | `/dashboard/{payments,products,inventory,orders}` are all usable by a seller today — scoped to their own shop via RLS (`seller_id = auth.uid()` / `is_shop_member()`). No Reports page built yet. |
+| **Pages** | `/dashboard/{payments,products,inventory,orders,reports}` are all usable by a seller today — scoped to their own shop via RLS (`seller_id = auth.uid()` / `is_shop_member()`) and, for Reports, the `report_*` RPCs' internal seller scoping. |
 | **Components** | Shares `src/app/dashboard/layout.tsx` (minimal chrome) with Admin; `src/features/dashboard/` is still an empty stub. |
 | **Server Actions** | `features/payments/actions/payment.actions.ts` — `verifyPaymentAction`; `features/products/actions/product.actions.ts` — create/update/archive; `features/inventory/actions/inventory.actions.ts` — `adjustStockAction`; `features/orders/actions/order.actions.ts` — `advanceOrderStatusAction`, all scoped to the seller's own shop for their own orders/payments/inventory. |
 | **Services** | Same centralized `queries.ts` functions as Products/Orders/Inventory/Payments — **no separate seller-only service layer**. |
 | **Database Tables** | `products` (own, via `seller_id` and/or `shop_id`), `inventory`/`stock_adjustments` (own shop's products, via `is_shop_member()`), `orders` (own, via seller-scoped RLS), `payments` (own orders' payments, via `verify_payment`), `shops`/`shop_users` (own shop, via `is_shop_member()`). |
 | **Dependencies** | Products, Inventory, Orders, Payments, Reports — Shop Owner is a **role-scoped view** over those modules, not a new data domain. |
-| **Current Status** | ✅ Products, Inventory, Orders, and payment verification are all built and scoped to the seller's own shop — proof the underlying RLS/role guards (`current_user_role() in ('seller','admin')`, `is_shop_member()`) are correctly scoped. ⏳ Upcoming: Reports. |
-| **Future Work** | Build a seller-facing sales report, composing existing Orders/Reports data once a Reports module exists, not rebuilding it. |
+| **Current Status** | ✅ Products, Inventory, Orders, payment verification, and Reports are all built and scoped to the seller's own shop — proof the underlying RLS/role guards (`current_user_role() in ('seller','admin')`, `is_shop_member()`, and the `report_*` RPCs' internal `seller_id = auth.uid()` scoping) are correctly scoped. |
+| **Future Work** | None outstanding for the SAD scope. Richer/scheduled report exports are future scaling, not current scope. |
 
 ---
 

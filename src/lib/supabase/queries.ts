@@ -57,6 +57,13 @@ import {
   type InventoryItem,
   type StockAdjustment,
 } from "@/features/inventory/types/inventory.types";
+import type {
+  OrderStatusCount,
+  ReportGranularity,
+  SalesSummary,
+  SalesTrendPoint,
+  TopProduct,
+} from "@/features/reports/types/report.types";
 
 /**
  * Centralized, reusable Supabase data-access layer.
@@ -1695,6 +1702,149 @@ export async function listStockAdjustments(
   return (data ?? []).map((row) =>
     toStockAdjustment(row as StockAdjustmentRowWithActor),
   );
+}
+
+// ============================================================================
+// Reports & analytics
+// ============================================================================
+//
+// All four reads call the matching `report_*` SECURITY DEFINER RPC, which
+// re-enforces scoping internally (seller → own orders; admin → all, or one shop
+// via `shopId`). No manual seller/shop filtering here, and no `.from()` on
+// orders — the RPC does the aggregation DB-side. Amounts stay integer cents.
+// `shopId` is only meaningful for admins; the RPC ignores it for sellers.
+
+const EMPTY_SALES_SUMMARY: SalesSummary = {
+  totalOrders: 0,
+  paidOrders: 0,
+  cancelledOrders: 0,
+  revenueCents: 0,
+  unitsSold: 0,
+  avgOrderValueCents: 0,
+  codPaidOrders: 0,
+  qrPaidOrders: 0,
+  pendingPaymentOrders: 0,
+};
+
+/** KPI summary for a Manila date range. Always resolves (zeros when no orders). */
+export const getSalesSummary = cache(async function getSalesSummary(
+  from: string,
+  to: string,
+  shopId: string | null = null,
+): Promise<SalesSummary> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("report_sales_summary", {
+    p_from: from,
+    p_to: to,
+    p_shop_id: shopId,
+  });
+
+  if (error) {
+    throw new Error(`Failed to load sales summary: ${error.message}`);
+  }
+
+  const row = data?.[0];
+  if (!row) return EMPTY_SALES_SUMMARY;
+  return {
+    totalOrders: row.total_orders,
+    paidOrders: row.paid_orders,
+    cancelledOrders: row.cancelled_orders,
+    revenueCents: row.revenue_cents,
+    unitsSold: row.units_sold,
+    avgOrderValueCents: row.avg_order_value_cents,
+    codPaidOrders: row.cod_paid_orders,
+    qrPaidOrders: row.qr_paid_orders,
+    pendingPaymentOrders: row.pending_payment_orders,
+  };
+});
+
+/** Order count + paid revenue per time bucket (only non-empty buckets). */
+export const getSalesTimeseries = cache(async function getSalesTimeseries(
+  from: string,
+  to: string,
+  granularity: ReportGranularity,
+  shopId: string | null = null,
+): Promise<SalesTrendPoint[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("report_sales_timeseries", {
+    p_from: from,
+    p_to: to,
+    p_granularity: granularity,
+    p_shop_id: shopId,
+  });
+
+  if (error) {
+    throw new Error(`Failed to load sales trend: ${error.message}`);
+  }
+
+  return (data ?? []).map((row) => ({
+    bucket: row.bucket,
+    orderCount: row.order_count,
+    revenueCents: row.revenue_cents,
+  }));
+});
+
+/** Order counts grouped by fulfilment status within the range. */
+export const getOrderStatusBreakdown = cache(
+  async function getOrderStatusBreakdown(
+    from: string,
+    to: string,
+    shopId: string | null = null,
+  ): Promise<OrderStatusCount[]> {
+    const supabase = await createSupabaseServerClient();
+    const { data, error } = await supabase.rpc(
+      "report_order_status_breakdown",
+      { p_from: from, p_to: to, p_shop_id: shopId },
+    );
+
+    if (error) {
+      throw new Error(`Failed to load status breakdown: ${error.message}`);
+    }
+
+    return (data ?? []).map((row) => ({
+      status: row.status,
+      orderCount: row.order_count,
+    }));
+  },
+);
+
+/** Best-selling products by units (revenue over the paid subset). */
+export const getTopProducts = cache(async function getTopProducts(
+  from: string,
+  to: string,
+  limit: number,
+  shopId: string | null = null,
+): Promise<TopProduct[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("report_top_products", {
+    p_from: from,
+    p_to: to,
+    p_limit: limit,
+    p_shop_id: shopId,
+  });
+
+  if (error) {
+    throw new Error(`Failed to load top products: ${error.message}`);
+  }
+
+  return (data ?? []).map((row) => ({
+    productId: row.product_id,
+    productTitle: row.product_title,
+    unitsSold: row.units_sold,
+    revenueCents: row.revenue_cents,
+  }));
+});
+
+/**
+ * Low- and out-of-stock rows for the report, reusing the existing RLS-scoped
+ * inventory read (no new SQL). A seller sees their own shop's stock; an admin
+ * sees every shop's.
+ */
+export async function getLowStockReport(): Promise<InventoryItem[]> {
+  const items = await listDashboardInventory();
+  return items
+    .filter((item) => item.stockStatus !== "in_stock")
+    .sort((a, b) => a.quantity - b.quantity);
 }
 
 // ============================================================================

@@ -270,6 +270,23 @@ The `enforce_order_update_rules` trigger has a narrow exception for this last st
 
 Receipt images live in the private `payment-receipts` Supabase Storage bucket, path `{order_id}/{uuid}.{ext}`. RLS on `storage.objects` authorizes via a subquery against `orders` (buyer, seller, or admin of that order) — the object path is never trusted as identity on its own.
 
+### Reporting RPCs (analytics over existing orders)
+
+Reports & analytics are **computed DB-side by four read-only `SECURITY DEFINER` RPCs** over the existing `orders`/`order_items`/`payments` — there is **no `reports` table** (the SAD's `reports` entity is realised as derived aggregates, not a stored, duplicative table). Added in `20260818000000_reports_analytics_rpcs.sql`:
+
+- **`report_sales_summary(p_from, p_to, p_shop_id)`** — one KPI row: total/paid/cancelled/pending-payment orders, paid revenue, units sold, average order value, and the COD-vs-QR paid split. Always returns exactly one row (zeros for an empty range).
+- **`report_sales_timeseries(p_from, p_to, p_granularity, p_shop_id)`** — order count + paid revenue per `day`/`week`/`month` bucket.
+- **`report_order_status_breakdown(p_from, p_to, p_shop_id)`** — order counts per fulfilment status.
+- **`report_top_products(p_from, p_to, p_limit, p_shop_id)`** — best-selling products by units (revenue over the paid subset), from the `order_items` snapshots.
+
+Design rules baked into all four (mirroring `verify_payment`/`adjust_stock`):
+
+- **Scoping is re-enforced inside each function** (DEFINER bypasses RLS): a seller sees only `seller_id = auth.uid()`; an admin sees every order, optionally narrowed to one shop via `p_shop_id` (mapped shop→seller through `shop_users`, since `orders` has no `shop_id` — see TD-1). A seller's `p_shop_id` is **ignored**, so scope can never be widened. Non-seller/non-admin callers are rejected (`42501`); `EXECUTE` is granted to `authenticated` only (never `anon`).
+- **Single date axis:** every metric buckets on `placed_at`, interpreted in **`Asia/Manila`** (the PHP business timezone). Inclusive calendar range `[p_from, p_to]`.
+- **Consistent metric rule:** count/volume metrics include every order *placed* in range; monetary metrics count only the `payment_status = 'paid'` subset — the confirmed-revenue source of truth that covers both COD and QR (payments rows are never summed directly, since a COD order may have zero payment rows and an order may accrue several).
+
+Two additive indexes back the date-range scans: `orders (seller_id, placed_at desc)` and `orders (placed_at desc)`. The service layer (`getSalesSummary`/`getSalesTimeseries`/`getOrderStatusBreakdown`/`getTopProducts`, plus `getLowStockReport` reusing the RLS-scoped inventory read) calls these via `.rpc()`; charts are hand-rolled SVG/CSS in `src/components/charts` (no new dependency). Resolves TD-5.
+
 ---
 
 ## Authentication Flow
@@ -505,9 +522,9 @@ The code converges toward the SAD **without breaking the build at any step**. Re
 
 1. ~~**Introduce `shops` + `shop_users`.**~~ **Foundation done** (`20260813000000_shops_and_shop_users.sql`) — tables, RLS, `is_shop_member()`, and a backfill exist; each `seller` profile has exactly one `shops` row via `shop_users`. `products.shop_id` now exists too (`20260814000000_products_shop_scoping.sql`), consumed by the shop-scoped Products dashboard. **Remaining:** `orders.seller_id` still references `profiles.id` directly — no `shop_id` column on `orders` yet. Add it, update `orders` RLS/`create_order`/`enforce_order_update_rules` to use it, and migrate checkout/cart's per-seller grouping to per-shop, once an Orders dashboard actually needs shop-scoped order data — not speculatively.
 2. ~~**Extract `inventory`.**~~ **Done** (`20260815000000_inventory_and_stock_history.sql`) — stock moved from `products.quantity` into a dedicated `inventory` table (`products.quantity` kept as a trigger-synced mirror for backward compatibility); `create_order` is atomic against `inventory` (locks `inventory` rows `FOR UPDATE`, before `products`); an append-only `stock_adjustments` table records every movement; manual changes go through the `adjust_stock` RPC; order cancellation auto-restocks via a trigger. See the Inventory note under [Current Database Mapping](#current-database-mapping-target-vs-current).
-3. ~~**Implement Payments (target).** Add `qr_upload` method + receipt storage + manual verification workflow. Drop the now-unused Stripe columns from `payments`.~~ **Done.** See [Payments RPCs](#payments-rpcs-qr-receipt-upload-manual-verification). The Admin/Shop Owner dashboard has since grown well beyond that single page — Products, Inventory, Orders, and now Users/Shops (seller onboarding, `20260816000000_admin_user_shop_management.sql`) are all built (`/dashboard/{products,inventory,orders,users,shops}`), all following the same "RLS is the primary boundary, no manual filtering" pattern for reads, with `SECURITY DEFINER` RPCs reserved for the genuinely cross-user/no-direct-grant writes. Remaining: Reports (step 5 below) and platform Settings.
+3. ~~**Implement Payments (target).** Add `qr_upload` method + receipt storage + manual verification workflow. Drop the now-unused Stripe columns from `payments`.~~ **Done.** See [Payments RPCs](#payments-rpcs-qr-receipt-upload-manual-verification). The Admin/Shop Owner dashboard has since grown well beyond that single page — Products, Inventory, Orders, and now Users/Shops (seller onboarding, `20260816000000_admin_user_shop_management.sql`) are all built (`/dashboard/{products,inventory,orders,users,shops}`), all following the same "RLS is the primary boundary, no manual filtering" pattern for reads, with `SECURITY DEFINER` RPCs reserved for the genuinely cross-user/no-direct-grant writes (and now cross-user **read** aggregation for Reports). Remaining: platform Settings.
 4. **Add `recommendation_rules`** and build the rule-based Guided Product Selection engine behind `features/assistant`.
-5. **Add `reports`** aggregates and build `features/reports` + `features/dashboard`.
+5. ~~**Add `reports` aggregates and build `features/reports`.**~~ **Done** (`20260818000000_reports_analytics_rpcs.sql`) — realised as four read-only `SECURITY DEFINER` aggregation RPCs over existing `orders`/`order_items`/`payments` (no physical `reports` table), a shop/admin-scoped `/dashboard/reports` page, and hand-rolled SVG/CSS charts. See [Reporting RPCs](#reporting-rpcs-analytics-over-existing-orders). Resolves TD-5.
 
 **Guardrails during evolution:**
 
@@ -538,6 +555,8 @@ The code converges toward the SAD **without breaking the build at any step**. Re
   14. `20260814000000_products_shop_scoping.sql` — adds `products.shop_id`, widens `products` RLS to accept shop membership additively; `orders`/`payments` untouched.
   15. `20260815000000_inventory_and_stock_history.sql` — `inventory`/`stock_adjustments` tables + `stock_adjustment_reason` enum, seed/sync/restock triggers, `adjust_stock` RPC, `create_order` replaced to lock/decrement `inventory` instead of `products`, idempotent backfill, column-level `REVOKE UPDATE (quantity)` on `products` for `authenticated`. Resolves TD-2.
   16. `20260816000000_admin_user_shop_management.sql` — `shop_users` gains `unique (user_id)`; new `admin_action_log` table + RLS; `admin_assign_seller_shop`/`admin_list_users` RPCs. No changes to `products`/`orders`/`inventory`/`payments`.
+  17. `20260817000000_fix_profiles_payment_qr_url_select_grant.sql` — bug fix: grants `SELECT (payment_qr_url)` to `authenticated`, missing since `20260807040000` added the column with only an `UPDATE` grant. Every query using `ORDER_COLUMNS` (all buyer *and* dashboard order reads) was failing outright with "permission denied for table profiles" until this landed — column-privilege checks apply to every column referenced in a query regardless of row count, so this broke Orders unconditionally, not just QR-code display.
+  18. `20260818000000_reports_analytics_rpcs.sql` — Reports & analytics: four read-only `SECURITY DEFINER` aggregation RPCs (`report_sales_summary`/`report_sales_timeseries`/`report_order_status_breakdown`/`report_top_products`) over existing `orders`/`order_items`/`payments`, `EXECUTE` to `authenticated` only, seller/admin scoping re-enforced inside; plus two additive `orders` indexes (`orders_seller_placed_idx`, `orders_placed_at_idx`). No table/enum/RLS/trigger changes to existing objects. Resolves TD-5.
 - **Type regeneration** after any schema change:
   ```bash
   npx supabase gen types typescript --project-id <project-id> > src/lib/supabase/database.types.ts
@@ -558,7 +577,7 @@ The code converges toward the SAD **without breaking the build at any step**. Re
 | ~~TD-2~~ | ~~Inventory is `products.quantity`~~ | **Resolved** — dedicated `inventory`/`stock_adjustments` tables landed in `20260815000000_inventory_and_stock_history.sql`. | — |
 | ~~TD-3~~ | ~~Stripe columns on `payments`~~ | **Resolved** — dropped in `20260807010000_evolve_payments_for_qr.sql` when QR payments were built. | — |
 | TD-4 | **No `recommendation_rules`** — Guided Selection is a landing preview only | Core SAD feature unbuilt | Evolution step 4 |
-| TD-5 | **No `reports` table / module** | No analytics for owners/admin | Evolution step 5 |
+| ~~TD-5~~ | ~~No `reports` table / module~~ | **Resolved** — Reports & analytics shipped as four `SECURITY DEFINER` aggregation RPCs over existing `orders`/`order_items`/`payments` (`20260818000000_reports_analytics_rpcs.sql`) + `/dashboard/reports`. No physical `reports` table was modelled by design (derivable data). | — |
 | TD-6 | **No test runner** (only `scripts/*.mjs`) | Limited automated regression safety | Add a runner when justified (see CLAUDE.md) |
 | TD-7 | **`roles` as enum**, not a table | Minor divergence from SAD DB list | Model a `roles` table if/when role metadata is needed |
 | TD-8 | **`database.types.ts` hand-written** | Drift risk vs migrations | Regenerate from Supabase once project is provisioned |

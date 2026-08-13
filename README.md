@@ -187,7 +187,7 @@ Detailed purpose, boundaries, and interactions for each module are in [`ARCHITEC
 | Shops (multi-shop model) | 🚧 In Progress (`shops`/`shop_users` exist and are backfilled; `products.shop_id` exists — `20260814000000_products_shop_scoping.sql`; admin can now create/manage shops and onboard sellers with no direct SQL — `20260816000000_admin_user_shop_management.sql`; `orders` still keys off `seller_id` only, no `shop_id` bridge yet) | `supabase/migrations/{20260813000000,20260814000000,20260816000000}_*.sql`, `src/features/shops`, `src/features/users`, `src/app/dashboard/{shops,users}` |
 | Inventory (dedicated module) | ✅ Completed | `supabase/migrations/20260815000000_inventory_and_stock_history.sql`, `src/features/inventory`, `src/app/dashboard/inventory` |
 | Payments (COD + QR verification) | ✅ Completed | `src/features/payments`; receipt upload on the order detail page; verification queue at `/dashboard/payments` |
-| Reports | ⏳ Upcoming | `src/features/reports` *(stub)* |
+| Reports | ✅ Completed | `src/features/reports`, `src/app/dashboard/reports`, `src/components/charts` |
 | Guided Product Selection | ⏳ Upcoming | `src/features/assistant` *(stub; landing preview only)* |
 
 Legend: ✅ Completed · 🚧 In Progress · ⏳ Upcoming
@@ -215,9 +215,9 @@ flowchart LR
     classDef done fill:#1f7a3d,stroke:#0d3d1f,color:#fff;
     classDef todo fill:#3a3f4b,stroke:#20242c,color:#fff;
     classDef partial fill:#8a6d1f,stroke:#4d3c10,color:#fff;
-    class P1,P2,P3,P4,P5,P7 done;
+    class P1,P2,P3,P4,P5,P7,P8 done;
     class P6 partial;
-    class P8,P9 todo;
+    class P9 todo;
 ```
 
 > [!NOTE]
@@ -244,7 +244,7 @@ flowchart LR
 | 5 | **Checkout** | ✅ |
 | 6 | Shops & Inventory (align to SAD multi-shop model) | 🚧 (Shops + `products.shop_id` + Inventory + Admin Users/Shops onboarding done; `orders.shop_id` bridge not started) |
 | 7 | Payments — COD + QR receipt upload + manual verification | ✅ |
-| 8 | Reports & analytics | ⏳ |
+| 8 | Reports & analytics | ✅ |
 | 9 | Guided Product Selection (rule-based) | ⏳ |
 
 ---
@@ -445,7 +445,7 @@ The interface follows modern marketplace best practices, inspired by **Lazada, S
 | `roles` table | Role stored on `profiles.role` (enum) | Roles are an enum column, not a separate table. |
 | `inventory` table | ✅ **Implemented** — dedicated `inventory` + `stock_adjustments` tables | `products.quantity` is now a trigger-synced mirror, not the source of truth. See [ARCHITECTURE.md → Architecture Evolution Strategy](./ARCHITECTURE.md#architecture-evolution-strategy). |
 | `recommendation_rules` table | ❌ Not implemented | Guided Product Selection is a landing **preview** only; `features/assistant` is a stub. |
-| `reports` table | ❌ Not implemented | `features/reports` is a stub. |
+| `reports` table | ✅ **Implemented as computed RPCs** (no physical table) | Reports are aggregated DB-side by four read-only `SECURITY DEFINER` RPCs (`report_sales_summary`/`_timeseries`/`_order_status_breakdown`/`_top_products`) over the existing `orders`/`order_items`/`payments`, scoped per shop/admin. A stored `reports` table was deliberately not modelled — see [ARCHITECTURE.md → Reporting RPCs](./ARCHITECTURE.md#reporting-rpcs-analytics-over-existing-orders). |
 | Unified **cart** | Client-side cart (localStorage + `useReducer`) | Guest cart is client-only by design; committed at checkout. |
 | **Payments:** COD + QR receipt upload, manual verification | ✅ **Implemented** — COD (no action needed) + QR (buyer uploads a receipt, seller/admin verifies at `/dashboard/payments`) | Matches target. Stripe/card spike removed (ADR-014); its columns were dropped from `payments` when this landed. |
 

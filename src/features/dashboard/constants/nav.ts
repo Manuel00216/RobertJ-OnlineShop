@@ -35,7 +35,7 @@ export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
   { href: ROUTES.inventory, label: "Inventory", icon: Boxes, roles: DASHBOARD_ROLES, status: "available" },
   { href: ROUTES.dashboardOrders, label: "Orders", icon: ClipboardList, roles: DASHBOARD_ROLES, status: "available" },
   { href: ROUTES.paymentVerification, label: "Payments", icon: Wallet, roles: DASHBOARD_ROLES, status: "available" },
-  { href: ROUTES.reports, label: "Reports", icon: BarChart3, roles: DASHBOARD_ROLES, status: "comingSoon" },
+  { href: ROUTES.reports, label: "Reports", icon: BarChart3, roles: DASHBOARD_ROLES, status: "available" },
   { href: ROUTES.adminUsers, label: "Users", icon: Users, roles: ADMIN_ONLY_ROLES, status: "available" },
   { href: ROUTES.adminShops, label: "Shops", icon: Store, roles: ADMIN_ONLY_ROLES, status: "available" },
   { href: ROUTES.adminSettings, label: "Settings", icon: Settings, roles: ADMIN_ONLY_ROLES, status: "comingSoon" },

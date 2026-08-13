@@ -36,6 +36,7 @@ Every decision is a numbered ADR with a fixed shape: **Context → Problem → O
 | [ADR-013](#adr-013-guest-cart-is-client-side-only) | Guest cart is client-side only | ✅ Accepted |
 | [ADR-014](#adr-014-stripe-integration-is-a-provisional-spike) | Stripe integration is a provisional spike | ⛔ Retired |
 | [ADR-015](#adr-015-no-automated-test-runner-yet) | No automated test runner yet | ✅ Accepted (deferred) |
+| [ADR-016](#adr-016-reports-as-security-definer-rpcs-over-existing-orders) | Reports as SECURITY DEFINER RPCs over existing orders | ✅ Accepted |
 
 ---
 
@@ -401,3 +402,30 @@ Original decision: Option 2. The Stripe code stayed in the repo (real, working c
 - Tracked as technical debt (TD-6 in [ARCHITECTURE.md](./ARCHITECTURE.md#technical-debt-register)).
 
 **Future Revisit:** Once Checkout (current phase) and Payments (target) stabilize, introduce Vitest for the service layer (`queries.ts` mappers, pure utils) and Playwright for the checkout/order critical path — the highest-value, lowest-effort starting point. Requires a new ADR before adding the dependency.
+
+---
+
+## ADR-016: Reports as SECURITY DEFINER RPCs over existing orders
+
+**Status:** ✅ Accepted
+
+**Context:** The SAD lists a `reports` entity and requires sales/operational analytics for Shop Owners (own shop) and the Administrator (platform-wide). The data needed already lives in `orders`/`order_items`/`payments`. Reporting requires GROUP BY / date bucketing / SUM that PostgREST does not express well, and must be computed server/DB-side, correctly scoped per shop.
+
+**Problem:** Where do report aggregates live and run — a physical/materialized `reports` table, plain PostgREST aggregate reads relying on RLS, or SQL functions?
+
+**Options Considered:**
+1. A stored `reports` table (or materialized views) populated by triggers/jobs — duplicates derivable data and adds write paths + staleness to keep in sync.
+2. Plain PostgREST aggregate queries under RLS — but Supabase aggregate functions are limited/often disabled, GROUP BY + timezone bucketing is awkward, and the per-row `EXISTS` in `order_items`/`payments` RLS is costly at scale.
+3. **Read-only `SECURITY DEFINER` RPCs** that aggregate over the existing tables and re-enforce seller/admin scoping internally (the same chokepoint pattern as `create_order`/`verify_payment`/`adjust_stock`).
+
+**Decision:** Option 3. Four RPCs — `report_sales_summary`/`report_sales_timeseries`/`report_order_status_breakdown`/`report_top_products` (`20260818000000_reports_analytics_rpcs.sql`). No physical `reports` table. Consequential sub-decisions:
+- **Single date axis:** every metric buckets on `placed_at` in **`Asia/Manila`** (the PHP business timezone) for consistent date handling across all metrics.
+- **Revenue = `payment_status = 'paid'`** (the confirmed-revenue source of truth covering both COD and QR); count/volume metrics include all placed orders. Never sum `payments.amount_cents` directly (COD orders have no payment row; an order may have several).
+- **Charts are hand-rolled SVG/CSS** in `src/components/charts` — no charting dependency added (honours [CLAUDE.md → AI Non-Negotiable Rules](./CLAUDE.md#ai-non-negotiable-rules)).
+
+**Consequences:**
+- Zero schema duplication and no aggregate staleness — numbers are always live. Scoping is defence-in-depth: the RPC re-checks `seller_id = auth.uid() OR is_admin()` (DEFINER bypasses RLS), `EXECUTE` is `authenticated`-only, and a seller's `p_shop_id` is ignored so scope can't be widened.
+- Admin per-shop filtering maps shop→seller via `shop_users` because `orders` has no `shop_id` yet (TD-1); an `orders.shop_id` bridge would simplify this later.
+- Two additive `orders` indexes back the date-range scans. Verified against seeded data (in rolled-back transactions) that seller/admin numbers match independent ground-truth aggregates. Resolves [ARCHITECTURE.md TD-5](./ARCHITECTURE.md#technical-debt-register).
+
+**Future Revisit:** If report volume grows enough to matter, revisit materialized aggregates or an `orders.shop_id` column — neither is needed at current scale.

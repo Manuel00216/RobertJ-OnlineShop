@@ -592,6 +592,62 @@ export interface Database {
           shop_name: string | null;
         }[];
       };
+      report_sales_summary: {
+        Args: {
+          p_from: string;
+          p_to: string;
+          p_shop_id?: string | null;
+        };
+        Returns: {
+          total_orders: number;
+          paid_orders: number;
+          cancelled_orders: number;
+          revenue_cents: number;
+          units_sold: number;
+          avg_order_value_cents: number;
+          cod_paid_orders: number;
+          qr_paid_orders: number;
+          pending_payment_orders: number;
+        }[];
+      };
+      report_sales_timeseries: {
+        Args: {
+          p_from: string;
+          p_to: string;
+          p_granularity?: string;
+          p_shop_id?: string | null;
+        };
+        Returns: {
+          bucket: string;
+          order_count: number;
+          revenue_cents: number;
+        }[];
+      };
+      report_order_status_breakdown: {
+        Args: {
+          p_from: string;
+          p_to: string;
+          p_shop_id?: string | null;
+        };
+        Returns: {
+          status: Database["public"]["Enums"]["order_status"];
+          order_count: number;
+        }[];
+      };
+      report_top_products: {
+        Args: {
+          p_from: string;
+          p_to: string;
+          p_limit?: number;
+          p_shop_id?: string | null;
+        };
+        Returns: {
+          product_id: string;
+          product_title: string;
+          units_sold: number;
+          revenue_cents: number;
+        }[];
+      };
     };
 
     Enums: {
