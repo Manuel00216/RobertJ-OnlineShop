@@ -11,6 +11,7 @@ import { signInAction } from "@/features/auth/actions/auth.actions";
 import { AuthButton } from "@/features/auth/components/AuthButton";
 import { AuthHeader } from "@/features/auth/components/layout/AuthHeader";
 import { AUTH_COPY } from "@/features/auth/constants/auth.constants";
+import { isInternalPath } from "@/lib/utils/url";
 import type { ActionResult } from "@/types/action.types";
 
 import { EmailInput } from "../fields/EmailInput";
@@ -36,9 +37,7 @@ export function LoginForm() {
     if (state?.success) {
       const redirectTo = new URLSearchParams(window.location.search).get("redirectTo");
       // Only navigate to internal paths — never an external / open-redirect target.
-      const isInternal =
-        redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//");
-      router.replace(isInternal ? redirectTo : ROUTES.home);
+      router.replace(isInternalPath(redirectTo) ? redirectTo : ROUTES.home);
     }
   }, [state, router]);
 

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { ROUTES } from "@/constants/routes";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { isInternalPath } from "@/lib/utils/url";
 
 /**
  * PKCE exchange endpoint for Supabase auth email links (sign-up confirmation and
@@ -20,8 +21,9 @@ export async function GET(request: NextRequest) {
     const supabase = await createSupabaseServerClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      // Only allow same-origin, absolute-path redirects to avoid open redirects.
-      const target = next.startsWith("/") ? next : ROUTES.home;
+      // Only allow same-origin, absolute-path redirects to avoid open redirects
+      // (rejects protocol-relative targets like `//evil.com` too).
+      const target = isInternalPath(next) ? next : ROUTES.home;
       return NextResponse.redirect(`${origin}${target}`);
     }
   }

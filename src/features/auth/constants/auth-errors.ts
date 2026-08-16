@@ -13,10 +13,16 @@ const KNOWN_ERRORS: Array<[RegExp, string]> = [
     "Please verify your email address. We sent a link to your inbox.",
   ],
   [
+    // Deliberately generic: doesn't confirm the email is registered (matches
+    // the anti-enumeration design already used by requestPasswordResetAction).
     /already registered|user already exists/i,
-    "An account with this email already exists. Try signing in.",
+    "Couldn't create your account with those details. If you already have an account, try signing in instead.",
   ],
   [/rate limit|too many requests|429/i, "Too many attempts. Please try again later."],
+  [
+    /password reset link has expired/i,
+    "This password reset link has expired. Please request a new one.",
+  ],
 ];
 
 const FALLBACK = "Something went wrong. Please try again.";

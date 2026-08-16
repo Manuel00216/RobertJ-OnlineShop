@@ -15,6 +15,7 @@ import {
   type ProductStatus,
 } from "@/constants/status";
 import {
+  createSupabaseAdminClient,
   createSupabaseAnonClient,
   createSupabaseServerClient,
 } from "@/lib/supabase/server";
@@ -1887,6 +1888,37 @@ export const getSessionUser = cache(
   },
 );
 
+/**
+ * True only when the current session's JWT records a "recovery" auth method
+ * — i.e. it was established by clicking a password-recovery email link, not
+ * an ordinary sign-in. `getClaims()` verifies the JWT itself (unlike
+ * `getSession()`), so this is safe to use as an authorization gate.
+ * Used by the reset-password screen so a hijacked ordinary session can't
+ * reach the password-change form without going through recovery.
+ */
+export async function hasRecoverySession(): Promise<boolean> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.auth.getClaims();
+  if (error || !data) return false;
+
+  const amr = data.claims.amr ?? [];
+  return amr.some((entry) =>
+    typeof entry === "string" ? entry === "recovery" : entry.method === "recovery",
+  );
+}
+
+/**
+ * Throws unless the current session came from a password-recovery link.
+ * Use at the top of `updatePasswordAction` — the page-level check in
+ * `reset-password/page.tsx` is the primary UX gate, this is the
+ * belt-and-suspenders re-check at the Server Action boundary.
+ */
+export async function requireRecoverySession(): Promise<void> {
+  if (!(await hasRecoverySession())) {
+    throw new Error("This password reset link has expired. Please request a new one.");
+  }
+}
+
 /** Throws when unauthenticated — use at the top of protected Server Actions. */
 export async function requireSessionUser(): Promise<SessionUser> {
   const user = await getSessionUser();
@@ -2002,11 +2034,34 @@ export async function sendPasswordResetEmail(email: string) {
   if (error) throw new Error(error.message);
 }
 
-/** Sets a new password for the currently-authenticated (recovery) session. */
+/**
+ * Sets a new password for the currently-authenticated (recovery) session,
+ * then revokes every *other* session on the account. A successful password
+ * recovery is a strong proof of ownership — this is the right moment to
+ * shake loose any other session (a stale device, or one an attacker
+ * obtained through a different vector) rather than leaving it valid.
+ */
 export async function updatePassword(newPassword: string) {
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.auth.updateUser({ password: newPassword });
   if (error) throw new Error(error.message);
+
+  // Read back the (now-updated) session's access token purely to identify
+  // it to the admin API below — not used for any auth decision, so this is
+  // a safe, narrow exception to the "use getUser(), not getSession()" rule.
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (session?.access_token) {
+    try {
+      // Best-effort: a failure here (including a missing service-role key
+      // in local dev) must not fail the password change itself.
+      const admin = createSupabaseAdminClient();
+      await admin.auth.admin.signOut(session.access_token, "others");
+    } catch {
+      // Swallowed deliberately — see comment above.
+    }
+  }
 }
 
 /** Re-sends the sign-up confirmation email for an unverified address. */
