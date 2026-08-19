@@ -9,8 +9,10 @@ import { getClientIp } from "@/lib/utils/request";
 import * as queries from "@/lib/supabase/queries";
 import type { ActionResult } from "@/types/action.types";
 import { mapAuthError } from "@/features/auth/constants/auth-errors";
+import { isInternalPath } from "@/lib/utils/url";
 import {
   forgotPasswordSchema,
+  oauthSignInSchema,
   resetPasswordSchema,
   signInSchema,
   signUpSchema,
@@ -60,6 +62,43 @@ export async function signUpAction(
 
   revalidatePath("/", "layout");
   return ok(null);
+}
+
+/**
+ * Starts Google/Facebook sign-in. Bound directly to `<form action={...}>`
+ * (a plain `void | Promise<void>` DOM form action, not `useActionState`) —
+ * success is a full navigation to the provider's consent screen, so there's
+ * no client state to react to, same as `signOutAction` below. Every path
+ * ends in `redirect()`, including failure: rather than returning an
+ * `ActionResult` no plain form action would ever read, failures redirect
+ * back to `/sign-in?error=<code>`, reusing the same `mapOAuthCallbackError`
+ * copy the `/auth/callback` route's own failures already render there.
+ */
+export async function signInWithOAuthAction(formData: FormData): Promise<void> {
+  const parsed = oauthSignInSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    redirect(`${ROUTES.signIn}?error=oauth_start_failed`);
+  }
+
+  const next = isInternalPath(parsed.data.redirectTo) ? parsed.data.redirectTo : undefined;
+
+  let url: string;
+  try {
+    const ip = await getClientIp();
+    // Keyed by IP, not email — we don't know the account yet at this point.
+    // This only throttles generation of the redirect URL itself; the
+    // provider and Supabase separately rate-limit the actual OAuth exchange.
+    await queries.requireRateLimit(`oauth:${parsed.data.provider}:${ip}`, 15, 300);
+    url = await queries.signInWithOAuth(parsed.data.provider, next);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    const code = /too many attempts/i.test(message) ? "rate_limited" : "oauth_start_failed";
+    redirect(`${ROUTES.signIn}?error=${code}`);
+  }
+
+  // redirect() throws NEXT_REDIRECT — must stay outside the try/catch above,
+  // or it gets caught and misreported as a failed sign-in.
+  redirect(url);
 }
 
 export async function signOutAction() {

@@ -8,6 +8,7 @@ export { CalloutBubble } from "./components/layout/CalloutBubble";
 export { SocialLoginButtons } from "./components/social/SocialLoginButtons";
 export { SocialButton } from "./components/social/SocialButton";
 export { Divider } from "./components/social/Divider";
+export { GoogleIcon, FacebookIcon } from "./components/social/icons";
 export { EmailInput } from "./components/fields/EmailInput";
 export { PasswordInput } from "./components/fields/PasswordInput";
 export { VerificationPending } from "./components/feedback/VerificationPending";
@@ -23,6 +24,7 @@ export {
   signInAction,
   signUpAction,
   signOutAction,
+  signInWithOAuthAction,
   requestPasswordResetAction,
   updatePasswordAction,
   resendVerificationAction,
@@ -32,10 +34,14 @@ export {
   signUpSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  oauthSignInSchema,
+  OAUTH_PROVIDERS,
 } from "./schemas/auth.schema";
 export type {
   SignInInput,
   SignUpInput,
   ForgotPasswordInput,
   ResetPasswordInput,
+  OAuthProvider,
 } from "./schemas/auth.schema";
+export { mapAuthError, mapOAuthCallbackError } from "./constants/auth-errors";

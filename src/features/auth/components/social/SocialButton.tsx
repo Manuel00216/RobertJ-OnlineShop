@@ -1,4 +1,7 @@
+"use client";
+
 import type { ReactNode } from "react";
+import { useFormStatus } from "react-dom";
 
 import { cn } from "@/lib/utils/cn";
 
@@ -8,23 +11,32 @@ export interface SocialButtonProps {
 }
 
 /**
- * Visual-only social sign-in option — OAuth is not implemented (out of
- * scope, see README/MODULES.md), so this is inert markup, not a real action.
+ * Submit button for a single-provider OAuth form. Pending state comes from
+ * `useFormStatus`, which only reports its nearest parent `<form>` — each
+ * provider must be its own `<form>` (see `SocialLoginButtons`), or both
+ * buttons would show pending together.
  */
 export function SocialButton({ icon, label }: SocialButtonProps) {
+  const { pending } = useFormStatus();
   return (
     <button
-      type="button"
-      disabled
-      aria-disabled="true"
-      title="Coming soon"
+      type="submit"
+      disabled={pending}
+      aria-busy={pending}
       className={cn(
         "flex w-full items-center justify-center gap-3 rounded-xl border border-rj-gray-600",
         "bg-rj-white px-4 py-3.5 text-sm font-semibold text-rj-black shadow-sm",
-        "cursor-not-allowed opacity-60",
+        "transition-opacity disabled:cursor-not-allowed disabled:opacity-60",
       )}
     >
-      {icon}
+      {pending ? (
+        <span
+          className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+          aria-hidden="true"
+        />
+      ) : (
+        icon
+      )}
       <span>{label}</span>
     </button>
   );

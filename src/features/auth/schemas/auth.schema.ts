@@ -5,6 +5,10 @@ import { z } from "zod";
 // under a previously-lower minimum.
 const NEW_PASSWORD_MIN = 10;
 
+/** The only providers enabled in the Supabase dashboard for this app. */
+export const OAUTH_PROVIDERS = ["google", "facebook"] as const;
+export type OAuthProvider = (typeof OAUTH_PROVIDERS)[number];
+
 export const signInSchema = z.object({
   email: z.email("Enter a valid email address."),
   // Deliberately not raised alongside NEW_PASSWORD_MIN: this only validates
@@ -38,6 +42,16 @@ export const resetPasswordSchema = z
     message: "Passwords do not match.",
     path: ["confirmPassword"],
   });
+
+/**
+ * Sign-in via Google/Facebook. `redirectTo` carries the post-login
+ * destination through the provider round trip; re-validated with
+ * `isInternalPath` before use (never trusted as-is).
+ */
+export const oauthSignInSchema = z.object({
+  provider: z.enum(OAUTH_PROVIDERS),
+  redirectTo: z.string().optional(),
+});
 
 export type SignInInput = z.infer<typeof signInSchema>;
 export type SignUpInput = z.infer<typeof signUpSchema>;

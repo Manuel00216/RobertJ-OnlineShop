@@ -1,6 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
+import type { UserIdentity } from "@supabase/supabase-js";
 
 import { USER_ROLES, type UserRole } from "@/constants/roles";
 import { publicEnv } from "@/config/env";
@@ -48,6 +49,7 @@ import type {
   ShippingAddress,
 } from "@/features/orders/types/order.types";
 import type { UpdateProfileInput } from "@/features/account/schemas/account.schema";
+import type { OAuthProvider } from "@/features/auth/schemas/auth.schema";
 import type { Profile } from "@/features/account/types/account.types";
 import type { Payment, PaymentDecision } from "@/features/payments/types/payment.types";
 import type { Shop, ShopWithMember } from "@/features/shops/types/shop.types";
@@ -1041,7 +1043,7 @@ export async function createOrder(
     })),
     p_shipping_address: input.shippingAddress,
     p_shipping_fee_cents: input.shippingFeeCents,
-    p_notes: input.notes ?? null,
+    p_notes: input.notes ?? undefined,
   });
 
   if (error) {
@@ -1637,7 +1639,7 @@ export async function adjustStock(input: AdjustStockInput): Promise<InventoryIte
     p_product_id: input.productId,
     p_delta: input.delta,
     p_reason: input.reason,
-    p_note: input.note ?? null,
+    p_note: input.note ?? undefined,
   });
 
   if (error) {
@@ -1737,7 +1739,7 @@ export const getSalesSummary = cache(async function getSalesSummary(
   const { data, error } = await supabase.rpc("report_sales_summary", {
     p_from: from,
     p_to: to,
-    p_shop_id: shopId,
+    p_shop_id: shopId ?? undefined,
   });
 
   if (error) {
@@ -1771,7 +1773,7 @@ export const getSalesTimeseries = cache(async function getSalesTimeseries(
     p_from: from,
     p_to: to,
     p_granularity: granularity,
-    p_shop_id: shopId,
+    p_shop_id: shopId ?? undefined,
   });
 
   if (error) {
@@ -1795,7 +1797,7 @@ export const getOrderStatusBreakdown = cache(
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase.rpc(
       "report_order_status_breakdown",
-      { p_from: from, p_to: to, p_shop_id: shopId },
+      { p_from: from, p_to: to, p_shop_id: shopId ?? undefined },
     );
 
     if (error) {
@@ -1821,7 +1823,7 @@ export const getTopProducts = cache(async function getTopProducts(
     p_from: from,
     p_to: to,
     p_limit: limit,
-    p_shop_id: shopId,
+    p_shop_id: shopId ?? undefined,
   });
 
   if (error) {
@@ -1998,6 +2000,30 @@ export async function signInWithPassword(email: string, password: string) {
   if (error) throw new Error(error.message);
 }
 
+/**
+ * Starts the PKCE OAuth flow for `provider` and returns the provider's
+ * consent-screen URL. Does not redirect itself — there is no `window` in a
+ * Server Action, so `signInWithOAuth` never auto-navigates here regardless;
+ * the caller must `redirect(url)` explicitly.
+ *
+ * Whether this reuses an existing account or creates a new one is decided
+ * server-side by Supabase Auth (GoTrue) before this call returns — it links
+ * to an existing user only when the incoming identity's email is verified by
+ * the provider, and never on a bare email-string match. Do not add
+ * email-based matching logic anywhere in this app; that would bypass
+ * Supabase's own pre-account-takeover safeguard.
+ */
+export async function signInWithOAuth(provider: OAuthProvider, next?: string): Promise<string> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: { redirectTo: callbackUrl(next) },
+  });
+  if (error) throw new Error(error.message);
+  if (!data.url) throw new Error("The sign-in provider did not return a redirect URL.");
+  return data.url;
+}
+
 export async function signUpWithPassword(
   email: string,
   password: string,
@@ -2072,5 +2098,50 @@ export async function resendVerificationEmail(email: string) {
     email,
     options: { emailRedirectTo: callbackUrl() },
   });
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * All identities (password, Google, Facebook, …) linked to the current
+ * session's user. Requires an authenticated session — call behind
+ * `requireSessionUser()`.
+ */
+export async function listUserIdentities(): Promise<UserIdentity[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.auth.getUserIdentities();
+  if (error) throw new Error(error.message);
+  return data.identities;
+}
+
+/**
+ * Manual identity linking (Supabase Dashboard → Authentication →
+ * "Enable Manual Linking" must be on): attaches `provider` to the
+ * *currently signed-in* user, regardless of whether its email matches or is
+ * verified — safe specifically because the caller is already proven to own
+ * the target account, unlike automatic linking, which only trusts a
+ * provider-verified email. This is the sanctioned fallback for cases (e.g.
+ * Facebook without a verified email) where `signInWithOAuth` cannot safely
+ * auto-link on its own. Same PKCE round trip as `signInWithOAuth`; the
+ * existing `/auth/callback` route completes it unchanged.
+ */
+export async function linkOAuthIdentity(provider: OAuthProvider, next?: string): Promise<string> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.auth.linkIdentity({
+    provider,
+    options: { redirectTo: callbackUrl(next) },
+  });
+  if (error) throw new Error(error.message);
+  if (!data.url) throw new Error("The sign-in provider did not return a redirect URL.");
+  return data.url;
+}
+
+/**
+ * Detaches `identity` from the current user. Supabase requires at least 2
+ * remaining identities on the account — surface that in the UI rather than
+ * letting this throw as the first the user hears of it.
+ */
+export async function unlinkOAuthIdentity(identity: UserIdentity): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.auth.unlinkIdentity(identity);
   if (error) throw new Error(error.message);
 }

@@ -17,6 +17,17 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? ROUTES.home;
 
+  // OAuth providers (or GoTrue itself, e.g. when Facebook can't supply an
+  // email) can redirect back here with an error and no `code` at all — most
+  // commonly the user cancelling the provider's consent screen. Surface a
+  // distinguishable code instead of falling through to the generic message.
+  const providerError = searchParams.get("error");
+  if (providerError) {
+    return NextResponse.redirect(
+      `${origin}${ROUTES.signIn}?error=${encodeURIComponent(providerError)}`,
+    );
+  }
+
   if (code) {
     const supabase = await createSupabaseServerClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);

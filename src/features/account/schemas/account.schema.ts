@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { OAUTH_PROVIDERS } from "@/features/auth";
+
 /**
  * Editable profile fields, mirroring the `profiles` column CHECKs:
  * `full_name` 1–120, `username ^[a-z0-9_]{3,30}$`, `phone ^\+?[0-9 ()-]{7,20}$`,
@@ -51,3 +53,13 @@ export const updateProfileSchema = z.object({
 });
 
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+
+/** Connected Accounts panel — linking a second provider identity to the signed-in user. */
+export const linkProviderSchema = z.object({
+  provider: z.enum(OAUTH_PROVIDERS),
+});
+
+/** Connected Accounts panel — unlinking, keyed by the identity's own id (not the provider name, since a user can only ever have one identity per provider anyway, but the id is what Supabase's API needs). */
+export const unlinkProviderSchema = z.object({
+  identityId: z.string().min(1),
+});

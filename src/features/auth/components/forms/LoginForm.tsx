@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useActionState } from "react";
 
 import { ErrorState } from "@/components/feedback/ErrorState";
@@ -11,6 +11,7 @@ import { signInAction } from "@/features/auth/actions/auth.actions";
 import { AuthButton } from "@/features/auth/components/AuthButton";
 import { AuthHeader } from "@/features/auth/components/layout/AuthHeader";
 import { AUTH_COPY } from "@/features/auth/constants/auth.constants";
+import { mapOAuthCallbackError } from "@/features/auth/constants/auth-errors";
 import { isInternalPath } from "@/lib/utils/url";
 import type { ActionResult } from "@/types/action.types";
 
@@ -32,6 +33,7 @@ export function LoginForm() {
     ActionResult<null> | null,
     FormData
   >(signInAction, null);
+  const [oauthError, setOauthError] = useState<string | null>(null);
 
   useEffect(() => {
     if (state?.success) {
@@ -41,8 +43,19 @@ export function LoginForm() {
     }
   }, [state, router]);
 
+  // Set once on mount from the /auth/callback redirect's ?error= — e.g. the
+  // user cancelled the Google/Facebook consent screen, or Facebook couldn't
+  // supply an email. See mapOAuthCallbackError for the code → copy mapping.
+  useEffect(() => {
+    // Same hydration-safety reasoning as SocialLoginButtons' redirectTo read:
+    // window is unavailable during SSR, so this can only run post-mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setOauthError(mapOAuthCallbackError(new URLSearchParams(window.location.search).get("error")));
+  }, []);
+
   const fieldErrors = state && !state.success ? state.fieldErrors : undefined;
-  const formError = state && !state.success && !state.fieldErrors ? state.error : undefined;
+  const formError =
+    (state && !state.success && !state.fieldErrors ? state.error : undefined) ?? oauthError ?? undefined;
 
   return (
     <>

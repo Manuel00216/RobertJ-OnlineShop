@@ -428,4 +428,27 @@ Original decision: Option 2. The Stripe code stayed in the repo (real, working c
 - Admin per-shop filtering maps shop→seller via `shop_users` because `orders` has no `shop_id` yet (TD-1); an `orders.shop_id` bridge would simplify this later.
 - Two additive `orders` indexes back the date-range scans. Verified against seeded data (in rolled-back transactions) that seller/admin numbers match independent ground-truth aggregates. Resolves [ARCHITECTURE.md TD-5](./ARCHITECTURE.md#technical-debt-register).
 
+---
+
+## ADR-017: OAuth account linking trusts Supabase's verified-email matching only
+
+**Status:** ✅ Accepted
+
+**Context:** Adding Google/Facebook sign-in (Module 1, Authentication) requires deciding when a Google/Facebook sign-in should land in an existing email/password account versus create a new one. The obvious-looking approach — "if the email string matches, it's the same person" — is exactly the mistake Supabase Auth's own documentation warns against: an OAuth provider that doesn't verify email ownership could let an attacker claim someone else's email and get folded into their real account (a pre-account-takeover attack). Facebook, specifically, does not reliably mark its email claim as verified, and can omit email entirely depending on the user's Facebook settings and the permissions granted.
+
+**Problem:** Where does "same person, different sign-in method" get decided, and on what evidence?
+
+**Options Considered:**
+1. Implement our own matching in `handle_new_user()` or a Server Action: look up `profiles`/`auth.users` by email and attach the new identity if found.
+2. **Trust Supabase Auth's (GoTrue's) built-in automatic identity linking**, which only links a new OAuth identity to an existing user when that identity's email is provider-verified, and never touches `handle_new_user()`'s job (GoTrue decides account identity before our trigger's `AFTER INSERT ON auth.users` even fires) — plus Supabase's manual-linking API (`linkIdentity()`), gated on the user already being authenticated, as the safe fallback for cases automatic linking can't cover.
+3. Always create a new account per provider and never link anything, leaving merging entirely to the user's memory of which method they used.
+
+**Decision:** Option 2. `handle_new_user()` (`20260819000200_oauth_profile_metadata_coalesce.sql`) only widens which `raw_user_meta_data` keys it reads (Facebook uses `name`/`picture` instead of Google's `full_name`/`avatar_url`) — it adds no email-matching logic. Google reliably auto-links (its email is always provider-verified). Facebook auto-links only when Facebook itself confirms the email; when it can't, sign-in still succeeds but creates a separate account, by design — the user recovers via **Connected Accounts** (`/profile`, `features/account/components/ConnectedAccounts.tsx`), which uses `linkIdentity()` while the user is already signed into their primary account, the only point at which "same person" is actually proven rather than guessed.
+
+**Consequences:**
+- No app code anywhere performs email-based account matching — the entire trust decision lives in Supabase Auth, upstream of every layer this app controls, so there is nothing here to audit for that specific vulnerability class.
+- A user whose Facebook sign-in didn't qualify for auto-linking gets a second account until they manually connect it. This is a real, user-visible rough edge, not swept under the rug — the sign-in UI captions this expectation, and the callback/error mapping (`mapOAuthCallbackError`) gives Facebook-specific failures a distinct message.
+- Manual linking does not retroactively merge an already-created duplicate account's order history into the primary account — that would require a manual admin data migration, out of scope here (see MODULES.md → Authentication → Future Work).
+- Requires **Authentication → Enable Manual Linking** turned on in the Supabase dashboard (off by default) for Connected Accounts to function at all.
+
 **Future Revisit:** If report volume grows enough to matter, revisit materialized aggregates or an `orders.shop_id` column — neither is needed at current scale.

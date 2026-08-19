@@ -17,15 +17,15 @@
 |---|---|
 | **Purpose** | Let Guests become Customers (and staff sign in) securely: registration, login, logout, email verification, password reset. |
 | **Responsibilities** | Session issuance/refresh; credential validation; safe error messaging (no account enumeration); redirect-after-auth handling. |
-| **Features** | Sign up, sign in, sign out, forgot password, reset password, email verification (PKCE), role-aware post-login redirect. |
-| **Pages** | `src/app/(auth)/{sign-in,sign-up,forgot-password,reset-password}/page.tsx`; `src/app/auth/callback/route.ts` (PKCE exchange, not a page). |
-| **Components** | `features/auth/components/forms/{LoginForm,RegisterForm,ForgotPasswordForm,ResetPasswordForm}`; `fields/{EmailInput,PasswordInput}`; `layout/{AuthCard,AuthHeader,AuthFooter,AuthLayout,EditorialPanel}`; `feedback/{VerificationPending,AuthSuccessState}`; `AuthButton`. |
-| **Server Actions** | `features/auth/actions/auth.actions.ts` — `signInAction`, `signUpAction`, `signOutAction`, `requestPasswordResetAction`, `updatePasswordAction`, `resendVerificationAction`. |
-| **Services** | `lib/supabase/queries.ts` (auth section) — `signInWithPassword`, `signUpWithPassword`, `signOut`, `sendPasswordResetEmail`, `updatePassword`, `resendVerificationEmail`, `getSessionUser`. |
-| **Database Tables** | `auth.users` (Supabase-managed) · `profiles` (via `handle_new_user` trigger, auto-creates a `buyer` profile row). |
-| **Dependencies** | `src/proxy.ts` (session refresh + route gating), `src/constants/routes.ts` (`AUTH_ROUTES`, `PROTECTED_ROUTE_PREFIXES`), `auth-errors.ts` (error mapping). |
-| **Current Status** | ✅ Completed. See [`docs` history via git](./ARCHITECTURE.md#migration-notes) — planned in `auth-module-architecture-plan.md`, now fully implemented. |
-| **Future Work** | OAuth providers, seller self-upgrade flow — both explicitly out of scope today (see [README.md → Out of Scope](./README.md#out-of-scope) precedent for deliberate exclusions). |
+| **Features** | Sign up, sign in, sign out, forgot password, reset password, email verification (PKCE), role-aware post-login redirect, Google/Facebook OAuth sign-in, manual account linking. |
+| **Pages** | `src/app/(auth)/{sign-in,sign-up,forgot-password,reset-password}/page.tsx`; `src/app/auth/callback/route.ts` (PKCE exchange for email links, OAuth sign-in, and OAuth account linking — not a page). |
+| **Components** | `features/auth/components/forms/{LoginForm,RegisterForm,ForgotPasswordForm,ResetPasswordForm}`; `fields/{EmailInput,PasswordInput}`; `layout/{AuthCard,AuthHeader,AuthFooter,AuthLayout,EditorialPanel}`; `feedback/{VerificationPending,AuthSuccessState}`; `social/{SocialLoginButtons,SocialButton,Divider,icons}`; `AuthButton`. Account linking UI lives in the Customer Account module: `features/account/components/{ConnectedAccounts,UnlinkIdentityButton}`. |
+| **Server Actions** | `features/auth/actions/auth.actions.ts` — `signInAction`, `signUpAction`, `signOutAction`, `signInWithOAuthAction`, `requestPasswordResetAction`, `updatePasswordAction`, `resendVerificationAction`. Linking lives with the Account module: `features/account/actions/account.actions.ts` — `linkIdentityAction`, `unlinkIdentityAction`. |
+| **Services** | `lib/supabase/queries.ts` (auth section) — `signInWithPassword`, `signUpWithPassword`, `signInWithOAuth`, `signOut`, `sendPasswordResetEmail`, `updatePassword`, `resendVerificationEmail`, `getSessionUser`, `listUserIdentities`, `linkOAuthIdentity`, `unlinkOAuthIdentity`. |
+| **Database Tables** | `auth.users`/`auth.identities` (Supabase-managed) · `profiles` (via `handle_new_user` trigger, auto-creates a `buyer` profile row; reads Google's and Facebook's differently-named metadata keys). |
+| **Dependencies** | `src/proxy.ts` (session refresh + route gating), `src/constants/routes.ts` (`AUTH_ROUTES`, `PROTECTED_ROUTE_PREFIXES`), `auth-errors.ts` (error mapping, incl. OAuth callback codes). |
+| **Current Status** | ✅ Completed, including Google/Facebook OAuth. Account-matching for OAuth is entirely Supabase Auth's (GoTrue's) own verified-email identity linking — this app never implements its own email-based account matching (see [DECISIONS.md](./DECISIONS.md) for the rationale). Manual linking (Connected Accounts on `/profile`) is the sanctioned fallback for cases automatic linking can't safely cover, e.g. Facebook without a provider-verified email. |
+| **Future Work** | Seller self-upgrade flow — explicitly out of scope today (see [README.md → Out of Scope](./README.md#out-of-scope)). Retroactively merging an already-separate duplicate account's order history into a primary account (created when Facebook auto-linking didn't apply) is a manual admin data-migration operation, not built. |
 
 ---
 
@@ -235,13 +235,13 @@
 |---|---|
 | **Purpose** | The buyer-facing account experience: profile, order history, and an account hub — the Customer's SAD scope. |
 | **Responsibilities** | Present the authenticated shopper's identity and history; let them update their profile; surface recent orders. |
-| **Features** | Account overview, profile edit, recent-orders summary, navigation to full order history (owned by the Orders module). |
+| **Features** | Account overview, profile edit, recent-orders summary, navigation to full order history (owned by the Orders module), Connected Accounts (manual Google/Facebook identity linking). |
 | **Pages** | `src/app/(account)/account/page.tsx`, `profile/page.tsx` (plus `orders/*`, owned by the Orders module and linked from here). |
-| **Components** | `features/account/components/{AccountMenu,AccountShell,AccountSidebar,OverviewSummary,ProfileForm,RecentOrdersList}`. |
-| **Server Actions** | `features/account/actions/account.actions.ts` — profile update. |
-| **Services** | `lib/supabase/queries.ts` — `getMyProfile` (via `get_my_profile()` RPC, the only path to `phone`), `toProfile` mapper. |
-| **Database Tables** | `profiles`; reads `orders` (via the Orders module, not duplicated here). |
-| **Dependencies** | Authentication (identity), Orders (`RecentOrdersList` composes the Orders module — does not reimplement it). |
+| **Components** | `features/account/components/{AccountMenu,AccountShell,AccountSidebar,OverviewSummary,ProfileForm,RecentOrdersList,ConnectedAccounts,UnlinkIdentityButton}`. |
+| **Server Actions** | `features/account/actions/account.actions.ts` — `updateProfileAction`, `linkIdentityAction`, `unlinkIdentityAction`. |
+| **Services** | `lib/supabase/queries.ts` — `getMyProfile` (via `get_my_profile()` RPC, the only path to `phone`), `toProfile` mapper, `listUserIdentities`/`linkOAuthIdentity`/`unlinkOAuthIdentity` (owned by Authentication, consumed here). |
+| **Database Tables** | `profiles`; reads `orders` (via the Orders module, not duplicated here); `auth.identities` (via Authentication's Supabase Auth wrappers). |
+| **Dependencies** | Authentication (identity, and the OAuth linking primitives Connected Accounts is built on), Orders (`RecentOrdersList` composes the Orders module — does not reimplement it). |
 | **Current Status** | ✅ Completed. |
 | **Future Work** | Saved shipping addresses, wishlists — both explicitly out of scope per `customer-account-architecture-plan.md` and [README.md → Out of Scope](./README.md#out-of-scope) precedent. |
 
