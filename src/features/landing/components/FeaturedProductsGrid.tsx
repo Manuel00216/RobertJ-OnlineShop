@@ -12,9 +12,16 @@ import type { FeaturedProductView } from "@/features/landing/types/landing.types
 
 export interface FeaturedProductsGridProps {
   products: FeaturedProductView[];
+  /** Ids of the current user's saved products; empty for a guest. */
+  wishlistedProductIds?: readonly string[];
+  isAuthenticated?: boolean;
 }
 
-function toTileItem(view: FeaturedProductView): ProductTileItem {
+function toTileItem(
+  view: FeaturedProductView,
+  wishlistedIds: ReadonlySet<string>,
+  isAuthenticated: boolean,
+): ProductTileItem {
   return {
     key: view.key,
     name: view.name,
@@ -38,10 +45,27 @@ function toTileItem(view: FeaturedProductView): ProductTileItem {
             sellerName: null,
           }
         : null,
+    // Placeholders (no productId yet) never show a wishlist heart — there is
+    // nothing real to save.
+    wishlist: view.productId
+      ? {
+          productId: view.productId,
+          initialSaved: wishlistedIds.has(view.productId),
+          isAuthenticated,
+        }
+      : null,
   };
 }
 
-export function FeaturedProductsGrid({ products }: FeaturedProductsGridProps) {
+export function FeaturedProductsGrid({
+  products,
+  wishlistedProductIds = [],
+  isAuthenticated = false,
+}: FeaturedProductsGridProps) {
+  const wishlistedIds = useMemo(
+    () => new Set(wishlistedProductIds),
+    [wishlistedProductIds],
+  );
   const [activeFilter, setActiveFilter] = useState<string>("All");
   const { ref: gridRef, inView } = useReveal<HTMLDivElement>({ amount: 0.1 });
 
@@ -89,7 +113,7 @@ export function FeaturedProductsGrid({ products }: FeaturedProductsGridProps) {
         {filtered.map((item, i) => (
           <ProductTile
             key={item.key}
-            item={toTileItem(item)}
+            item={toTileItem(item, wishlistedIds, isAuthenticated)}
             style={{
               animation: inView ? `fadeSlideIn 0.5s ease ${i * 60}ms both` : "none",
             }}

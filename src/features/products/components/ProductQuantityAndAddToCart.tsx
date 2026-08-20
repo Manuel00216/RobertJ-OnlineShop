@@ -4,16 +4,21 @@ import { useState } from "react";
 
 import { QuantityStepper } from "@/components/ui/quantity-stepper";
 import { AddToCartButton } from "@/features/cart/components/AddToCartButton";
+import { WishlistButton } from "@/features/wishlist/components/WishlistButton";
+import type { WishlistState } from "@/features/wishlist/types/wishlist.types";
 import type { Product } from "@/features/products/types/product.types";
 
 export interface ProductQuantityAndAddToCartProps {
   product: Product;
+  wishlist: WishlistState;
   className?: string;
 }
 
-/** PDP quantity selector + Add to cart, kept together since the button needs the live quantity. */
+/** PDP quantity selector + Add to cart + wishlist, kept together since the
+ * cart button needs the live quantity. */
 export function ProductQuantityAndAddToCart({
   product,
+  wishlist,
   className,
 }: ProductQuantityAndAddToCartProps) {
   const [quantity, setQuantity] = useState(1);
@@ -31,12 +36,20 @@ export function ProductQuantityAndAddToCart({
           />
         </div>
       )}
-      <AddToCartButton
-        product={product}
-        quantity={quantity}
-        buttonVariant="rj"
-        className="w-full sm:w-auto"
-      />
+      <div className="flex items-center gap-3">
+        <AddToCartButton
+          product={product}
+          quantity={quantity}
+          buttonVariant="rj"
+          className="w-full sm:w-auto"
+        />
+        <WishlistButton
+          productId={wishlist.productId}
+          initialSaved={wishlist.initialSaved}
+          isAuthenticated={wishlist.isAuthenticated}
+          variant="pdp"
+        />
+      </div>
     </div>
   );
 }

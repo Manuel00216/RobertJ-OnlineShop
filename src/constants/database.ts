@@ -26,6 +26,7 @@ export const DATABASE_TABLES = {
   INVENTORY: "inventory",
   STOCK_ADJUSTMENTS: "stock_adjustments",
   ADMIN_ACTION_LOG: "admin_action_log",
+  WISHLISTS: "wishlists",
 } as const;
 
 /** Union of every table name in the schema. */

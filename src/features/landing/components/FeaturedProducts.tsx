@@ -3,7 +3,11 @@ import { FeaturedProductsGrid } from "@/features/landing/components/FeaturedProd
 import { FEATURED_PRODUCTS_PLACEHOLDER } from "@/features/landing/constants/landing.constants";
 import type { FeaturedProductView } from "@/features/landing/types/landing.types";
 import { getCoverImage } from "@/features/products/types/product.types";
-import { listFeaturedProducts } from "@/lib/supabase/queries";
+import {
+  getSessionUser,
+  listFeaturedProducts,
+  listWishlistProductIds,
+} from "@/lib/supabase/queries";
 
 const FALLBACK_IMAGE = "/landing/product-knit-pullover.jpg";
 
@@ -63,10 +67,19 @@ export async function FeaturedProducts() {
     views = placeholderViews();
   }
 
+  const user = await getSessionUser();
+  const wishlistedProductIds = user
+    ? await listWishlistProductIds(user.id).catch(() => [])
+    : [];
+
   return (
     <section className="bg-rj-white py-24">
       <div className="mx-auto max-w-7xl px-5 md:px-8">
-        <FeaturedProductsGrid products={views} />
+        <FeaturedProductsGrid
+          products={views}
+          wishlistedProductIds={wishlistedProductIds}
+          isAuthenticated={user !== null}
+        />
       </div>
     </section>
   );

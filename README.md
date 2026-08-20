@@ -485,13 +485,12 @@ Beyond the current capstone scope (kept clearly separate from committed scope):
 - Automated inventory syncing across shops.
 - Payment gateway integration (would supersede the current manual COD/QR model).
 - Courier / shipping API integration and live tracking.
-- Product reviews and ratings.
-- Realtime notifications (Supabase Realtime).
-- Saved shipping addresses and wishlists.
+- Realtime notifications (Supabase Realtime) and push/email/SMS notification infrastructure. *(A lightweight, derived, read-only buyer activity feed — not realtime, no new infrastructure — was approved separately; see [ADR-018](./DECISIONS.md#adr-018-wishlist-reviews-and-a-derived-buyer-activity-feed).)*
+- Saved shipping addresses.
 - Richer analytics and exportable reports.
 
 > [!NOTE]
-> These are **not** in scope for the capstone and must not be implemented without explicit approval. A Stripe spike toward a possible future gateway previously lived in the repo (ADR-014) and has since been removed — it was never committed scope.
+> These are **not** in scope for the capstone and must not be implemented without explicit approval. A Stripe spike toward a possible future gateway previously lived in the repo (ADR-014) and has since been removed — it was never committed scope. Product reviews/ratings and wishlists — previously listed here — were approved for the Buyer UX Improvement Phase; see [ADR-018](./DECISIONS.md#adr-018-wishlist-reviews-and-a-derived-buyer-activity-feed).
 
 ---
 

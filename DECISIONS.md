@@ -37,6 +37,8 @@ Every decision is a numbered ADR with a fixed shape: **Context → Problem → O
 | [ADR-014](#adr-014-stripe-integration-is-a-provisional-spike) | Stripe integration is a provisional spike | ⛔ Retired |
 | [ADR-015](#adr-015-no-automated-test-runner-yet) | No automated test runner yet | ✅ Accepted (deferred) |
 | [ADR-016](#adr-016-reports-as-security-definer-rpcs-over-existing-orders) | Reports as SECURITY DEFINER RPCs over existing orders | ✅ Accepted |
+| [ADR-017](#adr-017-oauth-account-linking-trusts-supabases-verified-email-matching-only) | OAuth account linking trusts Supabase's verified-email matching only | ✅ Accepted |
+| [ADR-018](#adr-018-wishlist-reviews-and-a-derived-buyer-activity-feed) | Wishlist, Reviews, and a Derived Buyer Activity Feed | ✅ Accepted |
 
 ---
 
@@ -452,3 +454,34 @@ Original decision: Option 2. The Stripe code stayed in the repo (real, working c
 - Requires **Authentication → Enable Manual Linking** turned on in the Supabase dashboard (off by default) for Connected Accounts to function at all.
 
 **Future Revisit:** If report volume grows enough to matter, revisit materialized aggregates or an `orders.shop_id` column — neither is needed at current scale.
+
+---
+
+## ADR-018: Wishlist, Reviews, and a Derived Buyer Activity Feed
+
+**Status:** ✅ Accepted
+
+**Context:** The original capstone scope ([README.md → Future Enhancements](./README.md#future-enhancements)) explicitly deferred product reviews/ratings, wishlists, and realtime notifications, pending explicit approval — kept out to keep the initial build focused on the core three-shop purchase journey. A subsequent buyer/guest UX audit (browse → cart → checkout → COD/QR → fulfilment) found that journey complete, and identified these three specific buyer-trust and convenience features as high-value, low-complexity additions that require none of the infrastructure the SAD actually excludes (no payment gateway, no courier API, no messaging system, no realtime subsystem).
+
+**Problem:** Should RoberJ add wishlist, reviews/ratings, and a notification mechanism — and if so, in a form that doesn't compromise the project's curated three-shop scope or the hardened invariants in `create_order`, `verify_payment`, `submit_qr_payment`, and the order-status trigger chain?
+
+**Options Considered:**
+1. Adopt full-featured versions of each (photo/video reviews, Q&A, wishlist sharing, realtime push notifications), matching a general-marketplace reference implementation.
+2. Defer all three indefinitely, per the original Future Enhancements list.
+3. Adopt deliberately minimal versions: wishlist as a plain user-owned join table; reviews gated by verified purchase through a `SECURITY DEFINER` RPC, one review per order item, a dynamically computed rating aggregate; notifications as a read-only feed derived from existing order/payment timestamps, with no new table, no triggers, and no realtime infrastructure.
+
+**Decision:** Option 3.
+- **Wishlist** — `wishlists(user_id, product_id)`, RLS-scoped directly to `auth.uid()` on INSERT/SELECT/DELETE, no RPC. This is the first plain user-owned CRUD table in this schema (every other user-owned write goes through a `SECURITY DEFINER` RPC); justified because, unlike orders/inventory/payments, there is no cross-entity invariant to protect — RLS alone gives the same guarantee an RPC would.
+- **Reviews** — `reviews` table, one row per `order_item_id` (`unique`), publicly readable, but writes go only through a new `submit_review` `SECURITY DEFINER` RPC that re-verifies `buyer_id = auth.uid()` and `order_status = 'delivered'` inside the function — never trusts RLS alone, mirroring `submit_qr_payment`/`verify_payment`. Reviewer display name is snapshotted into the row at submission time (`profiles` RLS does not allow buyer-to-buyer visibility, so a live join is not available — this mirrors how `order_items` already snapshots `product_title`/`unit_price_cents`). The rating average/count is computed on read; it is never denormalized onto `products`.
+- **Notifications** — a `get_buyer_activity_feed` read-only `SECURITY DEFINER` RPC, structurally identical to the existing `report_*` RPCs, unioning `orders.placed_at/paid_at/shipped_at/delivered_at/cancelled_at` and `payments.created_at/verified_at`, scoped to the caller. No new table. No triggers added anywhere. `create_order`, `verify_payment`, `submit_qr_payment`, `enforce_order_update_rules`, and `track_order_status_timestamps` are unmodified. No Supabase Realtime, no push/email/SMS infrastructure.
+- **Shop identity** — as part of the same improvement phase, `shops` gains one additive public-read RLS policy (active shops readable by `anon`/`authenticated`) so buyer-facing surfaces (PDP "Sold by," shop filter, Featured Shops) can resolve a real shop name via `products.seller_id → shop_users.user_id → shop_id → shops.name`, since `products.shop_id` itself is not populated on any live row yet (TD-1 is still open).
+
+**Consequences:**
+- Buyer trust/convenience features land without expanding the payment, courier, or messaging surface the SAD explicitly excludes.
+- Reviews require verified purchase — no anonymous or unverifiable review is possible, without needing a moderation subsystem.
+- The activity feed cannot represent "confirmed" or "processing" as discrete events, because no column captures those transitions (`orders` only stamps `paid_at`/`shipped_at`/`delivered_at`/`cancelled_at`). This is an accepted, documented limitation, not an oversight.
+- Wishlist introduces the first plain-RLS (non-RPC-gated) user-owned write path in this schema. Future user-owned-data features should default to this lighter pattern only when no cross-entity invariant is at stake, and to the RPC pattern otherwise.
+- The new `shops` public-read policy is additive only; existing `is_shop_member(id) OR is_admin()` read/write policies on `shops` are untouched, and inactive shops remain invisible to `anon`/`authenticated`.
+- [README.md → Future Enhancements](./README.md#future-enhancements) is updated accordingly — "Product reviews and ratings" and "wishlists" are removed from the deferred list; "Realtime notifications" remains deferred, since what's built here is explicitly not that.
+
+**Future Revisit:** If review volume or spam becomes a problem, revisit rate-limiting `submit_review` via the existing `check_rate_limit` RPC/`rate_limit_hits` table (already used elsewhere), or a lightweight moderation flag — deliberately not built now. If buyers need an unread badge or push delivery for the activity feed, revisit the optional `profiles.activity_last_seen_at` column path raised during the improvement-phase audit — deliberately deferred to keep v1 a zero-schema-change feature. If `products.shop_id` is later fully backfilled (closing TD-1), the shop-identity joins added here should switch from the `shop_users` bridge to `products.shop_id` directly.

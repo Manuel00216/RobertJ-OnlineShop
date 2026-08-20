@@ -9,6 +9,8 @@ import { useState } from "react";
 import { ROUTES } from "@/constants/routes";
 import { formatCurrency } from "@/lib/utils/currency";
 import { useCart } from "@/features/cart/hooks/useCart";
+import { WishlistButton } from "@/features/wishlist/components/WishlistButton";
+import type { WishlistState } from "@/features/wishlist/types/wishlist.types";
 
 /**
  * Below this, "Only N left" surfaces next to the price — matches the wording
@@ -41,6 +43,9 @@ export interface ProductTileItem {
     sellerId: string;
     sellerName: string | null;
   } | null;
+  /** Wishlist heart payload; null hides the button entirely (e.g. a
+   * marketing placeholder with no real product behind it yet). */
+  wishlist: WishlistState | null;
 }
 
 export interface ProductTileProps {
@@ -141,11 +146,21 @@ export function ProductTile({ item, style }: ProductTileProps) {
           )}
         </div>
 
-        {discount !== null ? (
-          <div className="absolute right-3 top-3 rounded-full bg-rj-white px-2 py-0.5 text-[9px] font-black text-rj-red">
-            -{discount}%
-          </div>
-        ) : null}
+        <div className="absolute right-3 top-3 flex flex-col items-end gap-1.5">
+          {item.wishlist ? (
+            <WishlistButton
+              productId={item.wishlist.productId}
+              initialSaved={item.wishlist.initialSaved}
+              isAuthenticated={item.wishlist.isAuthenticated}
+              variant="tile"
+            />
+          ) : null}
+          {discount !== null ? (
+            <div className="rounded-full bg-rj-white px-2 py-0.5 text-[9px] font-black text-rj-red">
+              -{discount}%
+            </div>
+          ) : null}
+        </div>
 
         {/* Quick add — hidden once sold out; falls back to routing to the
             catalog for marketing placeholders with no real product behind them. */}

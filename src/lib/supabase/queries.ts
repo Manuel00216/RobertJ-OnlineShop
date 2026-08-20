@@ -527,6 +527,129 @@ export async function archiveProduct(
 }
 
 // ============================================================================
+// Wishlist
+// ============================================================================
+
+/** Ids of every product the given user has saved — a cheap bulk check so a
+ * listing/grid page can mark hearts as filled without one query per tile. */
+export async function listWishlistProductIds(userId: string): Promise<string[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.WISHLISTS)
+    .select("product_id")
+    .eq("user_id", userId);
+
+  if (error) {
+    throw new Error(`Failed to load wishlist: ${error.message}`);
+  }
+  return (data ?? []).map((row) => row.product_id);
+}
+
+/** Whether the given user has saved one specific product — used on the PDP. */
+export async function isProductWishlisted(
+  userId: string,
+  productId: string,
+): Promise<boolean> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.WISHLISTS)
+    .select("id")
+    .eq("user_id", userId)
+    .eq("product_id", productId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to check wishlist: ${error.message}`);
+  }
+  return data !== null;
+}
+
+/**
+ * The signed-in user's saved products, newest-saved first, for the
+ * `/wishlist` page. Fetched as two plain, literal-select queries (rather than
+ * one embedded `wishlists -> products` join) so the `PRODUCT_COLUMNS` select
+ * string stays a direct, uninterpolated literal — the one form Supabase's
+ * generated-type parser can actually infer (see the comment above
+ * `PRODUCT_COLUMNS`).
+ */
+export async function listWishlistProducts(userId: string): Promise<Product[]> {
+  const supabase = await createSupabaseServerClient();
+
+  const { data: wishlistRows, error: wishlistError } = await supabase
+    .from(DATABASE_TABLES.WISHLISTS)
+    .select("product_id")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+
+  if (wishlistError) {
+    throw new Error(`Failed to load wishlist: ${wishlistError.message}`);
+  }
+
+  const orderedIds = (wishlistRows ?? []).map((row) => row.product_id);
+  if (orderedIds.length === 0) return [];
+
+  const { data: productRows, error: productsError } = await supabase
+    .from(DATABASE_TABLES.PRODUCTS)
+    .select(PRODUCT_COLUMNS)
+    .in("id", orderedIds);
+
+  if (productsError) {
+    throw new Error(`Failed to load wishlist: ${productsError.message}`);
+  }
+
+  // `.in()` does not preserve argument order, and RLS silently omits a
+  // product that's no longer `active` (and not the caller's own) — resort to
+  // the wishlist's own saved-order and drop whatever didn't come back rather
+  // than surfacing a "missing product" error for a legitimately sold-out item.
+  const byId = new Map(
+    (productRows ?? []).map((row) => [
+      row.id,
+      toProduct(row as ProductRowWithImages),
+    ]),
+  );
+  return orderedIds
+    .map((id) => byId.get(id))
+    .filter((product): product is Product => product !== undefined);
+}
+
+/**
+ * Saves a product to the user's wishlist. Idempotent by design — re-saving
+ * an already-saved product (e.g. a duplicate optimistic click) is a silent
+ * no-op rather than an error; `wishlists_unique_item` (23505) is the only
+ * thing that would otherwise reject it.
+ */
+export async function addWishlistItem(
+  userId: string,
+  productId: string,
+): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from(DATABASE_TABLES.WISHLISTS)
+    .insert({ user_id: userId, product_id: productId });
+
+  if (error && error.code !== "23505") {
+    throw new Error(mapPostgresError(error, "Could not save this item."));
+  }
+}
+
+/** Removes a product from the user's wishlist. A no-op if it wasn't saved. */
+export async function removeWishlistItem(
+  userId: string,
+  productId: string,
+): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from(DATABASE_TABLES.WISHLISTS)
+    .delete()
+    .eq("user_id", userId)
+    .eq("product_id", productId);
+
+  if (error) {
+    throw new Error(mapPostgresError(error, "Could not remove this item."));
+  }
+}
+
+// ============================================================================
 // Categories
 // ============================================================================
 

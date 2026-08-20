@@ -12,6 +12,7 @@ export const ROUTES = {
   orders: "/orders",
   orderDetail: (id: string) => `/orders/${id}`,
   profile: "/profile",
+  wishlist: "/wishlist",
   dashboard: "/dashboard",
   dashboardProducts: "/dashboard/products",
   dashboardOrders: "/dashboard/orders",
@@ -46,6 +47,7 @@ export const PROTECTED_ROUTE_PREFIXES = [
   "/checkout",
   "/notifications",
   "/profile",
+  "/wishlist",
 ] as const;
 
 /** Routes an authenticated user should be redirected away from. */

@@ -6,7 +6,11 @@ import { ROUTES } from "@/constants/routes";
 import { PRODUCT_CONDITION_LABELS } from "@/constants/status";
 import { formatCurrency } from "@/lib/utils/currency";
 import { absoluteUrl } from "@/lib/utils/url";
-import { getProductBySlug } from "@/lib/supabase/queries";
+import {
+  getProductBySlug,
+  getSessionUser,
+  isProductWishlisted,
+} from "@/lib/supabase/queries";
 import { Breadcrumbs } from "@/features/products/components/Breadcrumbs";
 import { ProductGallery } from "@/features/products/components/ProductGallery";
 import { ProductJsonLd } from "@/features/products/components/ProductJsonLd";
@@ -35,6 +39,11 @@ export default async function ProductDetailPage({
   const product = await getProductBySlug(slug);
 
   if (!product) notFound();
+
+  const user = await getSessionUser();
+  const isWishlisted = user
+    ? await isProductWishlisted(user.id, product.id).catch(() => false)
+    : false;
 
   const breadcrumbItems = [
     { label: "Home", href: ROUTES.home },
@@ -103,7 +112,14 @@ export default async function ProductDetailPage({
             </p>
           ) : null}
 
-          <ProductQuantityAndAddToCart product={product} />
+          <ProductQuantityAndAddToCart
+            product={product}
+            wishlist={{
+              productId: product.id,
+              initialSaved: isWishlisted,
+              isAuthenticated: user !== null,
+            }}
+          />
         </div>
       </div>
 
