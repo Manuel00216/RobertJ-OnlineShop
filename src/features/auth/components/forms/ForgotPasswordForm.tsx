@@ -6,6 +6,7 @@ import { useActionState } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { ErrorState } from "@/components/feedback/ErrorState";
+import { Turnstile } from "@/components/Turnstile";
 import { ROUTES } from "@/constants/routes";
 import { requestPasswordResetAction } from "@/features/auth/actions/auth.actions";
 import { AuthButton } from "@/features/auth/components/AuthButton";
@@ -28,6 +29,8 @@ export function ForgotPasswordForm() {
   >(requestPasswordResetAction, null);
 
   const [success, setSuccess] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaKey, setCaptchaKey] = useState(0);
   const handled = useRef(false);
 
   useEffect(() => {
@@ -35,6 +38,17 @@ export function ForgotPasswordForm() {
       handled.current = true;
       setSuccess(true);
     }
+  }, [state]);
+
+  // Turnstile tokens are single-use — remount the widget for a fresh one
+  // after every submit attempt (success or failure).
+  useEffect(() => {
+    if (!state) return;
+    // Turnstile tokens are single-use — this must reset after every submit
+    // attempt (success or failure), not just on external-system sync.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCaptchaToken("");
+    setCaptchaKey((k) => k + 1);
   }, [state]);
 
   const fieldErrors = state && !state.success ? state.fieldErrors : undefined;
@@ -84,7 +98,10 @@ export function ForgotPasswordForm() {
           errors={fieldErrors?.email}
         />
 
-        <AuthButton type="submit" isLoading={isPending}>
+        <Turnstile key={captchaKey} onVerify={setCaptchaToken} />
+        <input type="hidden" name="captchaToken" value={captchaToken} />
+
+        <AuthButton type="submit" isLoading={isPending} disabled={!captchaToken}>
           {AUTH_COPY.forgotPassword.submitLabel}
         </AuthButton>
       </form>

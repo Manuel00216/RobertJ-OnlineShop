@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useActionState } from "react";
 
 import { ErrorState } from "@/components/feedback/ErrorState";
+import { Turnstile } from "@/components/Turnstile";
 import { ROUTES } from "@/constants/routes";
 import { signInAction } from "@/features/auth/actions/auth.actions";
 import { AuthButton } from "@/features/auth/components/AuthButton";
@@ -34,6 +35,8 @@ export function LoginForm() {
     FormData
   >(signInAction, null);
   const [oauthError, setOauthError] = useState<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaKey, setCaptchaKey] = useState(0);
 
   useEffect(() => {
     if (state?.success) {
@@ -42,6 +45,17 @@ export function LoginForm() {
       router.replace(isInternalPath(redirectTo) ? redirectTo : ROUTES.home);
     }
   }, [state, router]);
+
+  // Turnstile tokens are single-use — remount the widget for a fresh one
+  // after every submit attempt (success or failure).
+  useEffect(() => {
+    if (!state) return;
+    // Turnstile tokens are single-use — this must reset after every submit
+    // attempt (success or failure), not just on external-system sync.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCaptchaToken("");
+    setCaptchaKey((k) => k + 1);
+  }, [state]);
 
   // Set once on mount from the /auth/callback redirect's ?error= — e.g. the
   // user cancelled the Google/Facebook consent screen, or Facebook couldn't
@@ -100,7 +114,10 @@ export function LoginForm() {
           errors={fieldErrors?.password}
         />
 
-        <AuthButton type="submit" isLoading={isPending}>
+        <Turnstile key={captchaKey} onVerify={setCaptchaToken} />
+        <input type="hidden" name="captchaToken" value={captchaToken} />
+
+        <AuthButton type="submit" isLoading={isPending} disabled={!captchaToken}>
           {AUTH_COPY.signIn.submitLabel}
         </AuthButton>
       </form>

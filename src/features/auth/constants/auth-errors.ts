@@ -19,6 +19,7 @@ const KNOWN_ERRORS: Array<[RegExp, string]> = [
     "Couldn't create your account with those details. If you already have an account, try signing in instead.",
   ],
   [/rate limit|too many requests|429/i, "Too many attempts. Please try again later."],
+  [/captcha/i, "Verification failed. Please try again."],
   [
     /password reset link has expired/i,
     "This password reset link has expired. Please request a new one.",

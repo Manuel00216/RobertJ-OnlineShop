@@ -13,6 +13,7 @@ import { isInternalPath } from "@/lib/utils/url";
 import {
   forgotPasswordSchema,
   oauthSignInSchema,
+  requestPasswordResetSchema,
   resetPasswordSchema,
   signInSchema,
   signUpSchema,
@@ -32,6 +33,7 @@ export async function signInAction(
     await queries.signInWithPassword(
       parsed.data.email,
       parsed.data.password,
+      parsed.data.captchaToken,
     );
   } catch (error) {
     return fail(mapAuthError(error));
@@ -55,6 +57,7 @@ export async function signUpAction(
       parsed.data.email,
       parsed.data.password,
       parsed.data.fullName,
+      parsed.data.captchaToken,
     );
   } catch (error) {
     return fail(mapAuthError(error));
@@ -115,7 +118,7 @@ export async function requestPasswordResetAction(
   _prevState: ActionResult<null> | null,
   formData: FormData,
 ): Promise<ActionResult<null>> {
-  const parsed = forgotPasswordSchema.safeParse(Object.fromEntries(formData));
+  const parsed = requestPasswordResetSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return fromZodError(parsed.error);
 
   try {
@@ -123,7 +126,7 @@ export async function requestPasswordResetAction(
     // (always returns ok() below), so the limiter can't leak existence
     // either. Caps email-bombing a single inbox.
     await queries.requireRateLimit(`passwordreset:${parsed.data.email}`, 5, 300);
-    await queries.sendPasswordResetEmail(parsed.data.email);
+    await queries.sendPasswordResetEmail(parsed.data.email, parsed.data.captchaToken);
   } catch (error) {
     console.error("Password reset request failed:", error);
   }
@@ -142,6 +145,12 @@ export async function updatePasswordAction(
     // Belt-and-suspenders: the reset-password page already gates on this,
     // but the action must not trust that it was only ever reached that way.
     await queries.requireRecoverySession();
+    const user = await queries.requireSessionUser();
+    // Same rate-limit pattern as every other auth-mutating action (see
+    // signInAction/signUpAction/requestPasswordResetAction above) — this one
+    // was the sole gap, keyed by user id since the recovery session is
+    // already authenticated at this point.
+    await queries.requireRateLimit(`passwordupdate:${user.id}`, 5, 300);
     await queries.updatePassword(parsed.data.password);
   } catch (error) {
     return fail(mapAuthError(error));

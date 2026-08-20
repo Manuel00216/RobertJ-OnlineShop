@@ -81,8 +81,14 @@ export async function updateProductAction(
   if (!parsed.success) return fromZodError(parsed.error);
 
   try {
-    await queries.requireRole(DASHBOARD_ROLES);
-    const product = await queries.updateProduct(parsed.data);
+    const seller = await queries.requireRole(DASHBOARD_ROLES);
+    // Defense-in-depth beyond RLS: a non-admin's own scope (their products,
+    // or any product in a shop they belong to) is enforced again here.
+    const owner =
+      seller.role === USER_ROLES.admin
+        ? null
+        : { sellerId: seller.id, shopId: await queries.getOwnShopId(seller.id) };
+    const product = await queries.updateProduct(parsed.data, owner);
     revalidatePath(ROUTES.inventory);
     revalidatePath(ROUTES.productDetail(product.slug));
     return ok(product);
@@ -97,8 +103,12 @@ export async function archiveProductAction(
   id: string,
 ): Promise<ActionResult<null>> {
   try {
-    await queries.requireRole(DASHBOARD_ROLES);
-    await queries.archiveProduct(id);
+    const seller = await queries.requireRole(DASHBOARD_ROLES);
+    const owner =
+      seller.role === USER_ROLES.admin
+        ? null
+        : { sellerId: seller.id, shopId: await queries.getOwnShopId(seller.id) };
+    await queries.archiveProduct(id, owner);
     revalidatePath(ROUTES.inventory);
     revalidatePath(ROUTES.products);
     return ok(null);

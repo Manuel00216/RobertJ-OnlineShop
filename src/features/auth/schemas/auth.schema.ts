@@ -9,6 +9,9 @@ const NEW_PASSWORD_MIN = 10;
 export const OAUTH_PROVIDERS = ["google", "facebook"] as const;
 export type OAuthProvider = (typeof OAUTH_PROVIDERS)[number];
 
+/** Cloudflare Turnstile token, required on the bot-abusable auth entry points. */
+const captchaTokenSchema = z.string().min(1, "Verification failed. Please try again.");
+
 export const signInSchema = z.object({
   email: z.email("Enter a valid email address."),
   // Deliberately not raised alongside NEW_PASSWORD_MIN: this only validates
@@ -16,6 +19,7 @@ export const signInSchema = z.object({
   // truth for whether the password is correct — it must not reject a
   // legitimate, already-existing shorter password.
   password: z.string().min(8, "Password must be at least 8 characters."),
+  captchaToken: captchaTokenSchema,
 });
 
 export const signUpSchema = signInSchema.extend({
@@ -28,6 +32,16 @@ export const signUpSchema = signInSchema.extend({
 /** Forgot-password request: just the email to send the recovery link to. */
 export const forgotPasswordSchema = z.object({
   email: z.email("Enter a valid email address."),
+});
+
+/**
+ * Same as `forgotPasswordSchema` plus a captcha token — used only by
+ * `requestPasswordResetAction`. Kept separate (rather than adding the token
+ * to `forgotPasswordSchema` directly) because `resendVerificationAction`
+ * reuses the base schema and has no widget of its own.
+ */
+export const requestPasswordResetSchema = forgotPasswordSchema.extend({
+  captchaToken: captchaTokenSchema,
 });
 
 /** New-password form shown after following a recovery link. */
@@ -56,4 +70,5 @@ export const oauthSignInSchema = z.object({
 export type SignInInput = z.infer<typeof signInSchema>;
 export type SignUpInput = z.infer<typeof signUpSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type RequestPasswordResetInput = z.infer<typeof requestPasswordResetSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;

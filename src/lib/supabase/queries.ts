@@ -423,11 +423,39 @@ export async function createProduct(
  * *before* the rest of the row is updated, so a partial failure never leaves
  * stock silently wrong while cosmetic fields succeed.
  */
+/**
+ * `owner`: the caller's own scope for a non-admin request (`null` = admin,
+ * no extra filter — RLS's `is_admin()` is already the complete boundary
+ * there). For a seller, mirrors the live RLS policy exactly: their own
+ * products, or any product belonging to a shop they're a member of.
+ * Defense-in-depth alongside RLS, not a replacement for it — see the
+ * 2026-08-20 audit (this table's UPDATE previously relied on RLS alone).
+ */
 export async function updateProduct(
   input: UpdateProductInput,
+  owner: { sellerId: string; shopId: string | null } | null,
 ): Promise<Product> {
   const supabase = await createSupabaseServerClient();
   const { id, price, categoryId, description, location, quantity, ...rest } = input;
+
+  if (owner) {
+    const ownerFilter = owner.shopId
+      ? `seller_id.eq.${owner.sellerId},shop_id.eq.${owner.shopId}`
+      : `seller_id.eq.${owner.sellerId}`;
+    const { data: existing, error: readError } = await supabase
+      .from(DATABASE_TABLES.PRODUCTS)
+      .select("id")
+      .eq("id", id)
+      .or(ownerFilter)
+      .maybeSingle();
+
+    if (readError) {
+      throw new Error(`Failed to load product: ${readError.message}`);
+    }
+    if (!existing) {
+      throw new Error("Product not found.");
+    }
+  }
 
   if (quantity !== undefined) {
     const current = await getInventoryForProduct(id);
@@ -462,8 +490,32 @@ export async function updateProduct(
  * resolving. The order_items -> products FK is ON DELETE RESTRICT for the same
  * reason, so a hard delete of a sold product is refused by the database.
  */
-export async function archiveProduct(id: string): Promise<void> {
+/** `owner`: same defense-in-depth scope as `updateProduct` above. */
+export async function archiveProduct(
+  id: string,
+  owner: { sellerId: string; shopId: string | null } | null,
+): Promise<void> {
   const supabase = await createSupabaseServerClient();
+
+  if (owner) {
+    const ownerFilter = owner.shopId
+      ? `seller_id.eq.${owner.sellerId},shop_id.eq.${owner.shopId}`
+      : `seller_id.eq.${owner.sellerId}`;
+    const { data: existing, error: readError } = await supabase
+      .from(DATABASE_TABLES.PRODUCTS)
+      .select("id")
+      .eq("id", id)
+      .or(ownerFilter)
+      .maybeSingle();
+
+    if (readError) {
+      throw new Error(`Failed to load product: ${readError.message}`);
+    }
+    if (!existing) {
+      throw new Error("Product not found.");
+    }
+  }
+
   const { error } = await supabase
     .from(DATABASE_TABLES.PRODUCTS)
     .update({ status: PRODUCT_STATUS.archived })
@@ -967,17 +1019,26 @@ export const getDashboardOrder = cache(
  * automatically via the `orders_restock_on_cancel` trigger — no extra code
  * needed here.
  */
+/**
+ * `sellerId`: the caller's own id for a non-admin request (`null` = admin,
+ * no extra filter). Orders aren't shop-scoped, so unlike the product
+ * functions above this is a plain equality filter, not an OR. Defense-in-
+ * depth alongside RLS — see the 2026-08-20 audit.
+ */
 export async function advanceOrderStatus(
   orderId: string,
   newStatus: OrderStatus,
+  sellerId: string | null,
 ): Promise<Order> {
   const supabase = await createSupabaseServerClient();
 
-  const { data: existing, error: readError } = await supabase
+  let readQuery = supabase
     .from(DATABASE_TABLES.ORDERS)
     .select("order_status")
-    .eq("id", orderId)
-    .maybeSingle();
+    .eq("id", orderId);
+  if (sellerId) readQuery = readQuery.eq("seller_id", sellerId);
+
+  const { data: existing, error: readError } = await readQuery.maybeSingle();
 
   if (readError) {
     throw new Error(`Failed to load order: ${readError.message}`);
@@ -994,13 +1055,14 @@ export async function advanceOrderStatus(
     );
   }
 
-  const { data, error } = await supabase
+  let writeQuery = supabase
     .from(DATABASE_TABLES.ORDERS)
     .update({ order_status: newStatus })
     .eq("id", orderId)
-    .eq("order_status", currentStatus)
-    .select(ORDER_COLUMNS)
-    .maybeSingle();
+    .eq("order_status", currentStatus);
+  if (sellerId) writeQuery = writeQuery.eq("seller_id", sellerId);
+
+  const { data, error } = await writeQuery.select(ORDER_COLUMNS).maybeSingle();
 
   if (error) {
     throw new Error(`Failed to update order status: ${error.message}`);
@@ -1947,22 +2009,28 @@ export async function requireRole(
  * shop membership yet (an admin has no shop of their own; callers needing an
  * admin-selectable shop should use `listShops()` instead).
  */
-export async function requireOwnShopId(): Promise<string> {
-  const user = await requireSessionUser();
+/** Nullable variant of `requireOwnShopId` — a seller may legitimately have no shop. */
+export async function getOwnShopId(userId: string): Promise<string | null> {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from(DATABASE_TABLES.SHOP_USERS)
     .select("shop_id")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .maybeSingle();
 
   if (error) {
     throw new Error(`Failed to resolve your shop: ${error.message}`);
   }
-  if (!data) {
+  return data?.shop_id ?? null;
+}
+
+export async function requireOwnShopId(): Promise<string> {
+  const user = await requireSessionUser();
+  const shopId = await getOwnShopId(user.id);
+  if (!shopId) {
     throw new Error("Your account isn't linked to a shop yet. Contact an administrator.");
   }
-  return data.shop_id;
+  return shopId;
 }
 
 /**
@@ -1994,9 +2062,17 @@ export async function requireRateLimit(
   }
 }
 
-export async function signInWithPassword(email: string, password: string) {
+export async function signInWithPassword(
+  email: string,
+  password: string,
+  captchaToken: string,
+) {
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+    options: { captchaToken },
+  });
   if (error) throw new Error(error.message);
 }
 
@@ -2028,6 +2104,7 @@ export async function signUpWithPassword(
   email: string,
   password: string,
   fullName: string,
+  captchaToken: string,
 ) {
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.auth.signUp({
@@ -2037,6 +2114,7 @@ export async function signUpWithPassword(
       data: { full_name: fullName },
       // Confirmation link lands on the PKCE callback, which sets the session.
       emailRedirectTo: callbackUrl(),
+      captchaToken,
     },
   });
   if (error) throw new Error(error.message);
@@ -2052,10 +2130,11 @@ export async function signOut() {
  * establishes a session and forwards to the reset-password screen (built in the
  * auth phase).
  */
-export async function sendPasswordResetEmail(email: string) {
+export async function sendPasswordResetEmail(email: string, captchaToken: string) {
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: callbackUrl(ROUTES.resetPassword),
+    captchaToken,
   });
   if (error) throw new Error(error.message);
 }

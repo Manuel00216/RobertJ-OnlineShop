@@ -7,6 +7,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { FormField } from "@/components/forms/FormField";
+import { Turnstile } from "@/components/Turnstile";
 import { cn } from "@/lib/utils/cn";
 import { ROUTES } from "@/constants/routes";
 import {
@@ -44,6 +45,8 @@ export function RegisterForm() {
   const [resendCooldown, setResendCooldown] = useState(0);
   const [resendError, setResendError] = useState<string | null>(null);
   const [justSent, setJustSent] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaKey, setCaptchaKey] = useState(0);
   const handled = useRef(false);
 
   // Swap to the verification-pending state the first time the action succeeds.
@@ -53,6 +56,17 @@ export function RegisterForm() {
       setView("pending");
       setResendCooldown(30);
     }
+  }, [state]);
+
+  // Turnstile tokens are single-use — remount the widget for a fresh one
+  // after every submit attempt (success or failure).
+  useEffect(() => {
+    if (!state) return;
+    // Turnstile tokens are single-use — this must reset after every submit
+    // attempt (success or failure), not just on external-system sync.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCaptchaToken("");
+    setCaptchaKey((k) => k + 1);
   }, [state]);
 
   // Resend cooldown countdown (spec §4: disable for 30s after sending).
@@ -176,7 +190,10 @@ export function RegisterForm() {
           errors={confirmError ? [confirmError] : fieldErrors?.confirmPassword}
         />
 
-        <AuthButton type="submit" isLoading={isPending}>
+        <Turnstile key={captchaKey} onVerify={setCaptchaToken} />
+        <input type="hidden" name="captchaToken" value={captchaToken} />
+
+        <AuthButton type="submit" isLoading={isPending} disabled={!captchaToken}>
           {AUTH_COPY.signUp.submitLabel}
         </AuthButton>
 

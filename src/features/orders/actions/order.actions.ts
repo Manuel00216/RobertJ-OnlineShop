@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { DASHBOARD_ROLES } from "@/constants/roles";
+import { DASHBOARD_ROLES, USER_ROLES } from "@/constants/roles";
 import { ROUTES } from "@/constants/routes";
 import { fail, fromZodError, ok } from "@/lib/utils/result";
 import * as queries from "@/lib/supabase/queries";
@@ -59,9 +59,12 @@ export async function advanceOrderStatusAction(
   try {
     const user = await queries.requireRole(DASHBOARD_ROLES);
     await queries.requireRateLimit(`advanceOrderStatus:${user.id}`, 30, 60);
+    // Defense-in-depth beyond RLS: a non-admin's own seller_id is enforced
+    // again here.
     const order = await queries.advanceOrderStatus(
       parsed.data.orderId,
       parsed.data.newStatus,
+      user.role === USER_ROLES.admin ? null : user.id,
     );
     revalidatePath(ROUTES.dashboardOrders, "layout");
     revalidatePath(ROUTES.dashboardOrderDetail(order.id), "layout");
