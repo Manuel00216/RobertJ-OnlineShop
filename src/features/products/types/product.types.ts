@@ -46,6 +46,8 @@ export interface ProductListParams {
   categoryId?: string;
   status?: ProductStatus;
   sellerId?: string;
+  /** Resolved server-side to the shop's member seller ids — see `listProducts`. */
+  shopId?: string;
   sort?: ProductSort;
   /** Matches products tagged "sale" — the same seller-set tag convention ProductCard already reads. */
   onSale?: boolean;

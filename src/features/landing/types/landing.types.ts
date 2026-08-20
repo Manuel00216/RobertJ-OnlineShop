@@ -1,20 +1,17 @@
 import type { ReactNode } from "react";
 
 /**
- * Featured-shop card model. The current database schema has no shop/seller-shop
- * entity that carries a cover image, rating, or badge, so this section is driven
- * by clearly-marked placeholder data (see landing.constants). When a `shops`
- * concept is added to the schema, swap the constant for a service call that
- * returns this same shape. — PLACEHOLDER: no shop entity in current schema.
+ * Featured-shop card model — real `shops` rows plus a real active-product
+ * count (see `getFeaturedShops` in queries.ts). No rating/badge/cover-image
+ * fields: the schema has no data source for any of those, and this project
+ * doesn't fabricate marketplace signals (same principle `ProductJsonLd`
+ * already follows for product ratings).
  */
 export interface FeaturedShop {
   id: string;
   name: string;
-  category: string;
-  rating: number;
+  slug: string;
   productCount: number;
-  imageUrl: string;
-  badge?: "Top Seller" | "New Shop" | "Featured";
 }
 
 /** A "why RobertJ" value-proposition card. `icon` is a Lucide element. */

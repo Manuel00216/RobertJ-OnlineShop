@@ -1,6 +1,5 @@
 import type {
   AssistantMessage,
-  FeaturedShop,
   LandingStat,
 } from "@/features/landing/types/landing.types";
 
@@ -42,65 +41,6 @@ export const ABOUT_STATS: LandingStat[] = [
   { value: 18, prefix: "₱", suffix: "M+", label: "Sales Processed", source: "placeholder" },
   { value: 50000, suffix: "+", label: "Registered Buyers", source: "placeholder" },
   { value: 4.8, suffix: "★", label: "Average Rating", decimals: 1, source: "placeholder" },
-];
-
-/**
- * PLACEHOLDER: the current schema has no shop entity carrying cover image,
- * rating, or badge. Rendered as clearly-marked placeholder data; replace with a
- * service call returning `FeaturedShop[]` once a `shops` concept is added.
- */
-export const FEATURED_SHOPS_PLACEHOLDER: FeaturedShop[] = [
-  {
-    id: "maison-atelier",
-    name: "Maison Atelier",
-    category: "Women's Fashion",
-    rating: 4.9,
-    productCount: 218,
-    imageUrl: "/landing/shop-maison-atelier.jpg",
-    badge: "Top Seller",
-  },
-  {
-    id: "urbanthread",
-    name: "UrbanThread Co.",
-    category: "Men's Streetwear",
-    rating: 4.8,
-    productCount: 184,
-    imageUrl: "/landing/shop-urbanthread.jpg",
-    badge: "New Shop",
-  },
-  {
-    id: "minimal-edit",
-    name: "The Minimal Edit",
-    category: "Unisex Basics",
-    rating: 4.7,
-    productCount: 97,
-    imageUrl: "/landing/shop-minimal-edit.jpg",
-  },
-  {
-    id: "studio-loom",
-    name: "Studio Loom",
-    category: "Linen & Lux",
-    rating: 4.9,
-    productCount: 142,
-    imageUrl: "/landing/shop-studio-loom.jpg",
-    badge: "Featured",
-  },
-  {
-    id: "drift-drape",
-    name: "Drift & Drape",
-    category: "Resort Wear",
-    rating: 4.6,
-    productCount: 76,
-    imageUrl: "/landing/shop-drift-drape.jpg",
-  },
-  {
-    id: "cleanline",
-    name: "CleanLine Studio",
-    category: "Contemporary Cuts",
-    rating: 4.8,
-    productCount: 203,
-    imageUrl: "/landing/shop-cleanline.jpg",
-  },
 ];
 
 /** Local fallbacks for categories whose `image_url` is null. */

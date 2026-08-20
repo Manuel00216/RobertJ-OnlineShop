@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { QuantityStepper } from "@/components/ui/quantity-stepper";
 import { AddToCartButton } from "@/features/cart/components/AddToCartButton";
+import { BuyNowButton } from "@/features/cart/components/BuyNowButton";
 import { WishlistButton } from "@/features/wishlist/components/WishlistButton";
 import type { WishlistState } from "@/features/wishlist/types/wishlist.types";
 import type { Product } from "@/features/products/types/product.types";
@@ -36,11 +37,16 @@ export function ProductQuantityAndAddToCart({
           />
         </div>
       )}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <AddToCartButton
           product={product}
           quantity={quantity}
           buttonVariant="rj"
+          className="w-full sm:w-auto"
+        />
+        <BuyNowButton
+          product={product}
+          quantity={quantity}
           className="w-full sm:w-auto"
         />
         <WishlistButton

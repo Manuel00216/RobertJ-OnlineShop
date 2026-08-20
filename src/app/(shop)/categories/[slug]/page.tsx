@@ -2,7 +2,9 @@ import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
-import { getCategoryBySlug } from "@/lib/supabase/queries";
+import { ROUTES } from "@/constants/routes";
+import { getCategoryBySlug, listShops } from "@/lib/supabase/queries";
+import { Breadcrumbs } from "@/features/products/components/Breadcrumbs";
 import { CatalogHeader } from "@/features/products/components/CatalogHeader";
 import { ProductFilters } from "@/features/products/components/ProductFilters";
 import { ProductGridSkeleton } from "@/features/products/components/ProductGridSkeleton";
@@ -26,21 +28,33 @@ export default async function CategoryPage({
   searchParams,
 }: CategoryPageProps) {
   const { slug } = await params;
-  const [category, sp] = await Promise.all([getCategoryBySlug(slug), searchParams]);
+  const [category, sp, shops] = await Promise.all([
+    getCategoryBySlug(slug),
+    searchParams,
+    listShops().catch(() => []),
+  ]);
 
   if (!category) notFound();
 
   return (
     <div className="flex flex-col gap-8">
+      <Breadcrumbs
+        items={[
+          { label: "Home", href: ROUTES.home },
+          { label: "Categories", href: ROUTES.categories },
+          { label: category.name },
+        ]}
+      />
+
       <CatalogHeader
         eyebrow="Category"
         title={category.name}
         description={category.description ?? `Browse ${category.name} listings.`}
       />
 
-      {/* Sort-only toolbar — the category is pinned server-side, so no chips. */}
+      {/* No category chips — the category is pinned server-side. */}
       <Suspense fallback={null}>
-        <ProductFilters />
+        <ProductFilters shops={shops} />
       </Suspense>
 
       <Suspense key={JSON.stringify(sp)} fallback={<ProductGridSkeleton />}>

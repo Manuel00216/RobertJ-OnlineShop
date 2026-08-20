@@ -5,6 +5,7 @@ import type { FeaturedProductView } from "@/features/landing/types/landing.types
 import { getCoverImage } from "@/features/products/types/product.types";
 import {
   getSessionUser,
+  getShopNamesBySellerIds,
   listFeaturedProducts,
   listWishlistProductIds,
 } from "@/lib/supabase/queries";
@@ -43,12 +44,22 @@ export async function FeaturedProducts() {
 
   try {
     const products = await listFeaturedProducts(8);
+    const shopNames =
+      products.length > 0
+        ? await getShopNamesBySellerIds(
+            [...new Set(products.map((product) => product.sellerId))],
+          ).catch(() => new Map<string, string>())
+        : new Map<string, string>();
+
     views =
       products.length > 0
         ? products.map((product) => ({
             key: product.id,
             name: product.title,
-            shop: product.sellerName ?? "RobertJ Seller",
+            shop:
+              shopNames.get(product.sellerId) ??
+              product.sellerName ??
+              "RobertJ Seller",
             priceCents: product.priceCents,
             originalPriceCents: null,
             imageUrl: getCoverImage(product)?.url ?? FALLBACK_IMAGE,

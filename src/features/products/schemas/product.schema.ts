@@ -37,6 +37,7 @@ export const productListParamsSchema = z
       .default(PAGINATION.defaultPageSize),
     search: z.string().trim().max(120).optional(),
     categoryId: z.uuid().optional(),
+    shopId: z.uuid().optional(),
     sort: productSortSchema.default("newest"),
     // Deliberately not z.coerce.boolean() — Boolean("false") is true, which
     // would make ?onSale=false behave identically to ?onSale=true.

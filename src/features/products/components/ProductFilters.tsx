@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import type { Category } from "@/features/categories/types/category.types";
 import type { ProductSort } from "@/features/products/types/product.types";
+import type { Shop } from "@/features/shops/types/shop.types";
 
 export interface ProductFiltersProps {
   /**
@@ -13,6 +14,8 @@ export interface ProductFiltersProps {
    * pinned category pages where the category is fixed server-side).
    */
   categories?: Category[];
+  /** Shop dropdown options. Pass an empty array/omit to hide it. */
+  shops?: Shop[];
 }
 
 const SORT_OPTIONS: Array<{ value: ProductSort; label: string }> = [
@@ -27,13 +30,14 @@ const CHIP_ACTIVE =
 const CHIP_IDLE =
   "rounded-full border-[1.5px] border-rj-gray-200 bg-transparent px-4 py-1.5 text-[11px] font-bold text-rj-gray-600 transition-all hover:border-rj-black hover:text-rj-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30";
 
-/** Category chips + price range + sort control for the product listing. */
-export function ProductFilters({ categories = [] }: ProductFiltersProps) {
+/** Category chips + shop + price range + sort control for the product listing. */
+export function ProductFilters({ categories = [], shops = [] }: ProductFiltersProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const activeCategoryId = searchParams.get("categoryId") ?? "";
+  const activeShopId = searchParams.get("shopId") ?? "";
   const rawSort = searchParams.get("sort");
   const sort: ProductSort = SORT_OPTIONS.some((o) => o.value === rawSort)
     ? (rawSort as ProductSort)
@@ -163,6 +167,22 @@ export function ProductFilters({ categories = [] }: ProductFiltersProps) {
             </button>
           ) : null}
         </div>
+
+        {shops.length > 0 ? (
+          <select
+            value={activeShopId}
+            onChange={(event) => updateParams({ shopId: event.target.value || null })}
+            aria-label="Filter by shop"
+            className="h-9 rounded-full border-[1.5px] border-rj-gray-200 bg-transparent px-3 text-[11px] font-bold text-rj-black outline-none transition-colors focus-visible:border-rj-black"
+          >
+            <option value="">All shops</option>
+            {shops.map((shop) => (
+              <option key={shop.id} value={shop.id}>
+                {shop.name}
+              </option>
+            ))}
+          </select>
+        ) : null}
 
         <select
           value={sort}

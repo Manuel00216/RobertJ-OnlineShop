@@ -543,6 +543,61 @@ export type Database = {
         }
         Relationships: []
       }
+      reviews: {
+        Row: {
+          buyer_id: string
+          comment: string | null
+          created_at: string
+          id: string
+          order_item_id: string
+          product_id: string
+          rating: number
+          reviewer_display_name: string | null
+        }
+        Insert: {
+          buyer_id: string
+          comment?: string | null
+          created_at?: string
+          id?: string
+          order_item_id: string
+          product_id: string
+          rating: number
+          reviewer_display_name?: string | null
+        }
+        Update: {
+          buyer_id?: string
+          comment?: string | null
+          created_at?: string
+          id?: string
+          order_item_id?: string
+          product_id?: string
+          rating?: number
+          reviewer_display_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reviews_buyer_id_fkey"
+            columns: ["buyer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reviews_order_item_id_fkey"
+            columns: ["order_item_id"]
+            isOneToOne: true
+            referencedRelation: "order_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reviews_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       shop_users: {
         Row: {
           created_at: string
@@ -820,6 +875,15 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
       }
+      get_buyer_activity_feed: {
+        Args: { p_limit?: number }
+        Returns: {
+          event_type: string
+          order_id: string
+          order_number: string
+          occurred_at: string
+        }[]
+      }
       get_my_profile: {
         Args: never
         Returns: {
@@ -891,6 +955,10 @@ export type Database = {
           units_sold: number
         }[]
       }
+      resolve_shop_membership: {
+        Args: { p_seller_ids?: string[]; p_shop_ids?: string[] }
+        Returns: { seller_id: string; shop_id: string; shop_name: string }[]
+      }
       slugify: { Args: { value: string }; Returns: string }
       submit_qr_payment: {
         Args: { p_order_id: string; p_receipt_path: string }
@@ -911,6 +979,29 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "payments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      submit_review: {
+        Args: {
+          p_comment: string | null
+          p_order_item_id: string
+          p_rating: number
+        }
+        Returns: {
+          buyer_id: string
+          comment: string | null
+          created_at: string
+          id: string
+          order_item_id: string
+          product_id: string
+          rating: number
+          reviewer_display_name: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "reviews"
           isOneToOne: true
           isSetofReturn: false
         }

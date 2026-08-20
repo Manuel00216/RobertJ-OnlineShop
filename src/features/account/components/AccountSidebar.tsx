@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Heart, LayoutGrid, Package, UserRound } from "lucide-react";
+import { Bell, Heart, LayoutGrid, Package, UserRound } from "lucide-react";
 
 import { ROUTES } from "@/constants/routes";
 import { signOutAction } from "@/features/auth/actions/auth.actions";
@@ -14,6 +14,7 @@ const ACCOUNT_NAV = [
   { href: ROUTES.account, label: "Overview", icon: LayoutGrid },
   { href: ROUTES.orders, label: "Orders", icon: Package },
   { href: ROUTES.wishlist, label: "Wishlist", icon: Heart },
+  { href: ROUTES.notifications, label: "Notifications", icon: Bell },
   { href: ROUTES.profile, label: "Profile", icon: UserRound },
 ] as const;
 

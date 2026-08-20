@@ -12,8 +12,10 @@ import { ReceiptUpload } from "@/features/payments/components/ReceiptUpload";
 import {
   getActivePaymentForOrder,
   getBuyerOrder,
+  listReviewedOrderItemIds,
   requireSessionUser,
 } from "@/lib/supabase/queries";
+import { ORDER_STATUS } from "@/constants/status";
 
 interface OrderDetailPageProps {
   params: Promise<{ id: string }>;
@@ -41,6 +43,23 @@ export default async function OrderDetailPage({
   // PaymentStatusBadge below already reflects the outcome.
   const activePayment =
     order.paymentStatus === "pending" ? await getActivePaymentForOrder(order.id) : null;
+
+  // "Write a Review" only applies to a delivered order, and only for items
+  // the buyer hasn't already reviewed.
+  const reviewedOrderItemIds =
+    order.status === ORDER_STATUS.delivered
+      ? await listReviewedOrderItemIds(order.items.map((item) => item.id)).catch(
+          () => new Set<string>(),
+        )
+      : new Set<string>();
+  const reviewableOrderItemIds =
+    order.status === ORDER_STATUS.delivered
+      ? new Set(
+          order.items
+            .map((item) => item.id)
+            .filter((id) => !reviewedOrderItemIds.has(id)),
+        )
+      : undefined;
 
   return (
     <article className="flex flex-col gap-8">
@@ -74,7 +93,12 @@ export default async function OrderDetailPage({
 
       <div className="grid gap-8 lg:grid-cols-3">
         <div className="flex flex-col gap-8 lg:col-span-2">
-          <OrderItemsList items={order.items} currency={order.currency} />
+          <OrderItemsList
+            items={order.items}
+            currency={order.currency}
+            orderId={order.id}
+            reviewableOrderItemIds={reviewableOrderItemIds}
+          />
           <ShippingAddressCard address={order.shippingAddress} />
         </div>
         <div className="flex flex-col gap-6">

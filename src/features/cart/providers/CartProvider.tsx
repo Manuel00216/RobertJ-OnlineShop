@@ -5,6 +5,7 @@ import {
   useEffect,
   useMemo,
   useReducer,
+  useRef,
   type ReactNode,
 } from "react";
 
@@ -39,6 +40,18 @@ export const CartContext = createContext<CartContextValue | null>(null);
 /** Holds cart state client-side and mirrors it to localStorage. */
 export function CartProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(cartReducer, initialCartState);
+  // Skips exactly the first run of the persist effect below. Without this,
+  // both effects fire in the same pass on mount: the hydrate effect reads
+  // localStorage and *schedules* a "hydrate" dispatch (async — it doesn't
+  // update `state` until the next render), while the persist effect, in that
+  // same pass, still closes over the pre-hydration (empty) `state` and
+  // immediately writes `{items:[]}` back — permanently clobbering the real
+  // cart before the hydrate dispatch's re-render ever lands. Guest carts were
+  // being silently wiped on every hard page load. A ref (not state) is
+  // deliberate here: flipping it doesn't need to trigger a re-render, it only
+  // needs to be readable — the effect already re-runs on its own once the
+  // hydrate dispatch changes `state`.
+  const isFirstPersist = useRef(true);
 
   useEffect(() => {
     const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -51,6 +64,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (isFirstPersist.current) {
+      isFirstPersist.current = false;
+      return;
+    }
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }, [state]);
 

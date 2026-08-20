@@ -67,6 +67,11 @@ import type {
   SalesTrendPoint,
   TopProduct,
 } from "@/features/reports/types/report.types";
+import type {
+  ProductReviewSummary,
+  Review,
+} from "@/features/reviews/types/review.types";
+import type { BuyerActivityEvent } from "@/features/notifications/types/notification.types";
 
 /**
  * Centralized, reusable Supabase data-access layer.
@@ -162,10 +167,33 @@ export async function listProducts(
 ): Promise<PaginatedResult<Product>> {
   const supabase = await createSupabaseServerClient();
 
+  // `shopId` isn't a column on `products` (TD-1 — `products.shop_id` is
+  // unpopulated on every live row) — resolve it to the shop's member seller
+  // ids first via `resolve_shop_membership`, same as the dedicated shop
+  // filter. A shop with zero members short-circuits to an empty page instead
+  // of querying products at all.
+  let shopSellerIds: string[] | null = null;
+  if (params.shopId) {
+    shopSellerIds = await getShopSellerIds(params.shopId);
+    if (shopSellerIds.length === 0) {
+      return {
+        items: [],
+        total: 0,
+        page: params.page,
+        pageSize: params.pageSize,
+        totalPages: 1,
+      };
+    }
+  }
+
   let query = supabase
     .from(DATABASE_TABLES.PRODUCTS)
     .select(PRODUCT_COLUMNS, { count: "exact" })
     .eq("status", params.status ?? PRODUCT_STATUS.active);
+
+  if (shopSellerIds) {
+    query = query.in("seller_id", shopSellerIds);
+  }
 
   if (params.search) {
     // Postgres's `.or()` filter mini-DSL treats "," and "()" as syntax, not
@@ -647,6 +675,128 @@ export async function removeWishlistItem(
   if (error) {
     throw new Error(mapPostgresError(error, "Could not remove this item."));
   }
+}
+
+// ============================================================================
+// Reviews
+// ============================================================================
+
+type ReviewRow = Database["public"]["Tables"]["reviews"]["Row"];
+
+function toReview(row: ReviewRow): Review {
+  return {
+    id: row.id,
+    orderItemId: row.order_item_id,
+    productId: row.product_id,
+    reviewerDisplayName: row.reviewer_display_name,
+    rating: row.rating,
+    comment: row.comment,
+    createdAt: row.created_at,
+  };
+}
+
+/**
+ * Public reviews for one product, newest first, with a live-computed
+ * average — never denormalized onto `products` (see DECISIONS.md ADR-018).
+ */
+export async function listProductReviews(
+  productId: string,
+): Promise<ProductReviewSummary> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.REVIEWS)
+    .select(
+      "id, order_item_id, product_id, buyer_id, reviewer_display_name, rating, comment, created_at",
+    )
+    .eq("product_id", productId)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`Failed to load reviews: ${error.message}`);
+  }
+
+  const reviews = (data ?? []).map((row) => toReview(row as ReviewRow));
+  const reviewCount = reviews.length;
+  const averageRating =
+    reviewCount === 0
+      ? null
+      : reviews.reduce((sum, review) => sum + review.rating, 0) / reviewCount;
+
+  return { reviews, averageRating, reviewCount };
+}
+
+/**
+ * Submits a verified-purchase review via the `submit_review` RPC, which
+ * re-checks ownership + `order_status = 'delivered'` itself — this function
+ * never trusts the caller's claim about which order the item belongs to.
+ */
+export async function submitReview(
+  orderItemId: string,
+  rating: number,
+  comment: string | null,
+): Promise<Review> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("submit_review", {
+    p_order_item_id: orderItemId,
+    p_rating: rating,
+    p_comment: comment,
+  });
+
+  if (error) {
+    throw new Error(mapPostgresError(error, "Could not submit your review."));
+  }
+  return toReview(data as ReviewRow);
+}
+
+/**
+ * Which of the given order items already have a review — used to hide
+ * "Write a Review" for items the buyer has already covered.
+ */
+export async function listReviewedOrderItemIds(
+  orderItemIds: string[],
+): Promise<Set<string>> {
+  if (orderItemIds.length === 0) return new Set();
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.REVIEWS)
+    .select("order_item_id")
+    .in("order_item_id", orderItemIds);
+
+  if (error) {
+    throw new Error(`Failed to check existing reviews: ${error.message}`);
+  }
+  return new Set((data ?? []).map((row) => row.order_item_id));
+}
+
+// ============================================================================
+// Buyer Activity Feed
+// ============================================================================
+
+/**
+ * Derived, read-only notification feed via `get_buyer_activity_feed` — no
+ * `notifications` table, no triggers, no realtime (see DECISIONS.md
+ * ADR-018). "Confirmed"/"processing" are not represented: `orders` has no
+ * timestamp column for those transitions, and this deliberately doesn't
+ * guess one.
+ */
+export async function getBuyerActivityFeed(
+  limit = 20,
+): Promise<BuyerActivityEvent[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("get_buyer_activity_feed", {
+    p_limit: limit,
+  });
+
+  if (error) {
+    throw new Error(`Failed to load activity: ${error.message}`);
+  }
+
+  return (data ?? []).map((row) => ({
+    eventType: row.event_type as BuyerActivityEvent["eventType"],
+    orderId: row.order_id,
+    orderNumber: row.order_number,
+    occurredAt: row.occurred_at,
+  }));
 }
 
 // ============================================================================
@@ -1515,6 +1665,121 @@ export async function listShops(): Promise<Shop[]> {
   }
 
   return (data ?? []).map((row) => toShop(row as ShopRow));
+}
+
+type ShopMembershipRow = {
+  seller_id: string;
+  shop_id: string;
+  shop_name: string;
+};
+
+/**
+ * Resolves real shop identity for buyer-facing product surfaces via the
+ * `resolve_shop_membership` RPC — `products.shop_id` is unpopulated on every
+ * live row (TD-1), and `shop_users` (the table that actually holds this
+ * mapping) is member/admin-only RLS, so a buyer/guest cannot read it
+ * directly (see the RPC's migration comment). Returns a `sellerId ->
+ * shopName` map; empty input short-circuits without a round trip.
+ */
+export async function getShopNamesBySellerIds(
+  sellerIds: string[],
+): Promise<Map<string, string>> {
+  if (sellerIds.length === 0) return new Map();
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("resolve_shop_membership", {
+    p_seller_ids: sellerIds,
+  });
+
+  if (error) {
+    throw new Error(`Failed to resolve shop names: ${error.message}`);
+  }
+  return new Map(
+    ((data ?? []) as ShopMembershipRow[]).map((row) => [
+      row.seller_id,
+      row.shop_name,
+    ]),
+  );
+}
+
+/** Every seller id belonging to one shop — used to filter the catalog by shop. */
+export async function getShopSellerIds(shopId: string): Promise<string[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("resolve_shop_membership", {
+    p_shop_ids: [shopId],
+  });
+
+  if (error) {
+    throw new Error(`Failed to resolve shop members: ${error.message}`);
+  }
+  return ((data ?? []) as ShopMembershipRow[]).map((row) => row.seller_id);
+}
+
+export interface FeaturedShopView {
+  id: string;
+  name: string;
+  slug: string;
+  productCount: number;
+}
+
+/**
+ * Active shops with a real active-product count, for the homepage's Featured
+ * Shops carousel. Composed from two already-public reads (`listShops`,
+ * `resolve_shop_membership`) plus one lightweight `products` read — no new
+ * RPC beyond `resolve_shop_membership`, and no fabricated rating/badge/image
+ * fields (there is no data source for any of those).
+ */
+export async function getFeaturedShops(limit = 4): Promise<FeaturedShopView[]> {
+  const shops = await listShops();
+  if (shops.length === 0) return [];
+
+  const supabase = await createSupabaseServerClient();
+  const [membershipResult, productsResult] = await Promise.all([
+    supabase.rpc("resolve_shop_membership", {
+      p_shop_ids: shops.map((shop) => shop.id),
+    }),
+    supabase
+      .from(DATABASE_TABLES.PRODUCTS)
+      .select("seller_id")
+      .eq("status", PRODUCT_STATUS.active),
+  ]);
+
+  if (membershipResult.error) {
+    throw new Error(
+      `Failed to resolve shop members: ${membershipResult.error.message}`,
+    );
+  }
+  if (productsResult.error) {
+    throw new Error(
+      `Failed to count shop products: ${productsResult.error.message}`,
+    );
+  }
+
+  const countsBySeller = new Map<string, number>();
+  for (const row of productsResult.data ?? []) {
+    countsBySeller.set(
+      row.seller_id,
+      (countsBySeller.get(row.seller_id) ?? 0) + 1,
+    );
+  }
+
+  const countsByShop = new Map<string, number>();
+  for (const row of (membershipResult.data ?? []) as ShopMembershipRow[]) {
+    const current = countsByShop.get(row.shop_id) ?? 0;
+    countsByShop.set(
+      row.shop_id,
+      current + (countsBySeller.get(row.seller_id) ?? 0),
+    );
+  }
+
+  return shops
+    .map((shop) => ({
+      id: shop.id,
+      name: shop.name,
+      slug: shop.slug,
+      productCount: countsByShop.get(shop.id) ?? 0,
+    }))
+    .sort((a, b) => b.productCount - a.productCount)
+    .slice(0, limit);
 }
 
 /** Payload for creating a shop — `slug` is always server-derived from `name`, never client-submitted. */

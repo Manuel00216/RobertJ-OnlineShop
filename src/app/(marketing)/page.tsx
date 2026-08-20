@@ -9,7 +9,6 @@ import {
   ProductCategories,
   SmartAssistantPreview,
 } from "@/features/landing";
-import { FEATURED_SHOPS_PLACEHOLDER } from "@/features/landing/constants/landing.constants";
 
 /**
  * RobertJ Marketplace landing page. Data-backed sections (categories, featured
@@ -26,7 +25,7 @@ export default function LandingPage() {
       <MarqueeBand />
       <ProductCategories />
       <FeaturedProducts />
-      <FeaturedShops shops={FEATURED_SHOPS_PLACEHOLDER} />
+      <FeaturedShops />
       <EditorialBanner />
       <AboutSection />
       <MarketplaceFeatures />
