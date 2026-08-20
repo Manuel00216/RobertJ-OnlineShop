@@ -1,16 +1,63 @@
+import Image from "next/image";
+import Link from "next/link";
+
 import { PRODUCT_CONDITION, PRODUCT_CONDITION_LABELS } from "@/constants/status";
 import { ROUTES } from "@/constants/routes";
 import { EmptyState } from "@/components/feedback/EmptyState";
+import { formatCurrency } from "@/lib/utils/currency";
 import {
   getSessionUser,
   getShopNamesBySellerIds,
   listWishlistProductIds,
 } from "@/lib/supabase/queries";
 import { ProductTile, type ProductTileItem } from "@/features/products/components/ProductTile";
+import { WishlistButton } from "@/features/wishlist/components/WishlistButton";
 import { getCoverImage, type Product } from "@/features/products/types/product.types";
 
 export interface ProductGridProps {
   products: Product[];
+  /** Defaults to "grid". "list" renders compact horizontal rows instead —
+   * same underlying tile data, just a denser layout for scanning many items. */
+  viewMode?: "grid" | "list";
+  /** When set, the empty state names the search term instead of a generic message. */
+  searchTerm?: string;
+}
+
+/** One row in the "list" view — same fields as `ProductTile`, laid out horizontally. */
+function ProductListRow({ item }: { item: ProductTileItem }) {
+  return (
+    <li>
+      <Link
+        href={item.href}
+        className="flex items-center gap-4 rounded-xl border border-rj-gray-100 bg-rj-white p-3 transition-colors hover:border-rj-gray-200"
+      >
+        <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-rj-gray-100">
+          {item.imageUrl ? (
+            <Image src={item.imageUrl} alt={item.name} fill sizes="64px" className="object-cover" />
+          ) : null}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[9px] font-medium tracking-widest text-rj-gray-400">
+            {item.shopName}
+          </p>
+          <p className="line-clamp-1 text-sm font-medium text-rj-black">{item.name}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          <span className="text-sm font-bold text-rj-black">
+            {formatCurrency(item.priceCents, item.currency)}
+          </span>
+          {item.wishlist ? (
+            <WishlistButton
+              productId={item.wishlist.productId}
+              initialSaved={item.wishlist.initialSaved}
+              isAuthenticated={item.wishlist.isAuthenticated}
+              variant="tile"
+            />
+          ) : null}
+        </div>
+      </Link>
+    </li>
+  );
 }
 
 function toTileItem(
@@ -52,12 +99,21 @@ function toTileItem(
   };
 }
 
-export async function ProductGrid({ products }: ProductGridProps) {
+export async function ProductGrid({
+  products,
+  viewMode = "grid",
+  searchTerm,
+}: ProductGridProps) {
   if (products.length === 0) {
-    return (
+    return searchTerm ? (
+      <EmptyState
+        title={`No results for "${searchTerm}"`}
+        description="Check the spelling, try a shorter term, or browse by category instead."
+      />
+    ) : (
       <EmptyState
         title="No products found"
-        description="Try a different search term or browse another category."
+        description="Try adjusting your filters or browse another category."
       />
     );
   }
@@ -77,13 +133,25 @@ export async function ProductGrid({ products }: ProductGridProps) {
     getShopNamesBySellerIds(sellerIds).catch(() => new Map<string, string>()),
   ]);
 
+  const items = products.map((product) =>
+    toTileItem(product, wishlistedIds, user !== null, shopNames),
+  );
+
+  if (viewMode === "list") {
+    return (
+      <ul className="flex flex-col gap-3">
+        {items.map((item) => (
+          <ProductListRow key={item.key} item={item} />
+        ))}
+      </ul>
+    );
+  }
+
   return (
     <ul className="grid grid-cols-2 gap-5 md:grid-cols-3 md:gap-6 lg:grid-cols-4">
-      {products.map((product) => (
-        <li key={product.id}>
-          <ProductTile
-            item={toTileItem(product, wishlistedIds, user !== null, shopNames)}
-          />
+      {items.map((item) => (
+        <li key={item.key}>
+          <ProductTile item={item} />
         </li>
       ))}
     </ul>

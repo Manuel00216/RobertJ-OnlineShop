@@ -17,6 +17,7 @@ export {
   updateProductAction,
   archiveProductAction,
   assignProductShopAction,
+  searchProductSuggestionsAction,
 } from "./actions/product.actions";
 export {
   productListParamsSchema,

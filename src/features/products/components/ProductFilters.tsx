@@ -1,5 +1,6 @@
 "use client";
 
+import { LayoutGrid, List } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -38,6 +39,7 @@ export function ProductFilters({ categories = [], shops = [] }: ProductFiltersPr
 
   const activeCategoryId = searchParams.get("categoryId") ?? "";
   const activeShopId = searchParams.get("shopId") ?? "";
+  const view = searchParams.get("view") === "list" ? "list" : "grid";
   const rawSort = searchParams.get("sort");
   const sort: ProductSort = SORT_OPTIONS.some((o) => o.value === rawSort)
     ? (rawSort as ProductSort)
@@ -196,6 +198,35 @@ export function ProductFilters({ categories = [], shops = [] }: ProductFiltersPr
             </option>
           ))}
         </select>
+
+        <div
+          className="flex overflow-hidden rounded-full border-[1.5px] border-rj-gray-200"
+          role="group"
+          aria-label="Layout"
+        >
+          <button
+            type="button"
+            aria-pressed={view === "grid"}
+            aria-label="Grid view"
+            onClick={() => updateParams({ view: null })}
+            className={`flex h-9 w-9 items-center justify-center transition-colors ${
+              view === "grid" ? "bg-rj-black text-rj-white" : "text-rj-gray-400 hover:text-rj-black"
+            }`}
+          >
+            <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            aria-pressed={view === "list"}
+            aria-label="List view"
+            onClick={() => updateParams({ view: "list" })}
+            className={`flex h-9 w-9 items-center justify-center transition-colors ${
+              view === "list" ? "bg-rj-black text-rj-white" : "text-rj-gray-400 hover:text-rj-black"
+            }`}
+          >
+            <List className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </div>
       </div>
     </div>
   );

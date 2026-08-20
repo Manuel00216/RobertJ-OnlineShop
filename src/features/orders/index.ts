@@ -1,4 +1,5 @@
 export { cancelOrderAction, advanceOrderStatusAction } from "./actions/order.actions";
+export { BuyAgainButton } from "./components/BuyAgainButton";
 export {
   buyerOrderListParamsSchema,
   orderStatusSchema,

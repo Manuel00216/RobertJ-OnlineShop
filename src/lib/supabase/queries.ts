@@ -333,6 +333,41 @@ export async function listRelatedProducts(
   return (data ?? []).map((row) => toProduct(row as ProductRowWithImages));
 }
 
+export interface ProductSuggestion {
+  id: string;
+  title: string;
+  slug: string;
+}
+
+/**
+ * Lightweight title-only matches for the header search's suggestions
+ * dropdown. Deliberately not the full `listProducts` search (no
+ * description/full-text match, no pagination) — this only needs to be fast
+ * and narrow. Never triggers navigation itself; the header decides what to
+ * do with a click.
+ */
+export async function searchProductSuggestions(
+  term: string,
+  limit = 5,
+): Promise<ProductSuggestion[]> {
+  const trimmed = term.trim();
+  if (trimmed.length < 2) return [];
+
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PRODUCTS)
+    .select("id, title, slug")
+    .eq("status", PRODUCT_STATUS.active)
+    .ilike("title", `%${trimmed.replace(/[%_]/g, "")}%`)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    throw new Error(`Failed to search products: ${error.message}`);
+  }
+  return data ?? [];
+}
+
 /** Live price/stock snapshot for one product, used to revalidate a cached cart line. */
 export interface ProductPriceAndStock {
   id: string;

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { DASHBOARD_ROLES, USER_ROLES } from "@/constants/roles";
 import { ROUTES } from "@/constants/routes";
 import { fail, fromZodError, ok } from "@/lib/utils/result";
+import { getClientIp } from "@/lib/utils/request";
 import * as queries from "@/lib/supabase/queries";
 import type { ActionResult } from "@/types/action.types";
 import {
@@ -13,6 +14,28 @@ import {
   updateProductSchema,
 } from "@/features/products/schemas/product.schema";
 import type { Product } from "@/features/products/types/product.types";
+import type { ProductSuggestion } from "@/lib/supabase/queries";
+
+/**
+ * Backs the header search's suggestions dropdown. Public — search is a
+ * guest-accessible feature — so this intentionally does not call
+ * `requireSessionUser()`, only a per-IP rate limit against abuse.
+ */
+export async function searchProductSuggestionsAction(
+  term: string,
+): Promise<ActionResult<ProductSuggestion[]>> {
+  try {
+    const ip = await getClientIp();
+    await queries.requireRateLimit(`productSuggestions:${ip}`, 30, 60);
+    const suggestions = await queries.searchProductSuggestions(term);
+    return ok(suggestions);
+  } catch {
+    // Suggestions are a soft-fail affordance, not a critical action — an
+    // empty list (dropdown just doesn't show) beats surfacing an error
+    // under a search box.
+    return ok([]);
+  }
+}
 
 export async function createProductAction(
   _prevState: ActionResult<Product> | null,

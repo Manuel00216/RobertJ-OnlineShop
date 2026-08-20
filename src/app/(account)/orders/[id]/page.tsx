@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import { BuyAgainButton } from "@/features/orders/components/BuyAgainButton";
 import { CancelOrderButton } from "@/features/orders/components/CancelOrderButton";
 import { OrderHeader } from "@/features/orders/components/OrderHeader";
 import { OrderItemsList } from "@/features/orders/components/OrderItemsList";
@@ -65,9 +66,12 @@ export default async function OrderDetailPage({
     <article className="flex flex-col gap-8">
       <OrderHeader order={order} />
       <OrderTimeline status={order.status} />
-      {order.cancellable ? (
-        <CancelOrderButton orderId={order.id} orderNumber={order.orderNumber} />
-      ) : null}
+      <div className="flex flex-wrap items-center gap-3">
+        {order.cancellable ? (
+          <CancelOrderButton orderId={order.id} orderNumber={order.orderNumber} />
+        ) : null}
+        <BuyAgainButton order={order} />
+      </div>
 
       {order.paymentStatus === "pending" ? (
         activePayment ? (

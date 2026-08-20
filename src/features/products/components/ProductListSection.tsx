@@ -47,13 +47,14 @@ export async function ProductListSection({
   }
 
   const { items, page, totalPages, total } = result;
+  const viewMode = searchParams.view === "list" ? "list" : "grid";
 
   return (
     <section className="flex flex-col gap-6">
       <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-rj-gray-400" aria-live="polite">
         {total} product{total === 1 ? "" : "s"}
       </p>
-      <ProductGrid products={items} />
+      <ProductGrid products={items} viewMode={viewMode} searchTerm={parsed.data.search} />
       {totalPages > 1 ? <PaginationControls page={page} totalPages={totalPages} /> : null}
     </section>
   );

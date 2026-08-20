@@ -264,6 +264,12 @@ export function CartSummary() {
             Proceed to checkout
           </Button>
         </Link>
+        <Link
+          href={ROUTES.products}
+          className="text-center text-xs font-semibold text-rj-gray-600 hover:text-rj-black hover:underline"
+        >
+          ← Continue shopping
+        </Link>
       </div>
     </div>
   );
