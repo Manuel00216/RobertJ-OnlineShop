@@ -3,12 +3,15 @@
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { USER_ROLES } from "@/constants/roles";
 import { ROUTES } from "@/constants/routes";
 import { useCart } from "@/features/cart/hooks/useCart";
 import type { Order } from "@/features/orders/types/order.types";
 
 export interface BuyAgainButtonProps {
   order: Order;
+  /** Resolved shop/seller label — see `AddToCartButton`'s prop of the same name. */
+  sellerName?: string | null;
 }
 
 /**
@@ -19,12 +22,15 @@ export interface BuyAgainButtonProps {
  * existing availability check catches anything else that's changed since
  * (price, remaining stock).
  */
-export function BuyAgainButton({ order }: BuyAgainButtonProps) {
+export function BuyAgainButton({ order, sellerName }: BuyAgainButtonProps) {
   const router = useRouter();
   const { addItem } = useCart();
 
   const reorderableItems = order.items.filter((item) => item.productSlug !== null);
   if (reorderableItems.length === 0) return null;
+
+  const resolvedSellerName =
+    sellerName ?? (order.sellerRole === USER_ROLES.seller ? order.sellerName : null);
 
   function handleBuyAgain() {
     for (const item of reorderableItems) {
@@ -39,7 +45,7 @@ export function BuyAgainButton({ order }: BuyAgainButtonProps) {
         quantity: item.quantity,
         maxQuantity: item.quantity,
         sellerId: order.sellerId,
-        sellerName: order.sellerName,
+        sellerName: resolvedSellerName,
       });
     }
     router.push(ROUTES.cart);

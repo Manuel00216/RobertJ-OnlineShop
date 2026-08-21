@@ -5,12 +5,14 @@ import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
+import { RJ_CARD } from "@/components/ui/card";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { ROUTES } from "@/constants/routes";
 import { verifyPaymentAction } from "@/features/payments/actions/payment.actions";
 import type { Payment, PaymentDecision } from "@/features/payments/types/payment.types";
 import { formatCurrency } from "@/lib/utils/currency";
 import { formatDate } from "@/lib/utils/date";
+import { cn } from "@/lib/utils/cn";
 
 export interface VerificationCardProps {
   payment: Payment;
@@ -58,7 +60,7 @@ export function VerificationCard({ payment, receiptUrl }: VerificationCardProps)
   }
 
   return (
-    <div className="flex flex-col gap-4 rounded-2xl border border-rj-gray-100 bg-rj-white p-5 sm:flex-row sm:items-start">
+    <div className={cn(RJ_CARD, "flex flex-col gap-4 p-5 sm:flex-row sm:items-start")}>
       {receiptUrl ? (
         <a
           href={receiptUrl}

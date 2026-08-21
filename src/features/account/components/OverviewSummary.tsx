@@ -1,7 +1,9 @@
 import Link from "next/link";
 
+import { RJ_CARD } from "@/components/ui/card";
 import type { OrderStatus } from "@/constants/status";
 import { ROUTES } from "@/constants/routes";
+import { cn } from "@/lib/utils/cn";
 import {
   getOrderStatusLabel,
   ORDER_TIMELINE_STEPS,
@@ -28,7 +30,10 @@ export function OverviewSummary({
         <Link
           key={status}
           href={`${ROUTES.orders}?status=${status}`}
-          className="group rounded-2xl border border-rj-gray-100 bg-rj-white p-4 transition-all hover:border-rj-black hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30"
+          className={cn(
+            RJ_CARD,
+            "group p-4 transition-all hover:border-rj-black hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30",
+          )}
         >
           <p className="text-2xl font-bold text-rj-black">{statusCounts[status]}</p>
           <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.15em] text-rj-gray-600">

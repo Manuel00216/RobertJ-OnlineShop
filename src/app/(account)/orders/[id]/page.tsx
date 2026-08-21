@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import { RJ_CARD } from "@/components/ui/card";
+import { cn } from "@/lib/utils/cn";
 import { BuyAgainButton } from "@/features/orders/components/BuyAgainButton";
 import { CancelOrderButton } from "@/features/orders/components/CancelOrderButton";
 import { OrderHeader } from "@/features/orders/components/OrderHeader";
@@ -13,10 +15,12 @@ import { ReceiptUpload } from "@/features/payments/components/ReceiptUpload";
 import {
   getActivePaymentForOrder,
   getBuyerOrder,
+  getShopNamesBySellerIds,
   listReviewedOrderItemIds,
   requireSessionUser,
 } from "@/lib/supabase/queries";
 import { ORDER_STATUS } from "@/constants/status";
+import { USER_ROLES } from "@/constants/roles";
 
 interface OrderDetailPageProps {
   params: Promise<{ id: string }>;
@@ -39,6 +43,17 @@ export default async function OrderDetailPage({
   const order = await getBuyerOrder(id, user.id);
 
   if (!order) notFound();
+
+  // Same resolution as the catalog/PDP (see ProductGrid.tsx's toTileItem):
+  // a real shop name when the seller belongs to one, else the seller's own
+  // name only if `seller_id` actually resolves to a `seller` account —
+  // never an admin's or a demoted account's personal name.
+  const shopNames = await getShopNamesBySellerIds([order.sellerId]).catch(
+    () => new Map<string, string>(),
+  );
+  const shopName =
+    shopNames.get(order.sellerId) ??
+    (order.sellerRole === USER_ROLES.seller ? order.sellerName : null);
 
   // Only relevant while payment is undecided — once paid/failed, the
   // PaymentStatusBadge below already reflects the outcome.
@@ -70,7 +85,7 @@ export default async function OrderDetailPage({
         {order.cancellable ? (
           <CancelOrderButton orderId={order.id} orderNumber={order.orderNumber} />
         ) : null}
-        <BuyAgainButton order={order} />
+        <BuyAgainButton order={order} sellerName={shopName} />
       </div>
 
       {order.paymentStatus === "pending" ? (
@@ -83,13 +98,13 @@ export default async function OrderDetailPage({
               Receipt submitted — awaiting verification.
             </p>
             <p className="mt-1 text-xs text-rj-gray-600">
-              {order.sellerName ?? "The seller"} will confirm your payment shortly.
+              {shopName ?? "The seller"} will confirm your payment shortly.
             </p>
           </section>
         ) : (
           <ReceiptUpload
             orderId={order.id}
-            sellerName={order.sellerName}
+            sellerName={shopName}
             sellerPaymentQrUrl={order.sellerPaymentQrUrl}
           />
         )
@@ -109,7 +124,7 @@ export default async function OrderDetailPage({
           <OrderSummary order={order} />
           <section
             aria-label="Payment and shop"
-            className="rounded-2xl border border-rj-gray-100 bg-rj-white p-5"
+            className={cn(RJ_CARD, "p-5")}
           >
             <h2 className="text-[10px] font-bold uppercase tracking-[0.3em] text-rj-gray-400">
               Payment
@@ -117,12 +132,10 @@ export default async function OrderDetailPage({
             <div className="mt-3">
               <PaymentStatusBadge status={order.paymentStatus} />
             </div>
-            {order.sellerName ? (
+            {shopName ? (
               <p className="mt-3 border-t border-rj-gray-100 pt-3 text-xs text-rj-gray-600">
                 Sold by{" "}
-                <span className="font-semibold text-rj-black">
-                  {order.sellerName}
-                </span>
+                <span className="font-semibold text-rj-black">{shopName}</span>
               </p>
             ) : null}
           </section>
@@ -132,7 +145,7 @@ export default async function OrderDetailPage({
       {order.notes ? (
         <section
           aria-label="Order notes"
-          className="rounded-2xl border border-rj-gray-100 bg-rj-gray-50 p-5"
+          className={cn(RJ_CARD, "bg-rj-gray-50 p-5")}
         >
           <h2 className="text-[10px] font-bold uppercase tracking-[0.3em] text-rj-gray-400">
             Notes

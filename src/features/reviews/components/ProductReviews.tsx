@@ -1,4 +1,6 @@
 import { EmptyState } from "@/components/feedback/EmptyState";
+import { RJ_CARD } from "@/components/ui/card";
+import { cn } from "@/lib/utils/cn";
 import { StarRating } from "@/features/reviews/components/StarRating";
 import type { ProductReviewSummary } from "@/features/reviews/types/review.types";
 
@@ -37,7 +39,7 @@ export function ProductReviews({ summary }: ProductReviewsProps) {
           {reviews.map((review) => (
             <li
               key={review.id}
-              className="rounded-2xl border border-rj-gray-100 bg-rj-white p-4"
+              className={cn(RJ_CARD, "p-4")}
             >
               <div className="mb-1.5 flex items-center justify-between gap-2">
                 <span className="text-sm font-semibold text-rj-black">

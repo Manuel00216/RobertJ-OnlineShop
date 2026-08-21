@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import { RJ_CARD } from "@/components/ui/card";
+import { cn } from "@/lib/utils/cn";
 import { OrderHeader } from "@/features/orders/components/OrderHeader";
 import { OrderItemsList } from "@/features/orders/components/OrderItemsList";
 import { OrderStatusControl } from "@/features/orders/components/OrderStatusControl";
@@ -57,7 +59,7 @@ export default async function DashboardOrderDetailPage({
           <OrderSummary order={order} />
           <section
             aria-label="Buyer and payment"
-            className="rounded-2xl border border-rj-gray-100 bg-rj-white p-5"
+            className={cn(RJ_CARD, "p-5")}
           >
             <h2 className="text-[10px] font-bold uppercase tracking-[0.3em] text-rj-gray-400">
               Buyer
@@ -80,7 +82,7 @@ export default async function DashboardOrderDetailPage({
       {order.notes ? (
         <section
           aria-label="Order notes"
-          className="rounded-2xl border border-rj-gray-100 bg-rj-gray-50 p-5"
+          className={cn(RJ_CARD, "bg-rj-gray-50 p-5")}
         >
           <h2 className="text-[10px] font-bold uppercase tracking-[0.3em] text-rj-gray-400">
             Notes

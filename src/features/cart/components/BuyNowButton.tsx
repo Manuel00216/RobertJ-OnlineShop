@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { ROUTES } from "@/constants/routes";
+import { USER_ROLES } from "@/constants/roles";
 import { useCart } from "@/features/cart/hooks/useCart";
 import {
   getCoverImage,
@@ -15,6 +16,8 @@ export interface BuyNowButtonProps {
   product: Product;
   quantity?: number;
   className?: string;
+  /** See `AddToCartButton`'s prop of the same name. */
+  sellerName?: string | null;
 }
 
 /**
@@ -24,7 +27,12 @@ export interface BuyNowButtonProps {
  * `redirectTo` preserved, same as clicking "Proceed to checkout" from the
  * cart page; nothing extra to handle here.
  */
-export function BuyNowButton({ product, quantity = 1, className }: BuyNowButtonProps) {
+export function BuyNowButton({
+  product,
+  quantity = 1,
+  className,
+  sellerName,
+}: BuyNowButtonProps) {
   const router = useRouter();
   const { addItem } = useCart();
   const [isPending, setIsPending] = useState(false);
@@ -42,7 +50,8 @@ export function BuyNowButton({ product, quantity = 1, className }: BuyNowButtonP
       quantity,
       maxQuantity: product.quantity,
       sellerId: product.sellerId,
-      sellerName: product.sellerName,
+      sellerName:
+        sellerName ?? (product.sellerRole === USER_ROLES.seller ? product.sellerName : null),
     });
     router.push(ROUTES.checkout);
   }

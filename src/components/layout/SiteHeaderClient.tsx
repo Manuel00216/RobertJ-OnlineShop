@@ -8,7 +8,9 @@ import { useEffect, useRef, useState } from "react";
 
 import { AccountMenu } from "@/features/account/components/AccountMenu";
 import { Wordmark } from "@/components/brand/Wordmark";
+import { RJ_CARD } from "@/components/ui/card";
 import { ROUTES } from "@/constants/routes";
+import { cn } from "@/lib/utils/cn";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useCart } from "@/features/cart/hooks/useCart";
 import { searchProductSuggestionsAction } from "@/features/products/actions/product.actions";
@@ -129,7 +131,7 @@ export function SiteHeaderClient({ user, categories }: SiteHeaderClientProps) {
             <div
               role="menu"
               aria-label="Categories"
-              className="absolute left-0 top-full z-50 mt-2 w-60 rounded-2xl border border-rj-gray-100 bg-rj-white p-2 shadow-lg"
+              className={cn(RJ_CARD, "absolute left-0 top-full z-50 mt-2 w-60 p-2 shadow-lg")}
             >
               <Link
                 href={ROUTES.categories}
@@ -194,7 +196,7 @@ export function SiteHeaderClient({ user, categories }: SiteHeaderClientProps) {
             <div
               role="listbox"
               aria-label="Search suggestions"
-              className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-2xl border border-rj-gray-100 bg-rj-white shadow-lg"
+              className={cn(RJ_CARD, "absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden shadow-lg")}
             >
               {suggestions.map((suggestion) => (
                 <button

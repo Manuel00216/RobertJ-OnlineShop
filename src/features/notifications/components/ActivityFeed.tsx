@@ -1,7 +1,9 @@
 import Link from "next/link";
 
 import { EmptyState } from "@/components/feedback/EmptyState";
+import { RJ_CARD } from "@/components/ui/card";
 import { ROUTES } from "@/constants/routes";
+import { cn } from "@/lib/utils/cn";
 import { formatDateTime } from "@/lib/utils/date";
 import { ACTIVITY_EVENT_COPY } from "@/features/notifications/constants/notification.constants";
 import type { BuyerActivityEvent } from "@/features/notifications/types/notification.types";
@@ -28,7 +30,7 @@ export function ActivityFeed({ events }: ActivityFeedProps) {
         return (
           <li
             key={`${event.orderId}-${event.eventType}-${index}`}
-            className="flex items-start gap-3 rounded-2xl border border-rj-gray-100 bg-rj-white p-4"
+            className={cn(RJ_CARD, "flex items-start gap-3 p-4")}
           >
             <span className="text-xl" aria-hidden="true">
               {copy.icon}

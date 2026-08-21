@@ -6,6 +6,7 @@ import { Package } from "lucide-react";
 import { useEffect, useMemo, useState, useTransition } from "react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
+import { RJ_CARD } from "@/components/ui/card";
 import { QuantityStepper } from "@/components/ui/quantity-stepper";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { ROUTES } from "@/constants/routes";
@@ -109,7 +110,7 @@ export function CartSummary() {
                 return (
                   <li
                     key={item.productId}
-                    className="flex flex-col gap-3 rounded-2xl border border-rj-gray-100 bg-rj-white p-4 shadow-sm"
+                    className={cn(RJ_CARD, "flex flex-col gap-3 p-4 shadow-sm")}
                   >
                     <div className="flex items-center gap-4">
                       {item.imageUrl ? (

@@ -1,4 +1,6 @@
 import { FormField } from "@/components/forms/FormField";
+import { RJ_CARD } from "@/components/ui/card";
+import { cn } from "@/lib/utils/cn";
 import type { ShippingAddressInput } from "@/features/checkout/schemas/checkout.schema";
 
 /**
@@ -16,7 +18,7 @@ export function ShippingAddressForm({
   onChange: (field: keyof ShippingAddressInput, value: string) => void;
 }) {
   return (
-    <fieldset className="flex flex-col gap-4 rounded-2xl border border-rj-gray-100 bg-rj-white p-5">
+    <fieldset className={cn(RJ_CARD, "flex flex-col gap-4 p-5")}>
       <legend className="text-[10px] font-bold uppercase tracking-[0.3em] text-rj-gray-600">
         Shipping address
       </legend>

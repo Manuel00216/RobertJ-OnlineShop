@@ -13,6 +13,9 @@ export interface ProductQuantityAndAddToCartProps {
   product: Product;
   wishlist: WishlistState;
   className?: string;
+  /** The same resolved "Sold by" label already shown on this page — passed
+   * through so the cart line never disagrees with it. */
+  shopName?: string | null;
 }
 
 /** PDP quantity selector + Add to cart + wishlist, kept together since the
@@ -21,6 +24,7 @@ export function ProductQuantityAndAddToCart({
   product,
   wishlist,
   className,
+  shopName,
 }: ProductQuantityAndAddToCartProps) {
   const [quantity, setQuantity] = useState(1);
   const isOutOfStock = product.quantity <= 0;
@@ -43,11 +47,13 @@ export function ProductQuantityAndAddToCart({
           quantity={quantity}
           buttonVariant="rj"
           className="w-full sm:w-auto"
+          sellerName={shopName}
         />
         <BuyNowButton
           product={product}
           quantity={quantity}
           className="w-full sm:w-auto"
+          sellerName={shopName}
         />
         <WishlistButton
           productId={wishlist.productId}

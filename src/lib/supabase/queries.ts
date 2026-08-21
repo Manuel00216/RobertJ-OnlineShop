@@ -1191,7 +1191,7 @@ const ORDER_COLUMNS = `
   total_cents, currency, payment_status, order_status, shipping_address, notes,
   placed_at, paid_at, shipped_at, delivered_at, cancelled_at,
   buyer:profiles!orders_buyer_id_fkey ( full_name, username ),
-  seller:profiles!orders_seller_id_fkey ( full_name, username, payment_qr_url ),
+  seller:profiles!orders_seller_id_fkey ( full_name, username, payment_qr_url, role ),
   order_items (
     id, product_id, product_title, quantity, unit_price_cents, subtotal_cents,
     product:products!order_items_product_id_fkey ( slug, product_images ( url ) )
@@ -1201,7 +1201,7 @@ const ORDER_COLUMNS = `
 type OrderRowWithItems = Omit<OrderRow, "shipping_address"> & {
   shipping_address: Json;
   buyer: Pick<ProfileRow, "full_name" | "username"> | null;
-  seller: Pick<ProfileRow, "full_name" | "username" | "payment_qr_url"> | null;
+  seller: Pick<ProfileRow, "full_name" | "username" | "payment_qr_url" | "role"> | null;
   order_items: Array<
     OrderItemRow & {
       product: { slug: string; product_images: { url: string }[] } | null;
@@ -1246,6 +1246,7 @@ function toOrder(row: OrderRowWithItems): Order {
     buyerName: row.buyer?.full_name ?? row.buyer?.username ?? null,
     sellerId: row.seller_id,
     sellerName: row.seller?.full_name ?? row.seller?.username ?? null,
+    sellerRole: (row.seller?.role as UserRole | undefined) ?? null,
     sellerPaymentQrUrl: row.seller?.payment_qr_url ?? null,
     items: (row.order_items ?? []).map((item) => ({
       id: item.id,

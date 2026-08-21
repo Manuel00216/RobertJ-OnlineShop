@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { RJ_CARD } from "@/components/ui/card";
 import type { UserRole } from "@/constants/roles";
 import { ROUTES } from "@/constants/routes";
 import { signOutAction } from "@/features/auth/actions/auth.actions";
@@ -77,7 +78,7 @@ export function AccountMenu({ user }: { user: SessionUser }) {
         <div
           role="menu"
           aria-label="Account"
-          className="absolute right-0 top-full z-50 mt-2 w-56 rounded-2xl border border-rj-gray-100 bg-rj-white p-1.5 shadow-lg"
+          className={cn(RJ_CARD, "absolute right-0 top-full z-50 mt-2 w-56 p-1.5 shadow-lg")}
         >
           <div className="px-3 py-2">
             <p className="truncate text-sm font-semibold text-rj-black">

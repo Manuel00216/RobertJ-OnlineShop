@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { USER_ROLES } from "@/constants/roles";
 import { useCart } from "@/features/cart/hooks/useCart";
 import {
   getCoverImage,
@@ -15,6 +16,15 @@ export interface AddToCartButtonProps {
   className?: string;
   /** Visual treatment: default semantic primary, or the rj editorial pill. */
   buttonVariant?: "primary" | "rj";
+  /**
+   * Resolved shop/seller label for the cart line — pass the same value
+   * already shown as "Sold by" on the page (see the PDP), so cart/checkout
+   * never disagrees with what the buyer just saw. Falls back to the
+   * product's own role-gated name if the caller has nothing better (see
+   * `ProductGrid.tsx`'s `toTileItem` for why raw `product.sellerName` alone
+   * isn't safe to use).
+   */
+  sellerName?: string | null;
 }
 
 export function AddToCartButton({
@@ -22,6 +32,7 @@ export function AddToCartButton({
   quantity = 1,
   className,
   buttonVariant = "primary",
+  sellerName,
 }: AddToCartButtonProps) {
   const { addItem } = useCart();
   const [justAdded, setJustAdded] = useState(false);
@@ -38,7 +49,8 @@ export function AddToCartButton({
       quantity,
       maxQuantity: product.quantity,
       sellerId: product.sellerId,
-      sellerName: product.sellerName,
+      sellerName:
+        sellerName ?? (product.sellerRole === USER_ROLES.seller ? product.sellerName : null),
     });
     setJustAdded(true);
     setTimeout(() => setJustAdded(false), 2000);

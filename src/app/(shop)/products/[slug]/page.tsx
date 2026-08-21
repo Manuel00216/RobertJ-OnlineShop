@@ -142,6 +142,7 @@ export default async function ProductDetailPage({
               initialSaved: isWishlisted,
               isAuthenticated: user !== null,
             }}
+            shopName={shopName}
           />
         </div>
       </div>

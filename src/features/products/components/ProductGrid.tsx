@@ -67,20 +67,22 @@ function toTileItem(
   isAuthenticated: boolean,
   shopNames: ReadonlyMap<string, string>,
 ): ProductTileItem {
+  // Real shop name when the seller belongs to one (see
+  // `resolve_shop_membership`); falls back to the seller's own profile
+  // name for a legacy/unassigned seller (TD-1) — but only when `seller_id`
+  // actually resolves to a `seller` account. An admin-authored or
+  // demoted-account product has no shop and no business showing that
+  // account's personal name on the storefront, so it goes straight to the
+  // generic label instead.
+  const shopName =
+    shopNames.get(product.sellerId) ??
+    (product.sellerRole === USER_ROLES.seller ? product.sellerName : null) ??
+    "RobertJ Seller";
+
   return {
     key: product.id,
     name: product.title,
-    // Real shop name when the seller belongs to one (see
-    // `resolve_shop_membership`); falls back to the seller's own profile
-    // name for a legacy/unassigned seller (TD-1) — but only when `seller_id`
-    // actually resolves to a `seller` account. An admin-authored or
-    // demoted-account product has no shop and no business showing that
-    // account's personal name on the storefront, so it goes straight to the
-    // generic label instead.
-    shopName:
-      shopNames.get(product.sellerId) ??
-      (product.sellerRole === USER_ROLES.seller ? product.sellerName : null) ??
-      "RobertJ Seller",
+    shopName,
     priceCents: product.priceCents,
     originalPriceCents: null,
     currency: product.currency,
@@ -97,7 +99,10 @@ function toTileItem(
       productId: product.id,
       slug: product.slug,
       sellerId: product.sellerId,
-      sellerName: product.sellerName,
+      // Same resolved label as `shopName` above — the cart/checkout must
+      // show the same "who sold this" identity as the catalog, not the raw
+      // personal name (see the shop-name fix this mirrors).
+      sellerName: shopName,
     },
     wishlist: {
       productId: product.id,

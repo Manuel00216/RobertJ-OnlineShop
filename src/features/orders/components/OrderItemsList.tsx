@@ -1,8 +1,10 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import { RJ_CARD } from "@/components/ui/card";
 import { ROUTES } from "@/constants/routes";
 import { formatCurrency } from "@/lib/utils/currency";
+import { cn } from "@/lib/utils/cn";
 import { ReviewForm } from "@/features/reviews/components/ReviewForm";
 import type { OrderItem } from "@/features/orders/types/order.types";
 
@@ -36,7 +38,7 @@ export function OrderItemsList({
           return (
             <li
               key={item.id}
-              className="flex flex-col gap-3 rounded-2xl border border-rj-gray-100 bg-rj-white p-3"
+              className={cn(RJ_CARD, "flex flex-col gap-3 p-3")}
             >
               <div className="flex items-center gap-4">
                 {item.imageUrl ? (
