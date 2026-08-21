@@ -77,7 +77,12 @@ export function ProductTile({ item, style }: ProductTileProps) {
       ? Math.round((1 - item.priceCents / item.originalPriceCents) * 100)
       : null;
 
-  function handleQuickAdd() {
+  function handleQuickAdd(event: React.MouseEvent) {
+    // The whole tile is one <Link> (see below) — this button must never
+    // trigger that navigation, same reasoning as WishlistButton's handler.
+    event.preventDefault();
+    event.stopPropagation();
+
     if (!item.addToCart) {
       router.push(ROUTES.products);
       return;
@@ -100,8 +105,9 @@ export function ProductTile({ item, style }: ProductTileProps) {
   }
 
   return (
-    <div
-      className="group"
+    <Link
+      href={item.href}
+      className="group block"
       style={style}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -183,7 +189,7 @@ export function ProductTile({ item, style }: ProductTileProps) {
         ) : null}
       </div>
 
-      <Link href={item.href} className="block">
+      <div>
         <div className="mb-0.5 flex items-center justify-between gap-2">
           <span className="truncate text-[9px] font-medium tracking-widest text-rj-gray-400">
             {item.shopName}
@@ -212,7 +218,7 @@ export function ProductTile({ item, style }: ProductTileProps) {
             </span>
           ) : null}
         </div>
-      </Link>
-    </div>
+      </div>
+    </Link>
   );
 }

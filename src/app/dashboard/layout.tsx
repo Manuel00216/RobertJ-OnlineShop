@@ -11,8 +11,9 @@ import { requireRole } from "@/lib/supabase/queries";
  * `proxy.ts` only gates `/dashboard` by session presence, not role — this
  * `requireRole` call is the actual authorization check (belt-and-suspenders
  * alongside RLS and the RPCs' own checks). `bg-rj-white` is explicit
- * (mirroring `(shop)/layout.tsx`) because the root layout's `bg-background`
- * token flips to near-black under `prefers-color-scheme: dark` without it.
+ * (mirroring `(shop)/layout.tsx`) — the app is light-only by design (see
+ * `globals.css`), so this just keeps the surface pinned to the brand palette
+ * rather than the generic `bg-background` token.
  */
 export default async function DashboardLayout({
   children,

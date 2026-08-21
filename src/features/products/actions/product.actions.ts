@@ -11,9 +11,11 @@ import type { ActionResult } from "@/types/action.types";
 import {
   assignProductShopSchema,
   createProductSchema,
+  deleteProductImageSchema,
   updateProductSchema,
+  uploadProductImageSchema,
 } from "@/features/products/schemas/product.schema";
-import type { Product } from "@/features/products/types/product.types";
+import type { Product, ProductImage } from "@/features/products/types/product.types";
 import type { ProductSuggestion } from "@/lib/supabase/queries";
 
 /**
@@ -138,6 +140,71 @@ export async function archiveProductAction(
   } catch (error) {
     return fail(
       error instanceof Error ? error.message : "Could not archive the product.",
+    );
+  }
+}
+
+/**
+ * Uploads and attaches one photo to a seller's own product (or, for an
+ * admin, any product). Ownership is re-checked here beyond RLS/Storage
+ * policy, same defense-in-depth precedent as `updateProductAction` — a
+ * non-owner must not be able to spend a valid session uploading into
+ * another seller's product folder even though the Storage policy would
+ * also reject it.
+ */
+export async function uploadProductImageAction(
+  productId: string,
+  formData: FormData,
+): Promise<ActionResult<ProductImage>> {
+  const parsed = uploadProductImageSchema.safeParse({
+    productId,
+    image: formData.get("image"),
+  });
+  if (!parsed.success) return fromZodError(parsed.error);
+
+  try {
+    const seller = await queries.requireRole(DASHBOARD_ROLES);
+    if (seller.role !== USER_ROLES.admin) {
+      const owned = await queries.productBelongsToSeller(
+        parsed.data.productId,
+        seller.id,
+      );
+      if (!owned) return fail("Product not found.");
+    }
+
+    const url = await queries.uploadProductImage(
+      parsed.data.productId,
+      parsed.data.image,
+    );
+    const image = await queries.addProductImage(parsed.data.productId, url);
+    revalidatePath(ROUTES.dashboardProducts);
+    revalidatePath(ROUTES.products);
+    return ok(image);
+  } catch (error) {
+    return fail(
+      error instanceof Error ? error.message : "Could not upload the image.",
+    );
+  }
+}
+
+/** Same role/ownership shape as `uploadProductImageAction`. */
+export async function deleteProductImageAction(
+  imageId: string,
+  productId: string,
+): Promise<ActionResult<null>> {
+  const parsed = deleteProductImageSchema.safeParse({ imageId, productId });
+  if (!parsed.success) return fail("Invalid request.");
+
+  try {
+    const seller = await queries.requireRole(DASHBOARD_ROLES);
+    const owner = seller.role === USER_ROLES.admin ? null : { sellerId: seller.id };
+    await queries.deleteProductImage(parsed.data.imageId, owner);
+    revalidatePath(ROUTES.dashboardProducts);
+    revalidatePath(ROUTES.products);
+    return ok(null);
+  } catch (error) {
+    return fail(
+      error instanceof Error ? error.message : "Could not delete the image.",
     );
   }
 }

@@ -1,6 +1,8 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import Image from "next/image";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import { X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/feedback/ErrorState";
@@ -8,13 +10,23 @@ import { FormField } from "@/components/forms/FormField";
 import { PRODUCT_CONDITION_LABELS, PRODUCT_STATUS_LABELS } from "@/constants/status";
 import {
   createProductAction,
+  deleteProductImageAction,
   updateProductAction,
+  uploadProductImageAction,
 } from "@/features/products/actions/product.actions";
 import type { Category } from "@/features/categories/types/category.types";
-import type { Product } from "@/features/products/types/product.types";
+import type { Product, ProductImage } from "@/features/products/types/product.types";
 import type { Shop } from "@/features/shops/types/shop.types";
 import { fromCents } from "@/lib/utils/currency";
 import type { ActionResult } from "@/types/action.types";
+
+const IMAGE_INPUT_ACCEPT = "image/jpeg,image/png,image/webp";
+
+/** A file picked in create mode, held client-side until the product exists. */
+interface PendingImage {
+  file: File;
+  previewUrl: string;
+}
 
 const selectClasses =
   "h-10 rounded-md border border-border bg-background px-3 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring";
@@ -50,10 +62,83 @@ export function ProductForm({ categories, shops, product, onDone }: ProductFormP
   const fieldErrors = state && !state.success ? state.fieldErrors : undefined;
   const formError = state && !state.success && !state.fieldErrors ? state.error : undefined;
 
+  // Edit mode: images already exist server-side, managed against the live list.
+  const [images, setImages] = useState<ProductImage[]>(product?.images ?? []);
+  // Create mode: the product doesn't exist yet, so files are held client-side
+  // and uploaded once `createProductAction` returns an id (see the effect below).
+  const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [isImagePending, startImageTransition] = useTransition();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
-    if (state?.success) onDone?.();
+    if (!state?.success) return;
+
+    if (!isEdit && pendingImages.length > 0) {
+      const newProductId = state.data.id;
+      startImageTransition(async () => {
+        for (const pending of pendingImages) {
+          const formData = new FormData();
+          formData.append("image", pending.file);
+          const result = await uploadProductImageAction(newProductId, formData);
+          if (!result.success) setImageError(result.error);
+          URL.revokeObjectURL(pending.previewUrl);
+        }
+        setPendingImages([]);
+        onDone?.();
+      });
+      return;
+    }
+
+    onDone?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
+
+  function handleFilesSelected(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return;
+    const files = Array.from(fileList);
+    setImageError(null);
+
+    if (isEdit && product) {
+      startImageTransition(async () => {
+        for (const file of files) {
+          const formData = new FormData();
+          formData.append("image", file);
+          const result = await uploadProductImageAction(product.id, formData);
+          if (result.success) {
+            setImages((current) => [...current, result.data]);
+          } else {
+            setImageError(result.error);
+          }
+        }
+      });
+    } else {
+      setPendingImages((current) => [
+        ...current,
+        ...files.map((file) => ({ file, previewUrl: URL.createObjectURL(file) })),
+      ]);
+    }
+
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function handleRemovePendingImage(previewUrl: string) {
+    setPendingImages((current) => current.filter((image) => image.previewUrl !== previewUrl));
+    URL.revokeObjectURL(previewUrl);
+  }
+
+  function handleDeleteImage(imageId: string) {
+    if (!product) return;
+    setImageError(null);
+    startImageTransition(async () => {
+      const result = await deleteProductImageAction(imageId, product.id);
+      if (result.success) {
+        setImages((current) => current.filter((image) => image.id !== imageId));
+      } else {
+        setImageError(result.error);
+      }
+    });
+  }
 
   return (
     <form action={formAction} noValidate aria-busy={isPending} className="flex flex-col gap-4">
@@ -81,6 +166,73 @@ export function ProductForm({ categories, shops, product, onDone }: ProductFormP
           placeholder="Describe the item…"
           className={textareaClasses}
         />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <span className="text-sm font-medium">Photos</span>
+
+        {images.length > 0 || pendingImages.length > 0 ? (
+          <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+            {images.map((image) => (
+              <div key={image.id} className="group relative aspect-square overflow-hidden rounded-md border border-border">
+                <Image
+                  src={image.url}
+                  alt={image.altText ?? ""}
+                  fill
+                  className="object-cover"
+                  sizes="120px"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleDeleteImage(image.id)}
+                  disabled={isImagePending}
+                  aria-label="Remove image"
+                  className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white transition-opacity hover:bg-black/80 disabled:opacity-50"
+                >
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              </div>
+            ))}
+            {pendingImages.map((pending) => (
+              <div
+                key={pending.previewUrl}
+                className="group relative aspect-square overflow-hidden rounded-md border border-border"
+              >
+                <Image
+                  src={pending.previewUrl}
+                  alt=""
+                  fill
+                  unoptimized
+                  className="object-cover"
+                  sizes="120px"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleRemovePendingImage(pending.previewUrl)}
+                  aria-label="Remove image"
+                  className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white transition-opacity hover:bg-black/80"
+                >
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={IMAGE_INPUT_ACCEPT}
+          multiple
+          onChange={(event) => handleFilesSelected(event.target.files)}
+          disabled={isImagePending}
+          className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-rj-black file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-rj-white"
+        />
+        {imageError ? (
+          <p role="alert" className="text-xs text-rj-red-dark">
+            {imageError}
+          </p>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-2 gap-4">

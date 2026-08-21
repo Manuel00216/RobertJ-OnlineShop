@@ -32,6 +32,7 @@ import type {
 } from "@/features/products/schemas/product.schema";
 import type {
   Product,
+  ProductImage,
   ProductListParams,
 } from "@/features/products/types/product.types";
 import type { Category } from "@/features/categories/types/category.types";
@@ -586,6 +587,150 @@ export async function archiveProduct(
 
   if (error) {
     throw new Error(`Failed to archive product: ${error.message}`);
+  }
+}
+
+/**
+ * Cheap ownership check for a seller before an image write — mirrors the
+ * `product_images` RLS policies' own `p.seller_id = auth.uid()` check
+ * (no `shopId` clause: unlike `products`, `product_images` RLS was never
+ * shop-aware, so there's nothing to gain by checking shop membership here).
+ */
+export async function productBelongsToSeller(
+  productId: string,
+  sellerId: string,
+): Promise<boolean> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PRODUCTS)
+    .select("id")
+    .eq("id", productId)
+    .eq("seller_id", sellerId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to verify product ownership: ${error.message}`);
+  }
+  return Boolean(data);
+}
+
+/**
+ * Uploads one product photo to the public `product-images` bucket and
+ * returns its public URL — mirrors `uploadPaymentReceipt`'s path convention
+ * (`{parent_id}/{uuid}.{ext}`), except this bucket is public (product photos
+ * must be visible to guests) so the URL, not a private path, is what
+ * `product_images.url` stores (see the `product_images_url_scheme` check
+ * constraint, which requires a full `https?://` value).
+ */
+export async function uploadProductImage(
+  productId: string,
+  file: File,
+): Promise<string> {
+  const supabase = await createSupabaseServerClient();
+  const ext = file.name.split(".").pop() ?? "jpg";
+  const path = `${productId}/${crypto.randomUUID()}.${ext}`;
+
+  const { error } = await supabase.storage
+    .from("product-images")
+    .upload(path, file, { contentType: file.type });
+
+  if (error) {
+    throw new Error(`Failed to upload image: ${error.message}`);
+  }
+
+  const { data } = supabase.storage.from("product-images").getPublicUrl(path);
+  return data.publicUrl;
+}
+
+/**
+ * Attaches an already-uploaded image to a product. `sort_order` is
+ * server-computed (one past the current max) so callers never have to track
+ * ordering themselves, respecting the `unique (product_id, sort_order)`
+ * constraint without a client-supplied index that could collide.
+ */
+export async function addProductImage(
+  productId: string,
+  url: string,
+): Promise<ProductImage> {
+  const supabase = await createSupabaseServerClient();
+
+  const { data: existing, error: readError } = await supabase
+    .from(DATABASE_TABLES.PRODUCT_IMAGES)
+    .select("sort_order")
+    .eq("product_id", productId)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (readError) {
+    throw new Error(`Failed to load existing images: ${readError.message}`);
+  }
+
+  const nextSortOrder = existing ? existing.sort_order + 1 : 0;
+
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PRODUCT_IMAGES)
+    .insert({ product_id: productId, url, sort_order: nextSortOrder })
+    .select("id, url, alt_text, sort_order")
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to save image: ${error.message}`);
+  }
+
+  return {
+    id: data.id,
+    url: data.url,
+    altText: data.alt_text,
+    sortOrder: data.sort_order,
+  };
+}
+
+/**
+ * Removes a product image row and its Storage object.
+ * `owner`: same defense-in-depth scope as `updateProduct`/`archiveProduct`
+ * (`null` = admin, RLS is the complete boundary; otherwise re-verify the
+ * image's parent product belongs to this seller before deleting anything).
+ */
+export async function deleteProductImage(
+  imageId: string,
+  owner: { sellerId: string } | null,
+): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+
+  const { data: image, error: readError } = await supabase
+    .from(DATABASE_TABLES.PRODUCT_IMAGES)
+    .select("id, url, product_id, products!inner ( seller_id )")
+    .eq("id", imageId)
+    .maybeSingle<{
+      id: string;
+      url: string;
+      product_id: string;
+      products: { seller_id: string };
+    }>();
+
+  if (readError) {
+    throw new Error(`Failed to load image: ${readError.message}`);
+  }
+  if (!image) {
+    throw new Error("Image not found.");
+  }
+  if (owner && image.products.seller_id !== owner.sellerId) {
+    throw new Error("Image not found.");
+  }
+
+  const { error: deleteError } = await supabase
+    .from(DATABASE_TABLES.PRODUCT_IMAGES)
+    .delete()
+    .eq("id", imageId);
+
+  if (deleteError) {
+    throw new Error(`Failed to delete image: ${deleteError.message}`);
+  }
+
+  const path = new URL(image.url).pathname.split("/product-images/")[1];
+  if (path) {
+    await supabase.storage.from("product-images").remove([path]);
   }
 }
 
@@ -1208,6 +1353,33 @@ export async function getBuyerOrderSummary(
 }
 
 /**
+ * Dashboard equivalent of `getBuyerOrderSummary` — same per-status-count +
+ * 5-most-recent shape, but with no manual owner filter: matches
+ * `listDashboardOrders`'s existing "RLS is the primary boundary" convention
+ * (a seller's rows are scoped to `seller_id = auth.uid()`, an admin sees
+ * every order).
+ */
+export async function getDashboardOrderSummary(): Promise<OrderSummary> {
+  const supabase = await createSupabaseServerClient();
+
+  const counts = await Promise.all(
+    ORDER_STATUS_FLOW.map(async (status) => {
+      const { count, error } = await supabase
+        .from(DATABASE_TABLES.ORDERS)
+        .select("id", { count: "exact", head: true })
+        .eq("order_status", status);
+      return [status, error ? 0 : (count ?? 0)] as const;
+    }),
+  );
+
+  const statusCounts = Object.fromEntries(counts) as Record<OrderStatus, number>;
+
+  const recent = await listDashboardOrders({ page: 1, pageSize: 5 });
+
+  return { statusCounts, recentOrders: recent.items };
+}
+
+/**
  * Cancels one of the buyer's own orders. Ownership is enforced by RLS and the
  * `buyer_id` filter; the cancellable-state rule (pending/confirmed) is enforced
  * here because the DB trigger permits a buyer to set `cancelled` from any state.
@@ -1251,10 +1423,11 @@ export async function cancelBuyerOrder(
 
 /**
  * Every order visible to the caller for management purposes — no manual
- * seller/admin filtering, matching `listDashboardProducts()`/
- * `listDashboardInventory()`'s "RLS is the primary boundary" pattern: a
- * seller sees their own orders (`seller_id = auth.uid()`), an admin sees
- * every order.
+ * seller/admin filtering, matching `listDashboardInventory()`'s "RLS is the
+ * primary boundary" pattern: a seller sees their own orders
+ * (`seller_id = auth.uid()`), an admin sees every order. Safe to rely on RLS
+ * alone here because `orders`' SELECT policy has no public/unscoped clause
+ * (unlike `products` — see `listDashboardProducts()`'s owner-filter note).
  */
 export async function listDashboardOrders(
   params: OrderListParams,
@@ -1967,18 +2140,35 @@ export async function assignSellerShop(
 
 /**
  * Every product visible to the caller for management purposes — no status
- * filter (unlike `listProducts`, built for the storefront) and no manual
- * shop/seller filtering. RLS alone determines the result: a shop member sees
- * their own shop's products at every status, an admin sees everything
- * (including legacy/unassigned products with `shop_id = null`), the same
- * "RLS is the primary boundary" pattern as `listShops()`/`listPendingPayments()`.
+ * filter (unlike `listProducts`, built for the storefront).
+ *
+ * Unlike `listDashboardOrders`/`listDashboardInventory`, this **cannot**
+ * rely on RLS alone: `products`' SELECT policy has a standalone
+ * `status = 'active' or seller_id = auth.uid() or is_admin()` clause (it
+ * also has to serve the public storefront), so "no manual filter" here would
+ * return every *active* product from every seller platform-wide, not just
+ * the caller's own — a seller's dashboard list would silently include other
+ * sellers' listings (discovered 2026-08-21: this let a seller "Edit" a
+ * product that wasn't theirs, then fail confusingly on save/image-upload).
+ * `owner`: `null` = admin (no filter, sees everything); otherwise scoped to
+ * the caller's own products or shop, matching `updateProduct`/`archiveProduct`'s
+ * owner-filter shape.
  */
-export async function listDashboardProducts(): Promise<Product[]> {
+export async function listDashboardProducts(
+  owner: { sellerId: string; shopId: string | null } | null,
+): Promise<Product[]> {
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase
-    .from(DATABASE_TABLES.PRODUCTS)
-    .select(PRODUCT_COLUMNS)
-    .order("created_at", { ascending: false });
+  let query = supabase.from(DATABASE_TABLES.PRODUCTS).select(PRODUCT_COLUMNS);
+
+  if (owner) {
+    query = query.or(
+      owner.shopId
+        ? `seller_id.eq.${owner.sellerId},shop_id.eq.${owner.shopId}`
+        : `seller_id.eq.${owner.sellerId}`,
+    );
+  }
+
+  const { data, error } = await query.order("created_at", { ascending: false });
 
   if (error) {
     throw new Error(`Failed to load products: ${error.message}`);
@@ -2075,9 +2265,10 @@ function toInventoryItem(row: InventoryRowWithJoins): InventoryItem {
 
 /**
  * Every inventory row visible to the caller — no manual shop/seller
- * filtering, matching `listDashboardProducts()`'s "RLS is the primary
- * boundary" pattern: a shop member sees their own shop's stock, an admin
- * sees every shop's.
+ * filtering. Safe to rely on RLS alone here (unlike `listDashboardProducts()`,
+ * which needs an explicit owner filter): `inventory`'s SELECT policy has no
+ * public/unscoped clause, so a shop member sees only their own shop's stock,
+ * an admin sees every shop's.
  */
 export async function listDashboardInventory(): Promise<InventoryItem[]> {
   const supabase = await createSupabaseServerClient();

@@ -103,7 +103,35 @@ export const assignProductShopSchema = z.object({
   shopId: z.uuid(),
 });
 
+/** Mirrors the `product-images` bucket's own file_size_limit/allowed_mime_types
+ * (see the storage migration) so the UI fails fast instead of round-tripping
+ * to Storage only to be rejected there. */
+const MAX_PRODUCT_IMAGE_BYTES = 5 * 1024 * 1024;
+const ALLOWED_PRODUCT_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
+export const uploadProductImageSchema = z.object({
+  productId: z.uuid(),
+  image: z
+    .instanceof(File, { message: "An image is required." })
+    .refine((file) => file.size > 0, "An image is required.")
+    .refine(
+      (file) => file.size <= MAX_PRODUCT_IMAGE_BYTES,
+      "Image must be 5MB or smaller.",
+    )
+    .refine(
+      (file) => ALLOWED_PRODUCT_IMAGE_TYPES.includes(file.type),
+      "Image must be a JPEG, PNG, or WebP file.",
+    ),
+});
+
+export const deleteProductImageSchema = z.object({
+  imageId: z.uuid(),
+  productId: z.uuid(),
+});
+
 export type ProductListParamsInput = z.input<typeof productListParamsSchema>;
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;
 export type AssignProductShopInput = z.infer<typeof assignProductShopSchema>;
+export type UploadProductImageInput = z.infer<typeof uploadProductImageSchema>;
+export type DeleteProductImageInput = z.infer<typeof deleteProductImageSchema>;

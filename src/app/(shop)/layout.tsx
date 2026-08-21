@@ -5,10 +5,9 @@ import { SiteHeader } from "@/components/layout/SiteHeader";
  * Application chrome for the transactional side of the app (products, cart,
  * sign-in, …). The marketing/landing surface uses its own full-bleed layout,
  * so this header/footer no longer live in the root layout. `bg-rj-white` is
- * explicit here (mirroring `(marketing)/layout.tsx`) because the root
- * layout's `bg-background` token flips to near-black under
- * `prefers-color-scheme: dark` — without this override, every shop page goes
- * black for anyone on a dark-mode OS/browser.
+ * explicit here (mirroring `(marketing)/layout.tsx`) — the app is light-only
+ * by design (see `globals.css`), so this just keeps the surface pinned to
+ * the brand palette rather than the generic `bg-background` token.
  */
 export default function ShopLayout({
   children,

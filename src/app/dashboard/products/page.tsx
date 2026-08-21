@@ -3,16 +3,23 @@ import type { Metadata } from "next";
 import { USER_ROLES } from "@/constants/roles";
 import { DashboardProductsPanel } from "@/features/products/components/DashboardProductsPanel";
 import { CatalogHeader } from "@/features/products/components/CatalogHeader";
-import { listActiveCategories, listDashboardProducts, listShops, requireSessionUser } from "@/lib/supabase/queries";
+import {
+  getOwnShopId,
+  listActiveCategories,
+  listDashboardProducts,
+  listShops,
+  requireSessionUser,
+} from "@/lib/supabase/queries";
 
 export const metadata: Metadata = { title: "Products — Dashboard" };
 
 export default async function DashboardProductsPage() {
   const user = await requireSessionUser();
   const isAdmin = user.role === USER_ROLES.admin;
+  const owner = isAdmin ? null : { sellerId: user.id, shopId: await getOwnShopId(user.id) };
 
   const [products, categories, shops] = await Promise.all([
-    listDashboardProducts(),
+    listDashboardProducts(owner),
     listActiveCategories(),
     isAdmin ? listShops() : Promise.resolve([]),
   ]);
