@@ -26,6 +26,7 @@ export const ROUTES = {
   adminUsers: "/dashboard/users",
   adminShops: "/dashboard/shops",
   adminSettings: "/dashboard/settings",
+  adminAuditLogs: "/dashboard/audit-logs",
   notifications: "/notifications",
   assistant: "/assistant",
   signIn: "/sign-in",

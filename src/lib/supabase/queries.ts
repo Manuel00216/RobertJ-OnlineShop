@@ -79,6 +79,7 @@ import type {
   ReturnRequest,
   SellerReturnDecision,
 } from "@/features/returns/types/return.types";
+import type { AdminActionLogEntry } from "@/features/audit-log/types/audit-log.types";
 
 /**
  * Centralized, reusable Supabase data-access layer.
@@ -2070,6 +2071,60 @@ export async function listReturnRequests(status?: ReturnStatus): Promise<ReturnR
     throw new Error(`Failed to load return requests: ${error.message}`);
   }
   return (data ?? []).map((row) => toReturnRequest(row as ReturnRequestRowWithJoins));
+}
+
+// ============================================================================
+// Audit Log
+// ============================================================================
+
+const ADMIN_ACTION_LOG_COLUMNS = `
+  id, actor_id, action, target_user_id, target_shop_id, metadata, created_at,
+  actor:profiles!admin_action_log_actor_id_fkey ( full_name, username ),
+  target_user:profiles!admin_action_log_target_user_id_fkey ( full_name, username ),
+  target_shop:shops!admin_action_log_target_shop_id_fkey ( name )
+`;
+
+type AdminActionLogRow = Database["public"]["Tables"]["admin_action_log"]["Row"];
+type AdminActionLogRowWithJoins = AdminActionLogRow & {
+  actor: Pick<ProfileRow, "full_name" | "username"> | null;
+  target_user: Pick<ProfileRow, "full_name" | "username"> | null;
+  target_shop: { name: string } | null;
+};
+
+function toAdminActionLogEntry(row: AdminActionLogRowWithJoins): AdminActionLogEntry {
+  return {
+    id: row.id,
+    actorId: row.actor_id,
+    actorName: row.actor?.full_name ?? row.actor?.username ?? null,
+    action: row.action,
+    targetUserId: row.target_user_id,
+    targetUserName: row.target_user?.full_name ?? row.target_user?.username ?? null,
+    targetShopId: row.target_shop_id,
+    targetShopName: row.target_shop?.name ?? null,
+    metadata: row.metadata as Record<string, unknown> | null,
+    createdAt: row.created_at,
+  };
+}
+
+/**
+ * Every logged high-stakes admin action, newest first — admin-only (RLS
+ * already gates SELECT to `is_admin()`, matching the "no manual filter"
+ * pattern elsewhere in this file). Deliberately narrow: only whatever the
+ * opted-in RPCs actually write (`admin_assign_seller_shop`,
+ * `admin_set_user_active`, `decide_return`) — this reads what exists, it is
+ * not a place to add retroactive logging for unrelated actions.
+ */
+export async function listAdminActionLog(): Promise<AdminActionLogEntry[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.ADMIN_ACTION_LOG)
+    .select(ADMIN_ACTION_LOG_COLUMNS)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error(`Failed to load audit log: ${error.message}`);
+  }
+  return (data ?? []).map((row) => toAdminActionLogEntry(row as AdminActionLogRowWithJoins));
 }
 
 // ============================================================================

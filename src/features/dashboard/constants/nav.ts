@@ -2,6 +2,7 @@ import {
   BarChart3,
   Boxes,
   ClipboardList,
+  History,
   LayoutGrid,
   Package,
   RotateCcw,
@@ -40,6 +41,7 @@ export const DASHBOARD_NAV_ITEMS: readonly DashboardNavItem[] = [
   { href: ROUTES.reports, label: "Reports", icon: BarChart3, roles: DASHBOARD_ROLES, status: "available" },
   { href: ROUTES.adminUsers, label: "Users", icon: Users, roles: ADMIN_ONLY_ROLES, status: "available" },
   { href: ROUTES.adminShops, label: "Shops", icon: Store, roles: ADMIN_ONLY_ROLES, status: "available" },
+  { href: ROUTES.adminAuditLogs, label: "Audit Log", icon: History, roles: ADMIN_ONLY_ROLES, status: "available" },
   { href: ROUTES.adminSettings, label: "Settings", icon: Settings, roles: ADMIN_ONLY_ROLES, status: "comingSoon" },
 ] as const;
 
