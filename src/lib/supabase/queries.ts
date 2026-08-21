@@ -925,7 +925,11 @@ export async function submitReview(
   const { data, error } = await supabase.rpc("submit_review", {
     p_order_item_id: orderItemId,
     p_rating: rating,
-    p_comment: comment,
+    // The RPC has no `default null` for p_comment, so codegen types it as
+    // non-nullable even though the function body already normalizes ''
+    // back to NULL via `nullif(trim(p_comment), '')` — passing '' here is
+    // behaviorally identical to null, not a change in what gets stored.
+    p_comment: comment ?? "",
   });
 
   if (error) {
@@ -2120,6 +2124,7 @@ export async function listAdminUsers(): Promise<AdminUser[]> {
     createdAt: row.created_at,
     shopId: row.shop_id,
     shopName: row.shop_name,
+    isActive: row.is_active,
   }));
 }
 
@@ -2138,6 +2143,28 @@ export async function assignSellerShop(
   const { error } = await supabase.rpc("admin_assign_seller_shop", {
     p_user_id: userId,
     p_shop_id: shopId,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+/**
+ * Activates/deactivates a buyer or seller via the `admin_set_user_active`
+ * RPC — the sole write path (`is_active` has no client UPDATE grant, and
+ * RLS never exposes another user's row to an admin for a plain client
+ * update). The RPC itself rejects self-targeting and any `role = 'admin'`
+ * target, and logs the call to `admin_action_log`.
+ */
+export async function setUserActive(
+  userId: string,
+  isActive: boolean,
+): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("admin_set_user_active", {
+    p_user_id: userId,
+    p_is_active: isActive,
   });
 
   if (error) {
@@ -2559,7 +2586,7 @@ export const getSessionUser = cache(
 
     const { data: profile } = await supabase
       .from(DATABASE_TABLES.PROFILES)
-      .select("full_name, avatar_url, role")
+      .select("full_name, avatar_url, role, is_active")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -2569,6 +2596,10 @@ export const getSessionUser = cache(
       fullName: profile?.full_name ?? null,
       avatarUrl: profile?.avatar_url ?? null,
       role: profile?.role ?? USER_ROLES.buyer,
+      // No profile row is not the same as deactivated — fail open only for
+      // the "row missing" edge case (e.g. mid-signup), never for is_active's
+      // own value.
+      isActive: profile?.is_active ?? true,
     };
   },
 );
@@ -2604,11 +2635,22 @@ export async function requireRecoverySession(): Promise<void> {
   }
 }
 
-/** Throws when unauthenticated — use at the top of protected Server Actions. */
+/**
+ * Throws when unauthenticated, or when the session belongs to a deactivated
+ * account — the sole enforcement point for `profiles.is_active` across the
+ * app. A deactivated user's Supabase Auth session stays cryptographically
+ * valid (this never touches auth.users); this is the application-layer
+ * check that treats it as unauthorized anyway. Every protected Server
+ * Action and `requireRole()` call goes through this, so nothing else needs
+ * its own is_active check.
+ */
 export async function requireSessionUser(): Promise<SessionUser> {
   const user = await getSessionUser();
   if (!user) {
     throw new Error("You must be signed in to perform this action.");
+  }
+  if (!user.isActive) {
+    throw new Error("Your account has been deactivated. Contact support for assistance.");
   }
   return user;
 }

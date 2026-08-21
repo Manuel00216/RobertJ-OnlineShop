@@ -493,6 +493,7 @@ export type Database = {
           created_at: string
           full_name: string | null
           id: string
+          is_active: boolean
           payment_qr_url: string | null
           phone: string | null
           role: Database["public"]["Enums"]["user_role"]
@@ -505,6 +506,7 @@ export type Database = {
           created_at?: string
           full_name?: string | null
           id: string
+          is_active?: boolean
           payment_qr_url?: string | null
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
@@ -517,6 +519,7 @@ export type Database = {
           created_at?: string
           full_name?: string | null
           id?: string
+          is_active?: boolean
           payment_qr_url?: string | null
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
@@ -804,6 +807,7 @@ export type Database = {
           created_at: string
           full_name: string | null
           id: string
+          is_active: boolean
           payment_qr_url: string | null
           phone: string | null
           role: Database["public"]["Enums"]["user_role"]
@@ -825,11 +829,34 @@ export type Database = {
           email: string
           full_name: string
           id: string
+          is_active: boolean
           role: Database["public"]["Enums"]["user_role"]
           shop_id: string
           shop_name: string
           username: string
         }[]
+      }
+      admin_set_user_active: {
+        Args: { p_is_active: boolean; p_user_id: string }
+        Returns: {
+          avatar_url: string | null
+          bio: string | null
+          created_at: string
+          full_name: string | null
+          id: string
+          is_active: boolean
+          payment_qr_url: string | null
+          phone: string | null
+          role: Database["public"]["Enums"]["user_role"]
+          updated_at: string
+          username: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "profiles"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       check_rate_limit: {
         Args: { p_key: string; p_max_hits: number; p_window_seconds: number }
@@ -879,9 +906,9 @@ export type Database = {
         Args: { p_limit?: number }
         Returns: {
           event_type: string
+          occurred_at: string
           order_id: string
           order_number: string
-          occurred_at: string
         }[]
       }
       get_my_profile: {
@@ -892,6 +919,7 @@ export type Database = {
           created_at: string
           full_name: string | null
           id: string
+          is_active: boolean
           payment_qr_url: string | null
           phone: string | null
           role: Database["public"]["Enums"]["user_role"]
@@ -957,7 +985,11 @@ export type Database = {
       }
       resolve_shop_membership: {
         Args: { p_seller_ids?: string[]; p_shop_ids?: string[] }
-        Returns: { seller_id: string; shop_id: string; shop_name: string }[]
+        Returns: {
+          seller_id: string
+          shop_id: string
+          shop_name: string
+        }[]
       }
       slugify: { Args: { value: string }; Returns: string }
       submit_qr_payment: {
@@ -984,11 +1016,7 @@ export type Database = {
         }
       }
       submit_review: {
-        Args: {
-          p_comment: string | null
-          p_order_item_id: string
-          p_rating: number
-        }
+        Args: { p_comment: string; p_order_item_id: string; p_rating: number }
         Returns: {
           buyer_id: string
           comment: string | null

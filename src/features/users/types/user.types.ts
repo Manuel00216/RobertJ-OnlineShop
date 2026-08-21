@@ -12,4 +12,6 @@ export interface AdminUser {
   /** Current shop assignment, or null if unassigned (always null for buyers/admins). */
   shopId: string | null;
   shopName: string | null;
+  /** Admin-controlled account state — sole write path: `admin_set_user_active()`. */
+  isActive: boolean;
 }

@@ -1,16 +1,17 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ConfirmPanel } from "@/components/ui/confirm-panel";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { ROLE_LABELS, USER_ROLES, type UserRole } from "@/constants/roles";
-import { assignSellerShopAction } from "@/features/users/actions/user.actions";
+import { assignSellerShopAction, setUserActiveAction } from "@/features/users/actions/user.actions";
 import type { AdminUser } from "@/features/users/types/user.types";
 import type { Shop } from "@/features/shops/types/shop.types";
+import { cn } from "@/lib/utils/cn";
 import { formatDate } from "@/lib/utils/date";
 import { getInitials } from "@/lib/utils/format";
 
@@ -40,6 +41,15 @@ export function UserRow({ user, shops }: UserRowProps) {
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  const [confirmingActiveChange, setConfirmingActiveChange] = useState(false);
+  const [activeError, setActiveError] = useState<string | null>(null);
+  const [isActivePending, startActiveTransition] = useTransition();
+  const activeTriggerRef = useRef<HTMLButtonElement>(null);
+
+  // A deactivated admin account is a lockout risk the RPC itself refuses
+  // (admin_set_user_active rejects any role='admin' target) — hide the
+  // control entirely rather than show one that will always fail.
+  const canDeactivate = user.role !== USER_ROLES.admin;
   const canAssignShop = user.role !== USER_ROLES.admin;
   const actionLabel = user.role === USER_ROLES.buyer ? "Promote to Seller" : "Reassign shop";
   const selectedShop = shops.find((shop) => shop.id === selectedShopId);
@@ -59,6 +69,18 @@ export function UserRow({ user, shops }: UserRowProps) {
     });
   }
 
+  function handleConfirmActiveChange() {
+    setActiveError(null);
+    startActiveTransition(async () => {
+      const result = await setUserActiveAction(user.id, !user.isActive);
+      if (!result.success) {
+        setActiveError(result.error);
+        return;
+      }
+      setConfirmingActiveChange(false);
+    });
+  }
+
   return (
     <Card className="border-rj-gray-100">
       <CardContent className="flex flex-col gap-3 p-5">
@@ -73,6 +95,7 @@ export function UserRow({ user, shops }: UserRowProps) {
                   {user.fullName ?? user.username ?? "Unnamed user"}
                 </p>
                 <Badge tone={ROLE_TONE[user.role]}>{ROLE_LABELS[user.role]}</Badge>
+                {user.isActive ? null : <Badge tone="danger">Inactive</Badge>}
               </div>
               <p className="mt-0.5 truncate text-xs text-rj-gray-600">
                 {user.email ?? "No email"} · {user.shopName ?? "Unassigned"} · Joined{" "}
@@ -81,17 +104,32 @@ export function UserRow({ user, shops }: UserRowProps) {
             </div>
           </div>
 
-          {canAssignShop ? (
-            assigning ? (
-              <Button type="button" variant="outline" size="rjSm" onClick={() => setAssigning(false)}>
-                Cancel
-              </Button>
-            ) : (
-              <Button type="button" variant="rj" size="rjSm" onClick={() => setAssigning(true)}>
-                {actionLabel}
-              </Button>
-            )
-          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            {canAssignShop ? (
+              assigning ? (
+                <Button type="button" variant="outline" size="rjSm" onClick={() => setAssigning(false)}>
+                  Cancel
+                </Button>
+              ) : (
+                <Button type="button" variant="rj" size="rjSm" onClick={() => setAssigning(true)}>
+                  {actionLabel}
+                </Button>
+              )
+            ) : null}
+
+            {canDeactivate && !confirmingActiveChange ? (
+              <button
+                type="button"
+                ref={activeTriggerRef}
+                className={cn(
+                  buttonVariants({ variant: user.isActive ? "danger" : "outline", size: "rjSm" }),
+                )}
+                onClick={() => setConfirmingActiveChange(true)}
+              >
+                {user.isActive ? "Deactivate" : "Reactivate"}
+              </button>
+            ) : null}
+          </div>
         </div>
 
         {error ? <ErrorState title="Couldn't assign the shop" message={error} /> : null}
@@ -159,6 +197,37 @@ export function UserRow({ user, shops }: UserRowProps) {
               </div>
             ) : null}
           </div>
+        ) : null}
+
+        {activeError ? (
+          <ErrorState title="Couldn't update this account's status" message={activeError} />
+        ) : null}
+
+        {confirmingActiveChange ? (
+          <ConfirmPanel
+            label={
+              user.isActive
+                ? `Deactivate ${user.fullName ?? user.email}`
+                : `Reactivate ${user.fullName ?? user.email}`
+            }
+            title={
+              user.isActive
+                ? `Deactivate ${user.fullName ?? user.email}?`
+                : `Reactivate ${user.fullName ?? user.email}?`
+            }
+            description={
+              user.isActive
+                ? "They'll be signed out and unable to sign in, place orders, or manage their shop. Their order history, products, and shop data are kept — nothing is deleted."
+                : "They'll be able to sign in and perform actions again."
+            }
+            tone={user.isActive ? "danger" : "neutral"}
+            confirmLabel={user.isActive ? "Deactivate" : "Reactivate"}
+            pendingLabel="Saving…"
+            isPending={isActivePending}
+            triggerRef={activeTriggerRef}
+            onConfirm={handleConfirmActiveChange}
+            onCancel={() => setConfirmingActiveChange(false)}
+          />
         ) : null}
       </CardContent>
     </Card>

@@ -7,3 +7,11 @@ export const assignSellerShopSchema = z.object({
 });
 
 export type AssignSellerShopInput = z.infer<typeof assignSellerShopSchema>;
+
+/** Payload for activating/deactivating a buyer or seller account. */
+export const setUserActiveSchema = z.object({
+  userId: z.uuid(),
+  isActive: z.boolean(),
+});
+
+export type SetUserActiveInput = z.infer<typeof setUserActiveSchema>;

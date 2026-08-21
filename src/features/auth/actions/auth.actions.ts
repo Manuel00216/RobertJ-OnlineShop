@@ -39,6 +39,17 @@ export async function signInAction(
     return fail(mapAuthError(error));
   }
 
+  // Password auth succeeded — a deactivated account's session is still
+  // cryptographically valid at this point (it's a real Supabase Auth
+  // session), so check is_active explicitly and undo the sign-in rather
+  // than let the user land on a page that then fails confusingly on their
+  // first click via requireSessionUser().
+  const user = await queries.getSessionUser();
+  if (user && !user.isActive) {
+    await queries.signOut();
+    return fail("Your account has been deactivated. Contact support for assistance.");
+  }
+
   revalidatePath("/", "layout");
   return ok(null);
 }

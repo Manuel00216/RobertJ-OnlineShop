@@ -8,6 +8,8 @@ export interface SessionUser {
   fullName: string | null;
   avatarUrl: string | null;
   role: string;
+  /** Admin-controlled account state — see `requireSessionUser()`, the enforcement point. */
+  isActive: boolean;
 }
 
 export type Nullable<T> = T | null;
