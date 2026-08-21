@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import { USER_ROLES } from "@/constants/roles";
 import { PRODUCT_CONDITION, PRODUCT_CONDITION_LABELS } from "@/constants/status";
 import { ROUTES } from "@/constants/routes";
 import { EmptyState } from "@/components/feedback/EmptyState";
@@ -71,8 +72,15 @@ function toTileItem(
     name: product.title,
     // Real shop name when the seller belongs to one (see
     // `resolve_shop_membership`); falls back to the seller's own profile
-    // name for a legacy/unassigned seller (TD-1), then a generic label.
-    shopName: shopNames.get(product.sellerId) ?? product.sellerName ?? "RobertJ Seller",
+    // name for a legacy/unassigned seller (TD-1) — but only when `seller_id`
+    // actually resolves to a `seller` account. An admin-authored or
+    // demoted-account product has no shop and no business showing that
+    // account's personal name on the storefront, so it goes straight to the
+    // generic label instead.
+    shopName:
+      shopNames.get(product.sellerId) ??
+      (product.sellerRole === USER_ROLES.seller ? product.sellerName : null) ??
+      "RobertJ Seller",
     priceCents: product.priceCents,
     originalPriceCents: null,
     currency: product.currency,

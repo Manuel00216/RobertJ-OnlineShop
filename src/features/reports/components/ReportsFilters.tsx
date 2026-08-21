@@ -27,7 +27,7 @@ export interface ReportsFiltersProps {
 }
 
 const CONTROL =
-  "h-9 rounded-md border border-rj-gray-200 bg-rj-white px-3 text-sm text-rj-black focus:border-rj-black focus:outline-none";
+  "h-9 rounded-md border border-rj-gray-200 bg-rj-white px-3 text-sm text-rj-black focus-visible:border-rj-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30";
 
 /**
  * Client filter bar: date presets, an explicit range, trend granularity, and

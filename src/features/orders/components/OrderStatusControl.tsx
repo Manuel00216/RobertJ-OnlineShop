@@ -124,7 +124,7 @@ export function OrderStatusControl({
             <Button
               type="button"
               variant="danger"
-              size="sm"
+              size="rjSm"
               isLoading={isPending}
               onClick={() => advance("cancelled")}
             >
@@ -133,7 +133,7 @@ export function OrderStatusControl({
             <Button
               type="button"
               variant="outline"
-              size="sm"
+              size="rjSm"
               disabled={isPending}
               onClick={() => {
                 setConfirmingCancel(false);

@@ -16,7 +16,11 @@
   --secondary-foreground: #171717;
   --success: #16a34a;
   --warning: #b45309;
-  --danger: #dc2626;
+  /* Matches rj-red-dark (#c8111e), not a separate red — every destructive
+     action in the app (dashboard Archive/Reject/Cancel/Deactivate as well as
+     brand CTAs) now shares one red family instead of two visibly different
+     ones on the same screen. */
+  --danger: #c8111e;
   --danger-foreground: #ffffff;
   --info: #0284c7;
 }
@@ -52,7 +56,12 @@
   --color-rj-gray-50: #f5f4f2;
   --color-rj-gray-100: #ebebeb;
   --color-rj-gray-200: #d4d4d4;
-  --color-rj-gray-400: #9b9b9b;
+  /* #9b9b9b measured ~2.8:1 on rj-white — fails WCAG AA (4.5:1) for the many
+     real-content uses (eyebrow labels, footer nav, body copy) that reach for
+     this token, not just its placeholder/disabled uses. #707070 clears AA
+     (~4.6:1 on rj-white, ~4.9:1 on pure white) with the smallest possible
+     darkening, while a single token keeps every consumer consistent. */
+  --color-rj-gray-400: #707070;
   --color-rj-gray-600: #6b6b6b;
   --color-rj-gray-800: #2d2d2d;
   --color-rj-gold: #f4b942;

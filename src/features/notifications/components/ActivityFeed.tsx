@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { EmptyState } from "@/components/feedback/EmptyState";
 import { ROUTES } from "@/constants/routes";
 import { formatDateTime } from "@/lib/utils/date";
 import { ACTIVITY_EVENT_COPY } from "@/features/notifications/constants/notification.constants";
@@ -13,9 +14,10 @@ export interface ActivityFeedProps {
 export function ActivityFeed({ events }: ActivityFeedProps) {
   if (events.length === 0) {
     return (
-      <p className="rounded-2xl border border-dashed border-rj-gray-200 p-10 text-center text-sm text-rj-gray-600">
-        No activity yet — updates on your orders and payments will show up here.
-      </p>
+      <EmptyState
+        title="No activity yet"
+        description="Updates on your orders and payments will show up here."
+      />
     );
   }
 

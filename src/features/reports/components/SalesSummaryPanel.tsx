@@ -23,7 +23,9 @@ function StatCard({
         <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-rj-gray-400">
           {label}
         </p>
-        <p className="font-serif text-3xl leading-none text-rj-black">{value}</p>
+        <p className="truncate font-serif text-2xl leading-tight tabular-nums text-rj-black sm:text-3xl">
+          {value}
+        </p>
         {hint ? <p className="text-xs text-rj-gray-500">{hint}</p> : null}
       </CardContent>
     </Card>

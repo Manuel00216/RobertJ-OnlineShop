@@ -147,7 +147,7 @@ export function VerificationCard({ payment, receiptUrl }: VerificationCardProps)
             <Button
               type="button"
               variant="danger"
-              size="sm"
+              size="rjSm"
               onClick={() => setPendingDecision("failed")}
             >
               Reject

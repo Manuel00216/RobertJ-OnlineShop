@@ -1,3 +1,4 @@
+import { USER_ROLES } from "@/constants/roles";
 import { ROUTES } from "@/constants/routes";
 import { FeaturedProductsGrid } from "@/features/landing/components/FeaturedProductsGrid";
 import { FEATURED_PRODUCTS_PLACEHOLDER } from "@/features/landing/constants/landing.constants";
@@ -56,9 +57,11 @@ export async function FeaturedProducts() {
         ? products.map((product) => ({
             key: product.id,
             name: product.title,
+            // See ProductGrid.tsx's toTileItem for why sellerName is gated
+            // on role: only a genuine `seller` account is ever a real shop owner.
             shop:
               shopNames.get(product.sellerId) ??
-              product.sellerName ??
+              (product.sellerRole === USER_ROLES.seller ? product.sellerName : null) ??
               "RobertJ Seller",
             priceCents: product.priceCents,
             originalPriceCents: null,

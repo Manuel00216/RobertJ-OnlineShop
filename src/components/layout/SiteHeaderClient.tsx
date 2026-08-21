@@ -117,7 +117,7 @@ export function SiteHeaderClient({ user, categories }: SiteHeaderClientProps) {
             onClick={() => setCategoriesOpen((v) => !v)}
             aria-expanded={categoriesOpen}
             aria-haspopup="menu"
-            className="flex items-center gap-1 rounded-full px-3 py-1.5 text-[13px] font-medium text-rj-gray-600 transition-colors hover:bg-rj-gray-100 hover:text-rj-black"
+            className="flex items-center gap-1 rounded-full px-3 py-1.5 text-[13px] font-medium text-rj-gray-600 transition-colors hover:bg-rj-gray-100 hover:text-rj-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30"
           >
             Categories
             <ChevronDown
@@ -220,7 +220,7 @@ export function SiteHeaderClient({ user, categories }: SiteHeaderClientProps) {
             onClick={() => setMobileSearchOpen((v) => !v)}
             aria-label="Open search"
             aria-expanded={mobileSearchOpen}
-            className="flex h-9 w-9 items-center justify-center rounded-full transition-colors hover:bg-rj-gray-100 md:hidden"
+            className="flex h-9 w-9 items-center justify-center rounded-full transition-colors hover:bg-rj-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30 md:hidden"
           >
             <Search className="h-4 w-4 text-rj-black" aria-hidden="true" />
           </button>
@@ -256,7 +256,7 @@ export function SiteHeaderClient({ user, categories }: SiteHeaderClientProps) {
             type="button"
             aria-label={menuOpen ? "Close menu" : "Open menu"}
             aria-expanded={menuOpen}
-            className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-rj-gray-100 md:hidden"
+            className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-rj-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30 md:hidden"
             onClick={() => setMenuOpen((v) => !v)}
           >
             {menuOpen ? (

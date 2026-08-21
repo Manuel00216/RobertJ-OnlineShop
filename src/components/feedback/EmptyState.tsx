@@ -9,12 +9,12 @@ export interface EmptyStateProps {
 export function EmptyState({ title, description, action }: EmptyStateProps) {
   return (
     <div
-      className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border p-10 text-center"
+      className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-rj-gray-200 p-10 text-center"
       role="status"
     >
-      <p className="text-sm font-medium">{title}</p>
+      <p className="text-sm font-medium text-rj-black">{title}</p>
       {description ? (
-        <p className="max-w-sm text-sm text-muted-foreground">{description}</p>
+        <p className="max-w-sm text-sm text-rj-gray-600">{description}</p>
       ) : null}
       {action ? <div className="mt-2">{action}</div> : null}
     </div>

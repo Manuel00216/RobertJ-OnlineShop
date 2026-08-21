@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { ErrorState } from "@/components/feedback/ErrorState";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ROUTES } from "@/constants/routes";
 import { USER_ROLES } from "@/constants/roles";
 import { manilaToday } from "@/features/reports/utils/report-range";
@@ -33,7 +34,9 @@ function StatTile({
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-rj-gray-400">
             {label}
           </p>
-          <p className="font-serif text-2xl leading-none text-rj-black">{value}</p>
+          <p className="truncate font-serif text-xl leading-tight tabular-nums text-rj-black sm:text-2xl">
+            {value}
+          </p>
         </CardContent>
       </Card>
     </Link>
@@ -102,8 +105,8 @@ export function DashboardKpiRowSkeleton() {
       {Array.from({ length: 6 }).map((_, i) => (
         <Card key={i} className="border-rj-gray-100">
           <CardContent className="flex flex-col gap-2 p-5">
-            <div className="h-3 w-16 animate-pulse rounded bg-muted" />
-            <div className="h-7 w-20 animate-pulse rounded bg-muted" />
+            <Skeleton className="h-3 w-16 bg-rj-gray-100" />
+            <Skeleton className="h-7 w-20 bg-rj-gray-100" />
           </CardContent>
         </Card>
       ))}

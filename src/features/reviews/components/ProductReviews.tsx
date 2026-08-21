@@ -1,3 +1,4 @@
+import { EmptyState } from "@/components/feedback/EmptyState";
 import { StarRating } from "@/features/reviews/components/StarRating";
 import type { ProductReviewSummary } from "@/features/reviews/types/review.types";
 
@@ -27,9 +28,10 @@ export function ProductReviews({ summary }: ProductReviewsProps) {
       </div>
 
       {reviewCount === 0 ? (
-        <p className="text-sm text-rj-gray-600">
-          No reviews yet — be the first to review this product after your order is delivered.
-        </p>
+        <EmptyState
+          title="No reviews yet"
+          description="Be the first to review this product after your order is delivered."
+        />
       ) : (
         <ul className="flex flex-col gap-4">
           {reviews.map((review) => (

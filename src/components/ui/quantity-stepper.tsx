@@ -33,7 +33,7 @@ export function QuantityStepper({
         onClick={() => onChange(clamp(value - 1))}
         disabled={value <= min}
         aria-label="Decrease quantity"
-        className="flex h-11 w-9 shrink-0 items-center justify-center rounded-full border-[1.5px] border-rj-gray-200 text-rj-black transition-colors hover:border-rj-black disabled:pointer-events-none disabled:opacity-40"
+        className="flex h-11 w-9 shrink-0 items-center justify-center rounded-full border-[1.5px] border-rj-gray-200 text-rj-black transition-colors hover:border-rj-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30 disabled:pointer-events-none disabled:opacity-40"
       >
         <Minus className="h-3.5 w-3.5" aria-hidden="true" />
       </button>
@@ -57,7 +57,7 @@ export function QuantityStepper({
         onClick={() => onChange(clamp(value + 1))}
         disabled={value >= max}
         aria-label="Increase quantity"
-        className="flex h-11 w-9 shrink-0 items-center justify-center rounded-full border-[1.5px] border-rj-gray-200 text-rj-black transition-colors hover:border-rj-black disabled:pointer-events-none disabled:opacity-40"
+        className="flex h-11 w-9 shrink-0 items-center justify-center rounded-full border-[1.5px] border-rj-gray-200 text-rj-black transition-colors hover:border-rj-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30 disabled:pointer-events-none disabled:opacity-40"
       >
         <Plus className="h-3.5 w-3.5" aria-hidden="true" />
       </button>

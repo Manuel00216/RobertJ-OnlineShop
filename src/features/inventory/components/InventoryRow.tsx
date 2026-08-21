@@ -41,7 +41,7 @@ export function InventoryRow({ item, isAdmin }: InventoryRowProps) {
             <Button
               type="button"
               variant="outline"
-              size="sm"
+              size="rjSm"
               onClick={() => setMode(mode === "history" ? "view" : "history")}
             >
               {mode === "history" ? "Hide history" : "History"}
@@ -49,7 +49,7 @@ export function InventoryRow({ item, isAdmin }: InventoryRowProps) {
             <Button
               type="button"
               variant="rj"
-              size="sm"
+              size="rjSm"
               onClick={() => setMode(mode === "adjust" ? "view" : "adjust")}
             >
               {mode === "adjust" ? "Cancel" : "Adjust stock"}

@@ -95,7 +95,7 @@ export function WishlistButton({
       disabled={isPending}
       onClick={handleClick}
       className={cn(
-        "flex h-7 w-7 items-center justify-center rounded-full bg-rj-white/90 shadow transition-colors hover:bg-rj-white disabled:opacity-60",
+        "flex h-7 w-7 items-center justify-center rounded-full bg-rj-white/90 shadow transition-colors hover:bg-rj-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30 disabled:opacity-60",
         className,
       )}
     >

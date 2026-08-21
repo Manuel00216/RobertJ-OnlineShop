@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
+import { USER_ROLES } from "@/constants/roles";
 import { ROUTES } from "@/constants/routes";
 import { PRODUCT_CONDITION_LABELS } from "@/constants/status";
 import { formatCurrency } from "@/lib/utils/currency";
@@ -50,7 +51,11 @@ export default async function ProductDetailPage({
   const shopNames = await getShopNamesBySellerIds([product.sellerId]).catch(
     () => new Map<string, string>(),
   );
-  const shopName = shopNames.get(product.sellerId) ?? product.sellerName;
+  // See ProductGrid.tsx's toTileItem for why sellerName is gated on role:
+  // only a genuine `seller` account is ever a real shop owner.
+  const shopName =
+    shopNames.get(product.sellerId) ??
+    (product.sellerRole === USER_ROLES.seller ? product.sellerName : null);
   const reviewSummary = await listProductReviews(product.id).catch(() => ({
     reviews: [],
     averageRating: null,

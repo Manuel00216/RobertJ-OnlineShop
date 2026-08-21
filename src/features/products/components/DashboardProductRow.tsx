@@ -57,7 +57,7 @@ export function DashboardProductRow({
           <Button
             type="button"
             variant="outline"
-            size="sm"
+            size="rjSm"
             className="mt-3"
             onClick={() => setMode("view")}
           >
@@ -119,7 +119,7 @@ export function DashboardProductRow({
                 <select
                   value={selectedShopId}
                   onChange={(event) => setSelectedShopId(event.target.value)}
-                  className="h-9 rounded-md border border-border bg-background px-2 text-sm"
+                  className="h-9 rounded-md border border-rj-gray-200 bg-rj-white px-2 text-sm text-rj-black outline-none transition-colors focus-visible:border-rj-black focus-visible:ring-2 focus-visible:ring-rj-red/30"
                 >
                   <option value="">Select a shop…</option>
                   {shops.map((shop) => (
@@ -131,7 +131,7 @@ export function DashboardProductRow({
                 <Button
                   type="button"
                   variant="rj"
-                  size="sm"
+                  size="rjSm"
                   isLoading={isPending}
                   disabled={!selectedShopId}
                   onClick={handleAssignShop}
@@ -141,7 +141,7 @@ export function DashboardProductRow({
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
+                  size="rjSm"
                   disabled={isPending}
                   onClick={() => setAssigningShop(false)}
                 >
@@ -149,13 +149,13 @@ export function DashboardProductRow({
                 </Button>
               </>
             ) : (
-              <Button type="button" variant="outline" size="sm" onClick={() => setAssigningShop(true)}>
+              <Button type="button" variant="outline" size="rjSm" onClick={() => setAssigningShop(true)}>
                 Assign to shop
               </Button>
             )
           ) : null}
 
-          <Button type="button" variant="outline" size="sm" onClick={() => setMode("edit")}>
+          <Button type="button" variant="outline" size="rjSm" onClick={() => setMode("edit")}>
             Edit
           </Button>
 
@@ -164,7 +164,7 @@ export function DashboardProductRow({
               <Button
                 type="button"
                 variant="danger"
-                size="sm"
+                size="rjSm"
                 isLoading={isPending}
                 onClick={handleArchive}
               >
@@ -173,7 +173,7 @@ export function DashboardProductRow({
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
+                size="rjSm"
                 disabled={isPending}
                 onClick={() => setConfirmingArchive(false)}
               >
@@ -181,7 +181,7 @@ export function DashboardProductRow({
               </Button>
             </>
           ) : (
-            <Button type="button" variant="danger" size="sm" onClick={() => setConfirmingArchive(true)}>
+            <Button type="button" variant="danger" size="rjSm" onClick={() => setConfirmingArchive(true)}>
               Archive
             </Button>
           )}

@@ -14,9 +14,9 @@ import type { InventoryItem } from "@/features/inventory/types/inventory.types";
 import type { ActionResult } from "@/types/action.types";
 
 const selectClasses =
-  "h-10 rounded-md border border-border bg-background px-3 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring";
+  "h-10 rounded-md border border-rj-gray-200 bg-rj-white px-3 text-sm text-rj-black outline-none transition-colors focus-visible:border-rj-black focus-visible:ring-2 focus-visible:ring-rj-red/30";
 const textareaClasses =
-  "min-h-20 rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring";
+  "min-h-20 rounded-md border border-rj-gray-200 bg-rj-white px-3 py-2 text-sm text-rj-black outline-none transition-colors placeholder:text-rj-gray-400 focus-visible:border-rj-black focus-visible:ring-2 focus-visible:ring-rj-red/30";
 
 export interface StockAdjustmentFormProps {
   item: InventoryItem;

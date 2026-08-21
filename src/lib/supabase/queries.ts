@@ -114,7 +114,7 @@ const PRODUCT_COLUMNS = `
   status, featured, location, tags, category_id, seller_id, shop_id, published_at,
   created_at, updated_at,
   product_images ( id, url, alt_text, sort_order ),
-  seller:profiles!products_seller_id_fkey ( full_name, username ),
+  seller:profiles!products_seller_id_fkey ( full_name, username, role ),
   category:categories!products_category_id_fkey ( name, slug )
 `;
 
@@ -123,7 +123,7 @@ type ProductRowWithImages = Omit<ProductRow, "search_vector"> & {
     ProductImageRow,
     "id" | "url" | "alt_text" | "sort_order"
   >[];
-  seller: Pick<ProfileRow, "full_name" | "username"> | null;
+  seller: Pick<ProfileRow, "full_name" | "username" | "role"> | null;
   category: { name: string; slug: string } | null;
 };
 
@@ -155,6 +155,12 @@ function toProduct(row: ProductRowWithImages): Product {
     categorySlug: row.category?.slug ?? null,
     sellerId: row.seller_id,
     sellerName: row.seller?.full_name ?? row.seller?.username ?? null,
+    // Only a genuine `seller` is ever a shop owner — a product whose
+    // `seller_id` resolves to an admin or (legacy/demoted) buyer profile has
+    // no shop to display, and showing that account's personal name in its
+    // place would be misleading, not just unbranded. Callers that render a
+    // "shop" label check this before falling back to `sellerName`.
+    sellerRole: (row.seller?.role as UserRole | undefined) ?? null,
     shopId: row.shop_id,
     publishedAt: row.published_at,
     createdAt: row.created_at,

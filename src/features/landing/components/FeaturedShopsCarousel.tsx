@@ -55,7 +55,7 @@ export function FeaturedShopsCarousel({ shops }: FeaturedShopsCarouselProps) {
               type="button"
               onClick={() => scroll("left")}
               aria-label="Scroll shops left"
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-rj-gray-200 text-rj-gray-600 transition-all hover:border-rj-black hover:bg-rj-black hover:text-rj-white"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-rj-gray-200 text-rj-gray-600 transition-all hover:border-rj-black hover:bg-rj-black hover:text-rj-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30"
             >
               <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
@@ -63,13 +63,13 @@ export function FeaturedShopsCarousel({ shops }: FeaturedShopsCarouselProps) {
               type="button"
               onClick={() => scroll("right")}
               aria-label="Scroll shops right"
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-rj-gray-200 text-rj-gray-600 transition-all hover:border-rj-black hover:bg-rj-black hover:text-rj-white"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-rj-gray-200 text-rj-gray-600 transition-all hover:border-rj-black hover:bg-rj-black hover:text-rj-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30"
             >
               <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
             <Link
               href={ROUTES.products}
-              className="ml-2 flex items-center gap-1 text-[13px] font-medium text-rj-gray-600 transition-colors hover:text-rj-black"
+              className="ml-2 flex items-center gap-1 rounded text-[13px] font-medium text-rj-gray-600 transition-colors hover:text-rj-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30"
             >
               All shops <ArrowRight className="h-3 w-3" aria-hidden="true" />
             </Link>

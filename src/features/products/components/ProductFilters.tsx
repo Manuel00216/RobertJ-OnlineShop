@@ -1,8 +1,8 @@
 "use client";
 
-import { LayoutGrid, List } from "lucide-react";
+import { LayoutGrid, List, SlidersHorizontal, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import type { Category } from "@/features/categories/types/category.types";
@@ -51,6 +51,27 @@ export function ProductFilters({ categories = [], shops = [] }: ProductFiltersPr
   const debouncedMinPrice = useDebouncedValue(minPrice, 400);
   const debouncedMaxPrice = useDebouncedValue(maxPrice, 400);
 
+  // Below `md` the On Sale / price / shop / sort cluster collapses into a
+  // bottom sheet instead of wrapping into several rows above the product
+  // grid — the trigger that opens it is itself `md:hidden`, so this state
+  // can never matter at md+ regardless of window resizing while it's open.
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!sheetOpen) return;
+    sheetRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSheetOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [sheetOpen]);
+
   function updateParams(updates: Record<string, string | null>) {
     const params = new URLSearchParams(searchParams.toString());
     for (const [key, value] of Object.entries(updates)) {
@@ -92,15 +113,21 @@ export function ProductFilters({ categories = [], shops = [] }: ProductFiltersPr
   }
 
   const hasPriceFilter = minPrice !== "" || maxPrice !== "";
+  const activeAdvancedCount =
+    (onSale ? 1 : 0) + (hasPriceFilter ? 1 : 0) + (activeShopId ? 1 : 0) + (sort !== "newest" ? 1 : 0);
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center md:justify-between">
       {categories.length > 0 ? (
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by category">
+        <div
+          className="flex gap-2 overflow-x-auto pb-1 md:flex-wrap md:overflow-visible md:pb-0"
+          role="group"
+          aria-label="Filter by category"
+        >
           <button
             type="button"
             aria-pressed={!activeCategoryId}
-            className={!activeCategoryId ? CHIP_ACTIVE : CHIP_IDLE}
+            className={`shrink-0 ${!activeCategoryId ? CHIP_ACTIVE : CHIP_IDLE}`}
             onClick={() => updateParams({ categoryId: null })}
           >
             All
@@ -110,7 +137,7 @@ export function ProductFilters({ categories = [], shops = [] }: ProductFiltersPr
               key={category.id}
               type="button"
               aria-pressed={activeCategoryId === category.id}
-              className={activeCategoryId === category.id ? CHIP_ACTIVE : CHIP_IDLE}
+              className={`shrink-0 ${activeCategoryId === category.id ? CHIP_ACTIVE : CHIP_IDLE}`}
               onClick={() => updateParams({ categoryId: category.id })}
             >
               {category.name}
@@ -119,12 +146,98 @@ export function ProductFilters({ categories = [], shops = [] }: ProductFiltersPr
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex items-center gap-2">
+        {/* Mobile-only trigger for the collapsed On Sale/price/shop/sort cluster below. */}
+        <button
+          ref={triggerRef}
+          type="button"
+          onClick={() => setSheetOpen(true)}
+          aria-haspopup="dialog"
+          aria-expanded={sheetOpen}
+          aria-controls="mobile-filters-sheet"
+          className="flex h-11 items-center gap-2 rounded-full border-[1.5px] border-rj-gray-200 px-4 text-[11px] font-bold text-rj-black transition-colors hover:border-rj-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30 md:hidden"
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+          Filters
+          {activeAdvancedCount > 0 ? (
+            <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rj-red px-1 text-[9px] font-bold text-white">
+              {activeAdvancedCount}
+            </span>
+          ) : null}
+        </button>
+
+        <div
+          className="flex overflow-hidden rounded-full border-[1.5px] border-rj-gray-200"
+          role="group"
+          aria-label="Layout"
+        >
+          <button
+            type="button"
+            aria-pressed={view === "grid"}
+            aria-label="Grid view"
+            onClick={() => updateParams({ view: null })}
+            className={`flex h-11 w-11 items-center justify-center transition-colors md:h-9 md:w-9 ${
+              view === "grid" ? "bg-rj-black text-rj-white" : "text-rj-gray-400 hover:text-rj-black"
+            }`}
+          >
+            <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            aria-pressed={view === "list"}
+            aria-label="List view"
+            onClick={() => updateParams({ view: "list" })}
+            className={`flex h-11 w-11 items-center justify-center transition-colors md:h-9 md:w-9 ${
+              view === "list" ? "bg-rj-black text-rj-white" : "text-rj-gray-400 hover:text-rj-black"
+            }`}
+          >
+            <List className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+
+      {sheetOpen ? (
+        <div
+          className="fixed inset-0 z-40 bg-rj-black/40 md:hidden"
+          aria-hidden="true"
+          onClick={() => setSheetOpen(false)}
+        />
+      ) : null}
+
+      {/* On Sale / price / shop / sort — inline on desktop (md:flex below
+          always wins regardless of sheetOpen), a bottom sheet on mobile. */}
+      <div
+        id="mobile-filters-sheet"
+        ref={sheetRef}
+        role={sheetOpen ? "dialog" : undefined}
+        aria-modal={sheetOpen ? true : undefined}
+        aria-label={sheetOpen ? "Filters" : undefined}
+        tabIndex={sheetOpen ? -1 : undefined}
+        className={
+          sheetOpen
+            ? "fixed inset-x-0 bottom-0 z-50 flex max-h-[80vh] flex-col gap-4 overflow-y-auto rounded-t-2xl border-t border-rj-gray-200 bg-rj-white p-5 shadow-2xl outline-none md:static md:z-auto md:max-h-none md:flex-row md:flex-wrap md:items-center md:gap-2 md:overflow-visible md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none"
+            : "hidden md:flex md:flex-wrap md:items-center md:gap-2"
+        }
+      >
+        {sheetOpen ? (
+          <div className="flex items-center justify-between md:hidden">
+            <h2 className="text-sm font-bold text-rj-black">Filters</h2>
+            <button
+              type="button"
+              onClick={() => setSheetOpen(false)}
+              aria-label="Close filters"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-rj-gray-600 transition-colors hover:bg-rj-gray-100 hover:text-rj-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+        ) : null}
+
         <button
           type="button"
           aria-pressed={onSale}
           onClick={() => updateParams({ onSale: onSale ? null : "true" })}
-          className={onSale ? CHIP_ACTIVE : CHIP_IDLE}
+          className={`w-fit ${onSale ? CHIP_ACTIVE : CHIP_IDLE}`}
         >
           On Sale
         </button>
@@ -199,34 +312,15 @@ export function ProductFilters({ categories = [], shops = [] }: ProductFiltersPr
           ))}
         </select>
 
-        <div
-          className="flex overflow-hidden rounded-full border-[1.5px] border-rj-gray-200"
-          role="group"
-          aria-label="Layout"
-        >
+        {sheetOpen ? (
           <button
             type="button"
-            aria-pressed={view === "grid"}
-            aria-label="Grid view"
-            onClick={() => updateParams({ view: null })}
-            className={`flex h-9 w-9 items-center justify-center transition-colors ${
-              view === "grid" ? "bg-rj-black text-rj-white" : "text-rj-gray-400 hover:text-rj-black"
-            }`}
+            onClick={() => setSheetOpen(false)}
+            className="mt-1 w-full rounded-full bg-rj-black py-3 text-sm font-bold text-rj-white transition-colors hover:bg-rj-red focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30 md:hidden"
           >
-            <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" />
+            Show results
           </button>
-          <button
-            type="button"
-            aria-pressed={view === "list"}
-            aria-label="List view"
-            onClick={() => updateParams({ view: "list" })}
-            className={`flex h-9 w-9 items-center justify-center transition-colors ${
-              view === "list" ? "bg-rj-black text-rj-white" : "text-rj-gray-400 hover:text-rj-black"
-            }`}
-          >
-            <List className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
-        </div>
+        ) : null}
       </div>
     </div>
   );

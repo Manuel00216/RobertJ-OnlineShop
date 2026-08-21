@@ -28,7 +28,7 @@ export function ShopRow({ shop }: ShopRowProps) {
           <Button
             type="button"
             variant="outline"
-            size="sm"
+            size="rjSm"
             className="mt-3"
             onClick={() => setMode("view")}
           >
@@ -68,13 +68,13 @@ export function ShopRow({ shop }: ShopRowProps) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={() => setMode("edit")}>
+          <Button type="button" variant="outline" size="rjSm" onClick={() => setMode("edit")}>
             Edit
           </Button>
           <Button
             type="button"
             variant={shop.active ? "danger" : "rj"}
-            size="sm"
+            size="rjSm"
             isLoading={isPending}
             onClick={handleToggleActive}
           >

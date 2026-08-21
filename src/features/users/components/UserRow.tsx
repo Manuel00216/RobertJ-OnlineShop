@@ -82,11 +82,11 @@ export function UserRow({ user, shops }: UserRowProps) {
 
           {canAssignShop ? (
             assigning ? (
-              <Button type="button" variant="outline" size="sm" onClick={() => setAssigning(false)}>
+              <Button type="button" variant="outline" size="rjSm" onClick={() => setAssigning(false)}>
                 Cancel
               </Button>
             ) : (
-              <Button type="button" variant="rj" size="sm" onClick={() => setAssigning(true)}>
+              <Button type="button" variant="rj" size="rjSm" onClick={() => setAssigning(true)}>
                 {actionLabel}
               </Button>
             )
@@ -107,7 +107,7 @@ export function UserRow({ user, shops }: UserRowProps) {
                 setSelectedShopId(event.target.value);
                 setConfirming(false);
               }}
-              className="mt-1.5 h-10 w-full max-w-xs rounded-md border border-border bg-background px-3 text-sm"
+              className="mt-1.5 h-10 w-full max-w-xs rounded-md border border-rj-gray-200 bg-rj-white px-3 text-sm text-rj-black outline-none transition-colors focus-visible:border-rj-black focus-visible:ring-2 focus-visible:ring-rj-red/30"
             >
               <option value="">Select a shop…</option>
               {shops.map((shop) => (
@@ -121,7 +121,7 @@ export function UserRow({ user, shops }: UserRowProps) {
               <Button
                 type="button"
                 variant="rj"
-                size="sm"
+                size="rjSm"
                 className="mt-3"
                 onClick={() => setConfirming(true)}
               >
@@ -145,7 +145,7 @@ export function UserRow({ user, shops }: UserRowProps) {
                   <Button
                     type="button"
                     variant="rj"
-                    size="sm"
+                    size="rjSm"
                     isLoading={isPending}
                     onClick={handleConfirm}
                   >
@@ -154,7 +154,7 @@ export function UserRow({ user, shops }: UserRowProps) {
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
+                    size="rjSm"
                     disabled={isPending}
                     onClick={() => setConfirming(false)}
                   >
