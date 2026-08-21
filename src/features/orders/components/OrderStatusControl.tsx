@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
+import { ConfirmPanel } from "@/components/ui/confirm-panel";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import type { OrderStatus } from "@/constants/status";
 import { advanceOrderStatusAction } from "@/features/orders/actions/order.actions";
@@ -44,20 +45,6 @@ export function OrderStatusControl({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!confirmingCancel) return;
-    panelRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setConfirmingCancel(false);
-        triggerRef.current?.focus();
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [confirmingCancel]);
 
   function advance(target: OrderStatus) {
     setError(null);
@@ -105,45 +92,19 @@ export function OrderStatusControl({
       </div>
 
       {confirmingCancel ? (
-        <div
-          ref={panelRef}
-          role="alertdialog"
-          aria-modal="false"
-          aria-label={`Cancel order ${orderNumber}`}
-          tabIndex={-1}
-          className="rounded-2xl border border-danger/40 bg-danger/5 p-5 outline-none"
-        >
-          <p className="text-sm font-bold text-rj-black">
-            Cancel order {orderNumber}?
-          </p>
-          <p className="mt-1 text-xs text-rj-gray-600">
-            This can&apos;t be undone. Stock is restocked automatically.
-          </p>
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="danger"
-              size="rjSm"
-              isLoading={isPending}
-              onClick={() => advance("cancelled")}
-            >
-              {isPending ? "Cancelling…" : "Yes, cancel order"}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="rjSm"
-              disabled={isPending}
-              onClick={() => {
-                setConfirmingCancel(false);
-                triggerRef.current?.focus();
-              }}
-            >
-              Keep order
-            </Button>
-          </div>
-        </div>
+        <ConfirmPanel
+          label={`Cancel order ${orderNumber}`}
+          title={`Cancel order ${orderNumber}?`}
+          description="This can't be undone. Stock is restocked automatically."
+          tone="danger"
+          confirmLabel="Yes, cancel order"
+          pendingLabel="Cancelling…"
+          cancelLabel="Keep order"
+          isPending={isPending}
+          triggerRef={triggerRef}
+          onConfirm={() => advance("cancelled")}
+          onCancel={() => setConfirmingCancel(false)}
+        />
       ) : null}
     </div>
   );

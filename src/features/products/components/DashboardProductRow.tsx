@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { ConfirmPanel } from "@/components/ui/confirm-panel";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import {
   archiveProductAction,
@@ -16,6 +17,7 @@ import type { Category } from "@/features/categories/types/category.types";
 import type { Product } from "@/features/products/types/product.types";
 import type { Shop } from "@/features/shops/types/shop.types";
 import { formatCurrency } from "@/lib/utils/currency";
+import { cn } from "@/lib/utils/cn";
 
 export interface DashboardProductRowProps {
   product: Product;
@@ -44,6 +46,7 @@ export function DashboardProductRow({
   const [selectedShopId, setSelectedShopId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const archiveTriggerRef = useRef<HTMLButtonElement>(null);
 
   if (mode === "edit") {
     return (
@@ -95,97 +98,96 @@ export function DashboardProductRow({
 
   return (
     <Card className="border-rj-gray-100">
-      <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="truncate text-sm font-semibold text-rj-black">{product.title}</p>
-            <ProductStatusBadge status={product.status} />
-            {product.shopId === null ? <Badge tone="warning">Unassigned</Badge> : null}
-          </div>
-          <p className="mt-1 text-xs text-rj-gray-600">
-            {formatCurrency(product.priceCents, product.currency)} · Qty {product.quantity}
-          </p>
-          {error ? (
-            <div className="mt-2">
-              <ErrorState title="Something went wrong" message={error} />
+      <CardContent className="flex flex-col gap-3 p-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="truncate text-sm font-semibold text-rj-black">{product.title}</p>
+              <ProductStatusBadge status={product.status} />
+              {product.shopId === null ? <Badge tone="warning">Unassigned</Badge> : null}
             </div>
-          ) : null}
-        </div>
+            <p className="mt-1 text-xs text-rj-gray-600">
+              {formatCurrency(product.priceCents, product.currency)} · Qty {product.quantity}
+            </p>
+            {error ? (
+              <div className="mt-2">
+                <ErrorState title="Something went wrong" message={error} />
+              </div>
+            ) : null}
+          </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {isAdmin && product.shopId === null ? (
-            assigningShop ? (
-              <>
-                <select
-                  value={selectedShopId}
-                  onChange={(event) => setSelectedShopId(event.target.value)}
-                  className="h-9 rounded-md border border-rj-gray-200 bg-rj-white px-2 text-sm text-rj-black outline-none transition-colors focus-visible:border-rj-black focus-visible:ring-2 focus-visible:ring-rj-red/30"
-                >
-                  <option value="">Select a shop…</option>
-                  {shops.map((shop) => (
-                    <option key={shop.id} value={shop.id}>
-                      {shop.name}
-                    </option>
-                  ))}
-                </select>
-                <Button
-                  type="button"
-                  variant="rj"
-                  size="rjSm"
-                  isLoading={isPending}
-                  disabled={!selectedShopId}
-                  onClick={handleAssignShop}
-                >
-                  Assign
+          <div className="flex flex-wrap items-center gap-2">
+            {isAdmin && product.shopId === null ? (
+              assigningShop ? (
+                <>
+                  <select
+                    value={selectedShopId}
+                    onChange={(event) => setSelectedShopId(event.target.value)}
+                    className="h-9 rounded-md border border-rj-gray-200 bg-rj-white px-2 text-sm text-rj-black outline-none transition-colors focus-visible:border-rj-black focus-visible:ring-2 focus-visible:ring-rj-red/30"
+                  >
+                    <option value="">Select a shop…</option>
+                    {shops.map((shop) => (
+                      <option key={shop.id} value={shop.id}>
+                        {shop.name}
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    type="button"
+                    variant="rj"
+                    size="rjSm"
+                    isLoading={isPending}
+                    disabled={!selectedShopId}
+                    onClick={handleAssignShop}
+                  >
+                    Assign
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="rjSm"
+                    disabled={isPending}
+                    onClick={() => setAssigningShop(false)}
+                  >
+                    Cancel
+                  </Button>
+                </>
+              ) : (
+                <Button type="button" variant="outline" size="rjSm" onClick={() => setAssigningShop(true)}>
+                  Assign to shop
                 </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="rjSm"
-                  disabled={isPending}
-                  onClick={() => setAssigningShop(false)}
-                >
-                  Cancel
-                </Button>
-              </>
-            ) : (
-              <Button type="button" variant="outline" size="rjSm" onClick={() => setAssigningShop(true)}>
-                Assign to shop
-              </Button>
-            )
-          ) : null}
+              )
+            ) : null}
 
-          <Button type="button" variant="outline" size="rjSm" onClick={() => setMode("edit")}>
-            Edit
-          </Button>
-
-          {confirmingArchive ? (
-            <>
-              <Button
-                type="button"
-                variant="danger"
-                size="rjSm"
-                isLoading={isPending}
-                onClick={handleArchive}
-              >
-                Confirm archive
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="rjSm"
-                disabled={isPending}
-                onClick={() => setConfirmingArchive(false)}
-              >
-                Cancel
-              </Button>
-            </>
-          ) : (
-            <Button type="button" variant="danger" size="rjSm" onClick={() => setConfirmingArchive(true)}>
-              Archive
+            <Button type="button" variant="outline" size="rjSm" onClick={() => setMode("edit")}>
+              Edit
             </Button>
-          )}
+
+            {!confirmingArchive ? (
+              <button
+                type="button"
+                ref={archiveTriggerRef}
+                className={cn(buttonVariants({ variant: "danger", size: "rjSm" }))}
+                onClick={() => setConfirmingArchive(true)}
+              >
+                Archive
+              </button>
+            ) : null}
+          </div>
         </div>
+
+        {confirmingArchive ? (
+          <ConfirmPanel
+            label={`Archive ${product.title}`}
+            title={`Archive ${product.title}?`}
+            tone="danger"
+            confirmLabel="Confirm archive"
+            isPending={isPending}
+            triggerRef={archiveTriggerRef}
+            onConfirm={handleArchive}
+            onCancel={() => setConfirmingArchive(false)}
+          />
+        ) : null}
       </CardContent>
     </Card>
   );

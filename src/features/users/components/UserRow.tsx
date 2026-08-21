@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { ConfirmPanel } from "@/components/ui/confirm-panel";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { ROLE_LABELS, USER_ROLES, type UserRole } from "@/constants/roles";
 import { assignSellerShopAction } from "@/features/users/actions/user.actions";
@@ -130,37 +131,31 @@ export function UserRow({ user, shops }: UserRowProps) {
             ) : null}
 
             {confirming ? (
-              <div className="mt-3 rounded-xl border border-rj-gray-200 bg-rj-white p-4">
-                <p className="text-sm font-bold text-rj-black">
-                  {user.role === USER_ROLES.buyer
-                    ? `Promote ${user.fullName ?? user.email} to Seller and assign them to ${selectedShop?.name}?`
-                    : `Move ${user.fullName ?? user.email} to ${selectedShop?.name}?`}
-                </p>
-                <p className="mt-1 text-xs text-rj-gray-600">
-                  {user.role === USER_ROLES.buyer
-                    ? "They'll gain seller dashboard access, scoped to this shop only."
-                    : "Their previous shop membership will be removed."}
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="rj"
-                    size="rjSm"
-                    isLoading={isPending}
-                    onClick={handleConfirm}
-                  >
-                    {isPending ? "Saving…" : "Confirm"}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="rjSm"
-                    disabled={isPending}
-                    onClick={() => setConfirming(false)}
-                  >
-                    Back
-                  </Button>
-                </div>
+              <div className="mt-3">
+                <ConfirmPanel
+                  label={
+                    user.role === USER_ROLES.buyer
+                      ? `Promote ${user.fullName ?? user.email} to Seller`
+                      : `Move ${user.fullName ?? user.email} to ${selectedShop?.name}`
+                  }
+                  title={
+                    user.role === USER_ROLES.buyer
+                      ? `Promote ${user.fullName ?? user.email} to Seller and assign them to ${selectedShop?.name}?`
+                      : `Move ${user.fullName ?? user.email} to ${selectedShop?.name}?`
+                  }
+                  description={
+                    user.role === USER_ROLES.buyer
+                      ? "They'll gain seller dashboard access, scoped to this shop only."
+                      : "Their previous shop membership will be removed."
+                  }
+                  tone="neutral"
+                  confirmLabel="Confirm"
+                  pendingLabel="Saving…"
+                  cancelLabel="Back"
+                  isPending={isPending}
+                  onConfirm={handleConfirm}
+                  onCancel={() => setConfirming(false)}
+                />
               </div>
             ) : null}
           </div>

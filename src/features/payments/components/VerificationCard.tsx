@@ -2,10 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
 import { RJ_CARD } from "@/components/ui/card";
+import { ConfirmPanel } from "@/components/ui/confirm-panel";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { ROUTES } from "@/constants/routes";
 import { verifyPaymentAction } from "@/features/payments/actions/payment.actions";
@@ -31,17 +32,6 @@ export function VerificationCard({ payment, receiptUrl }: VerificationCardProps)
   const [error, setError] = useState<string | null>(null);
   const [decided, setDecided] = useState<PaymentDecision | null>(null);
   const [isPending, startTransition] = useTransition();
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!pendingDecision) return;
-    panelRef.current?.focus();
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setPendingDecision(null);
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [pendingDecision]);
 
   function confirmDecision() {
     if (!pendingDecision) return;
@@ -102,39 +92,22 @@ export function VerificationCard({ payment, receiptUrl }: VerificationCardProps)
             Marked {decided === "paid" ? "verified" : "rejected"}.
           </p>
         ) : pendingDecision ? (
-          <div
-            ref={panelRef}
-            role="alertdialog"
-            aria-label={`Confirm: mark ${payment.orderNumber} as ${pendingDecision}`}
-            tabIndex={-1}
-            className="mt-3 rounded-xl border border-rj-gray-200 bg-rj-gray-50 p-4 outline-none"
-          >
-            <p className="text-sm font-semibold text-rj-black">
-              {pendingDecision === "paid"
-                ? "Confirm this payment was received?"
-                : "Confirm this receipt should be rejected?"}
-            </p>
-            <p className="mt-1 text-xs text-rj-gray-600">This can&apos;t be undone.</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant={pendingDecision === "paid" ? "rj" : "danger"}
-                size="sm"
-                isLoading={isPending}
-                onClick={confirmDecision}
-              >
-                Yes, {pendingDecision === "paid" ? "mark verified" : "reject"}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={isPending}
-                onClick={() => setPendingDecision(null)}
-              >
-                Cancel
-              </Button>
-            </div>
+          <div className="mt-3">
+            <ConfirmPanel
+              label={`Confirm: mark ${payment.orderNumber} as ${pendingDecision}`}
+              title={
+                pendingDecision === "paid"
+                  ? "Confirm this payment was received?"
+                  : "Confirm this receipt should be rejected?"
+              }
+              description="This can't be undone."
+              tone="neutral"
+              confirmVariant={pendingDecision === "paid" ? "rj" : "danger"}
+              confirmLabel={`Yes, ${pendingDecision === "paid" ? "mark verified" : "reject"}`}
+              isPending={isPending}
+              onConfirm={confirmDecision}
+              onCancel={() => setPendingDecision(null)}
+            />
           </div>
         ) : (
           <div className="mt-3 flex flex-wrap gap-2">
