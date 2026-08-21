@@ -20,6 +20,8 @@ export const ROUTES = {
   inventory: "/dashboard/inventory",
   paymentVerification: "/dashboard/payments",
   reports: "/dashboard/reports",
+  /** Admin-only: sellers see their own return requests inline on their own orders, not this queue. */
+  dashboardReturns: "/dashboard/returns",
   /** Admin-only dashboard sections — distinct from the (nonexistent) `shops` table. */
   adminUsers: "/dashboard/users",
   adminShops: "/dashboard/shops",

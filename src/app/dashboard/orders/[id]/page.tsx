@@ -10,7 +10,14 @@ import { OrderSummary } from "@/features/orders/components/OrderSummary";
 import { OrderTimeline } from "@/features/orders/components/OrderTimeline";
 import { PaymentStatusBadge } from "@/features/orders/components/PaymentStatusBadge";
 import { ShippingAddressCard } from "@/features/orders/components/ShippingAddressCard";
-import { getDashboardOrder } from "@/lib/supabase/queries";
+import { ReturnRequestStatusCard } from "@/features/returns/components/ReturnRequestStatusCard";
+import { RespondToReturnPanel } from "@/features/returns/components/RespondToReturnPanel";
+import {
+  getDashboardOrder,
+  getReturnEvidenceSignedUrl,
+  getReturnRequestForOrder,
+} from "@/lib/supabase/queries";
+import { RETURN_STATUS } from "@/constants/status";
 
 interface DashboardOrderDetailPageProps {
   params: Promise<{ id: string }>;
@@ -40,6 +47,11 @@ export default async function DashboardOrderDetailPage({
 
   if (!order) notFound();
 
+  const returnRequest = await getReturnRequestForOrder(order.id).catch(() => null);
+  const returnEvidenceUrl = returnRequest?.evidencePath
+    ? await getReturnEvidenceSignedUrl(returnRequest.evidencePath).catch(() => null)
+    : null;
+
   return (
     <article className="flex flex-col gap-8">
       <OrderHeader order={order} />
@@ -49,6 +61,15 @@ export default async function DashboardOrderDetailPage({
         orderNumber={order.orderNumber}
         status={order.status}
       />
+
+      {returnRequest ? (
+        <div className="flex flex-col gap-3">
+          <ReturnRequestStatusCard request={returnRequest} evidenceUrl={returnEvidenceUrl} />
+          {returnRequest.status === RETURN_STATUS.pending ? (
+            <RespondToReturnPanel returnId={returnRequest.id} />
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="grid gap-8 lg:grid-cols-3">
         <div className="flex flex-col gap-8 lg:col-span-2">

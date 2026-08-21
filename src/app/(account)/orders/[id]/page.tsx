@@ -12,9 +12,13 @@ import { OrderTimeline } from "@/features/orders/components/OrderTimeline";
 import { PaymentStatusBadge } from "@/features/orders/components/PaymentStatusBadge";
 import { ShippingAddressCard } from "@/features/orders/components/ShippingAddressCard";
 import { ReceiptUpload } from "@/features/payments/components/ReceiptUpload";
+import { RequestReturnPanel } from "@/features/returns/components/RequestReturnPanel";
+import { ReturnRequestStatusCard } from "@/features/returns/components/ReturnRequestStatusCard";
 import {
   getActivePaymentForOrder,
   getBuyerOrder,
+  getReturnEvidenceSignedUrl,
+  getReturnRequestForOrder,
   getShopNamesBySellerIds,
   listReviewedOrderItemIds,
   requireSessionUser,
@@ -77,6 +81,17 @@ export default async function OrderDetailPage({
         )
       : undefined;
 
+  // Whole-order return only in this UI (the RPC also supports a per-item
+  // scope — see request_return — but a single "Request Return" entry point
+  // matches the buyer-facing lifecycle this phase actually asked for).
+  const returnRequest =
+    order.status === ORDER_STATUS.delivered
+      ? await getReturnRequestForOrder(order.id).catch(() => null)
+      : null;
+  const returnEvidenceUrl = returnRequest?.evidencePath
+    ? await getReturnEvidenceSignedUrl(returnRequest.evidencePath).catch(() => null)
+    : null;
+
   return (
     <article className="flex flex-col gap-8">
       <OrderHeader order={order} />
@@ -107,6 +122,14 @@ export default async function OrderDetailPage({
             sellerName={shopName}
             sellerPaymentQrUrl={order.sellerPaymentQrUrl}
           />
+        )
+      ) : null}
+
+      {order.status === ORDER_STATUS.delivered ? (
+        returnRequest ? (
+          <ReturnRequestStatusCard request={returnRequest} evidenceUrl={returnEvidenceUrl} />
+        ) : (
+          <RequestReturnPanel orderId={order.id} />
         )
       ) : null}
 

@@ -546,6 +546,109 @@ export type Database = {
         }
         Relationships: []
       }
+      return_requests: {
+        Row: {
+          admin_decided_at: string | null
+          admin_decided_by: string | null
+          admin_decision_note: string | null
+          buyer_id: string
+          created_at: string
+          evidence_path: string | null
+          id: string
+          order_id: string
+          order_item_id: string | null
+          reason: string
+          refund_amount_cents: number | null
+          seller_decided_at: string | null
+          seller_decided_by: string | null
+          seller_decision_note: string | null
+          seller_id: string
+          status: Database["public"]["Enums"]["return_status"]
+          updated_at: string
+        }
+        Insert: {
+          admin_decided_at?: string | null
+          admin_decided_by?: string | null
+          admin_decision_note?: string | null
+          buyer_id: string
+          created_at?: string
+          evidence_path?: string | null
+          id?: string
+          order_id: string
+          order_item_id?: string | null
+          reason: string
+          refund_amount_cents?: number | null
+          seller_decided_at?: string | null
+          seller_decided_by?: string | null
+          seller_decision_note?: string | null
+          seller_id: string
+          status?: Database["public"]["Enums"]["return_status"]
+          updated_at?: string
+        }
+        Update: {
+          admin_decided_at?: string | null
+          admin_decided_by?: string | null
+          admin_decision_note?: string | null
+          buyer_id?: string
+          created_at?: string
+          evidence_path?: string | null
+          id?: string
+          order_id?: string
+          order_item_id?: string | null
+          reason?: string
+          refund_amount_cents?: number | null
+          seller_decided_at?: string | null
+          seller_decided_by?: string | null
+          seller_decision_note?: string | null
+          seller_id?: string
+          status?: Database["public"]["Enums"]["return_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "return_requests_admin_decided_by_fkey"
+            columns: ["admin_decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "return_requests_buyer_id_fkey"
+            columns: ["buyer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "return_requests_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "return_requests_order_item_id_fkey"
+            columns: ["order_item_id"]
+            isOneToOne: false
+            referencedRelation: "order_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "return_requests_seller_decided_by_fkey"
+            columns: ["seller_decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "return_requests_seller_id_fkey"
+            columns: ["seller_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reviews: {
         Row: {
           buyer_id: string
@@ -902,6 +1005,34 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
       }
+      decide_return: {
+        Args: { p_decision: string; p_note?: string; p_return_id: string }
+        Returns: {
+          admin_decided_at: string | null
+          admin_decided_by: string | null
+          admin_decision_note: string | null
+          buyer_id: string
+          created_at: string
+          evidence_path: string | null
+          id: string
+          order_id: string
+          order_item_id: string | null
+          reason: string
+          refund_amount_cents: number | null
+          seller_decided_at: string | null
+          seller_decided_by: string | null
+          seller_decision_note: string | null
+          seller_id: string
+          status: Database["public"]["Enums"]["return_status"]
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "return_requests"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       get_buyer_activity_feed: {
         Args: { p_limit?: number }
         Returns: {
@@ -983,6 +1114,39 @@ export type Database = {
           units_sold: number
         }[]
       }
+      request_return: {
+        Args: {
+          p_evidence_path?: string
+          p_order_id: string
+          p_order_item_id?: string
+          p_reason?: string
+        }
+        Returns: {
+          admin_decided_at: string | null
+          admin_decided_by: string | null
+          admin_decision_note: string | null
+          buyer_id: string
+          created_at: string
+          evidence_path: string | null
+          id: string
+          order_id: string
+          order_item_id: string | null
+          reason: string
+          refund_amount_cents: number | null
+          seller_decided_at: string | null
+          seller_decided_by: string | null
+          seller_decision_note: string | null
+          seller_id: string
+          status: Database["public"]["Enums"]["return_status"]
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "return_requests"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       resolve_shop_membership: {
         Args: { p_seller_ids?: string[]; p_shop_ids?: string[] }
         Returns: {
@@ -990,6 +1154,34 @@ export type Database = {
           shop_id: string
           shop_name: string
         }[]
+      }
+      respond_to_return: {
+        Args: { p_decision: string; p_note?: string; p_return_id: string }
+        Returns: {
+          admin_decided_at: string | null
+          admin_decided_by: string | null
+          admin_decision_note: string | null
+          buyer_id: string
+          created_at: string
+          evidence_path: string | null
+          id: string
+          order_id: string
+          order_item_id: string | null
+          reason: string
+          refund_amount_cents: number | null
+          seller_decided_at: string | null
+          seller_decided_by: string | null
+          seller_decision_note: string | null
+          seller_id: string
+          status: Database["public"]["Enums"]["return_status"]
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "return_requests"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       slugify: { Args: { value: string }; Returns: string }
       submit_qr_payment: {
@@ -1080,6 +1272,12 @@ export type Database = {
         | "partially_refunded"
       product_condition: "new" | "like_new" | "good" | "fair" | "poor"
       product_status: "draft" | "active" | "sold" | "archived"
+      return_status:
+        | "pending"
+        | "seller_accepted"
+        | "seller_rejected"
+        | "admin_rejected"
+        | "refunded"
       stock_adjustment_reason:
         | "initial_stock"
         | "restock"
@@ -1235,6 +1433,13 @@ export const Constants = {
       ],
       product_condition: ["new", "like_new", "good", "fair", "poor"],
       product_status: ["draft", "active", "sold", "archived"],
+      return_status: [
+        "pending",
+        "seller_accepted",
+        "seller_rejected",
+        "admin_rejected",
+        "refunded",
+      ],
       stock_adjustment_reason: [
         "initial_stock",
         "restock",

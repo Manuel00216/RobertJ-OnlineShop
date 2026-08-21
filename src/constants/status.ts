@@ -9,6 +9,7 @@ export type ProductStatus = Enums<"product_status">;
 export type ProductCondition = Enums<"product_condition">;
 export type PaymentStatus = Enums<"payment_status">;
 export type OrderStatus = Enums<"order_status">;
+export type ReturnStatus = Enums<"return_status">;
 
 export const PRODUCT_STATUS = {
   draft: "draft",
@@ -83,4 +84,32 @@ export const TERMINAL_ORDER_STATUSES: readonly OrderStatus[] = [
   ORDER_STATUS.delivered,
   ORDER_STATUS.cancelled,
   ORDER_STATUS.refunded,
+];
+
+/**
+ * Return/refund lifecycle. See `decide_return`'s doc comment
+ * (`supabase/migrations/20260826000000_returns_and_refunds.sql`) for the
+ * full state machine — there is no separate "admin approved" state:
+ * approval and the refund itself are one atomic transition to `refunded`.
+ */
+export const RETURN_STATUS = {
+  pending: "pending",
+  sellerAccepted: "seller_accepted",
+  sellerRejected: "seller_rejected",
+  adminRejected: "admin_rejected",
+  refunded: "refunded",
+} as const satisfies Record<string, ReturnStatus>;
+
+export const RETURN_STATUS_LABELS: Record<ReturnStatus, string> = {
+  pending: "Pending",
+  seller_accepted: "Accepted by seller",
+  seller_rejected: "Rejected by seller",
+  admin_rejected: "Rejected",
+  refunded: "Refunded",
+};
+
+/** Return states that can no longer transition. */
+export const TERMINAL_RETURN_STATUSES: readonly ReturnStatus[] = [
+  RETURN_STATUS.adminRejected,
+  RETURN_STATUS.refunded,
 ];

@@ -14,6 +14,7 @@ import {
   type OrderStatus,
   type ProductCondition,
   type ProductStatus,
+  type ReturnStatus,
 } from "@/constants/status";
 import {
   createSupabaseAdminClient,
@@ -73,6 +74,11 @@ import type {
   Review,
 } from "@/features/reviews/types/review.types";
 import type { BuyerActivityEvent } from "@/features/notifications/types/notification.types";
+import type {
+  AdminReturnDecision,
+  ReturnRequest,
+  SellerReturnDecision,
+} from "@/features/returns/types/return.types";
 
 /**
  * Centralized, reusable Supabase data-access layer.
@@ -1847,6 +1853,220 @@ export async function listPendingPayments(): Promise<Payment[]> {
   }
 
   return (data ?? []).map((row) => toPayment(row as PaymentRowWithOrder));
+}
+
+// ============================================================================
+// Returns & Refunds
+// ============================================================================
+
+/**
+ * Literal for the same reason as `PRODUCT_COLUMNS`/`PAYMENT_COLUMNS` —
+ * Supabase's generated types parse embedded-resource joins at the type
+ * level. `buyer` is joined directly off `return_requests.buyer_id` (not via
+ * `orders`) since the row already carries its own snapshot of who filed it.
+ */
+const RETURN_REQUEST_COLUMNS = `
+  id, order_id, order_item_id, buyer_id, seller_id, reason, evidence_path, status,
+  seller_decision_note, seller_decided_at, seller_decided_by,
+  admin_decision_note, admin_decided_at, admin_decided_by,
+  refund_amount_cents, created_at, updated_at,
+  order:orders!return_requests_order_id_fkey ( order_number, currency ),
+  buyer:profiles!return_requests_buyer_id_fkey ( full_name, username ),
+  order_item:order_items!return_requests_order_item_id_fkey ( product_title )
+`;
+
+type ReturnRequestRow = Database["public"]["Tables"]["return_requests"]["Row"];
+type ReturnRequestRowWithJoins = ReturnRequestRow & {
+  order: { order_number: string; currency: string } | null;
+  buyer: Pick<ProfileRow, "full_name" | "username"> | null;
+  order_item: { product_title: string } | null;
+};
+
+function toReturnRequest(row: ReturnRequestRowWithJoins): ReturnRequest {
+  return {
+    id: row.id,
+    orderId: row.order_id,
+    orderNumber: row.order?.order_number ?? "",
+    currency: row.order?.currency ?? "PHP",
+    orderItemId: row.order_item_id,
+    orderItemTitle: row.order_item?.product_title ?? null,
+    buyerId: row.buyer_id,
+    buyerName: row.buyer?.full_name ?? row.buyer?.username ?? null,
+    sellerId: row.seller_id,
+    reason: row.reason,
+    evidencePath: row.evidence_path,
+    status: row.status,
+    sellerDecisionNote: row.seller_decision_note,
+    sellerDecidedAt: row.seller_decided_at,
+    adminDecisionNote: row.admin_decision_note,
+    adminDecidedAt: row.admin_decided_at,
+    refundAmountCents: row.refund_amount_cents,
+    createdAt: row.created_at,
+  };
+}
+
+/**
+ * Uploads a return's evidence photo to the `payment-receipts` bucket —
+ * private, RLS-gated by order ownership, the same scoping shape a return
+ * request itself needs (see the migration's comment for why this bucket is
+ * reused rather than a new one). `return-` prefix keeps it visually
+ * distinguishable from an actual payment receipt in the same folder.
+ */
+export async function uploadReturnEvidence(
+  orderId: string,
+  file: File,
+): Promise<string> {
+  const supabase = await createSupabaseServerClient();
+  const ext = file.name.split(".").pop() ?? "jpg";
+  const path = `${orderId}/return-${crypto.randomUUID()}.${ext}`;
+
+  const { error } = await supabase.storage
+    .from("payment-receipts")
+    .upload(path, file, { contentType: file.type });
+
+  if (error) {
+    throw new Error(`Failed to upload evidence photo: ${error.message}`);
+  }
+  return path;
+}
+
+/** Signed URL for a return's evidence photo — mirrors `getPaymentReceiptSignedUrl`. */
+export async function getReturnEvidenceSignedUrl(path: string): Promise<string> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.storage
+    .from("payment-receipts")
+    .createSignedUrl(path, 60 * 10);
+
+  if (error || !data) {
+    throw new Error(`Failed to load evidence photo: ${error?.message ?? "unknown error"}`);
+  }
+  return data.signedUrl;
+}
+
+/**
+ * Buyer-only: opens a return/refund request via the `request_return` RPC —
+ * the sole write path (no direct INSERT grant on `return_requests`).
+ * Ownership, order status, and duplicate-request checks all happen inside
+ * the RPC itself.
+ */
+export async function requestReturn(
+  orderId: string,
+  orderItemId: string | null,
+  reason: string,
+  evidencePath: string | null,
+): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("request_return", {
+    p_order_id: orderId,
+    p_order_item_id: orderItemId ?? undefined,
+    p_reason: reason,
+    p_evidence_path: evidencePath ?? undefined,
+  });
+
+  if (error) {
+    throw new Error(mapPostgresError(error, "Could not submit your return request."));
+  }
+}
+
+/**
+ * The order's own seller, or admin, accepts/rejects a pending return
+ * request via the `respond_to_return` RPC — the sole write path. Ownership
+ * and state-transition checks happen inside the RPC.
+ */
+export async function respondToReturn(
+  returnId: string,
+  decision: SellerReturnDecision,
+  note: string | null,
+): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("respond_to_return", {
+    p_return_id: returnId,
+    p_decision: decision,
+    p_note: note ?? undefined,
+  });
+
+  if (error) {
+    throw new Error(mapPostgresError(error, "Could not respond to this return request."));
+  }
+}
+
+/**
+ * Admin-only: approves (executes the refund) or rejects a return request
+ * via the `decide_return` RPC — the sole path that can ever move a payment
+ * to `refunded`. State-transition and duplicate-refund checks happen
+ * inside the RPC.
+ */
+export async function decideReturn(
+  returnId: string,
+  decision: AdminReturnDecision,
+  note: string | null,
+): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("decide_return", {
+    p_return_id: returnId,
+    p_decision: decision,
+    p_note: note ?? undefined,
+  });
+
+  if (error) {
+    throw new Error(mapPostgresError(error, "Could not decide this return request."));
+  }
+}
+
+/**
+ * Most recent return request for an order (optionally scoped to one line
+ * item), or null — used by the buyer's and seller's order-detail pages to
+ * show status/hide the "Request Return" action rather than a separate
+ * existence check. RLS alone restricts visible rows (buyer/seller/admin of
+ * that request), matching the "no manual filter" pattern used throughout
+ * this file.
+ */
+export async function getReturnRequestForOrder(
+  orderId: string,
+  orderItemId: string | null = null,
+): Promise<ReturnRequest | null> {
+  const supabase = await createSupabaseServerClient();
+  let query = supabase
+    .from(DATABASE_TABLES.RETURN_REQUESTS)
+    .select(RETURN_REQUEST_COLUMNS)
+    .eq("order_id", orderId)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  query = orderItemId ? query.eq("order_item_id", orderItemId) : query.is("order_item_id", null);
+
+  const { data, error } = await query.maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to load return request: ${error.message}`);
+  }
+  return data ? toReturnRequest(data as ReturnRequestRowWithJoins) : null;
+}
+
+/**
+ * Every return request visible to the caller, newest first, optionally
+ * filtered by status — powers the admin Returns & Refunds queue. No manual
+ * `seller_id`/`buyer_id` filtering: RLS alone scopes visible rows (buyer's
+ * own, seller's own-shop's, or all for admin), the same "RLS is the primary
+ * boundary" pattern as `listPendingPayments`/`listDashboardOrders`.
+ */
+export async function listReturnRequests(status?: ReturnStatus): Promise<ReturnRequest[]> {
+  const supabase = await createSupabaseServerClient();
+  let query = supabase
+    .from(DATABASE_TABLES.RETURN_REQUESTS)
+    .select(RETURN_REQUEST_COLUMNS)
+    .order("created_at", { ascending: false });
+
+  if (status) {
+    query = query.eq("status", status);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new Error(`Failed to load return requests: ${error.message}`);
+  }
+  return (data ?? []).map((row) => toReturnRequest(row as ReturnRequestRowWithJoins));
 }
 
 // ============================================================================

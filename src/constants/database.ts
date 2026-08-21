@@ -28,6 +28,7 @@ export const DATABASE_TABLES = {
   ADMIN_ACTION_LOG: "admin_action_log",
   WISHLISTS: "wishlists",
   REVIEWS: "reviews",
+  RETURN_REQUESTS: "return_requests",
 } as const;
 
 /** Union of every table name in the schema. */
