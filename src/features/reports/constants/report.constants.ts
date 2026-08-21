@@ -17,6 +17,7 @@ export const GRANULARITY_LABELS: Record<ReportGranularity, string> = {
 
 /** Rolling-window presets (days) plus the calendar "this month" option. */
 export const DATE_PRESETS = [
+  { id: "today", label: "Today", days: 1 },
   { id: "7d", label: "7D", days: 7 },
   { id: "30d", label: "30D", days: 30 },
   { id: "90d", label: "90D", days: 90 },

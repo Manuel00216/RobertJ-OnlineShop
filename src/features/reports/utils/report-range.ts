@@ -65,6 +65,33 @@ export function getDefaultRange(): { from: string; to: string } {
   return { from: addDays(to, -(DEFAULT_REPORT_DAYS - 1)), to };
 }
 
+/**
+ * Same `from`/`to` parsing as {@link parseReportFilters}, but defaulting to
+ * today only rather than the last {@link DEFAULT_REPORT_DAYS} days — used by
+ * the Dashboard Overview's lighter date filter (no granularity/shop concept
+ * of its own), so its unfiltered default view is unchanged from before this
+ * filter existed.
+ */
+export function parseDashboardDateRange(
+  params: Record<string, string | string[] | undefined>,
+): { from: string; to: string } {
+  const pick = (key: string): string | undefined => {
+    const v = params[key];
+    return Array.isArray(v) ? v[0] : v;
+  };
+
+  const today = manilaToday();
+  const rawFrom = pick("from");
+  const rawTo = pick("to");
+
+  let from = rawFrom && ISO_DATE.test(rawFrom) ? rawFrom : today;
+  let to = rawTo && ISO_DATE.test(rawTo) ? rawTo : today;
+  if (from > to) {
+    [from, to] = [to, from];
+  }
+  return { from, to };
+}
+
 function isGranularity(value: unknown): value is ReportGranularity {
   return REPORT_GRANULARITIES.includes(value as ReportGranularity);
 }

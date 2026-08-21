@@ -6,7 +6,6 @@ import { ErrorState } from "@/components/feedback/ErrorState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ROUTES } from "@/constants/routes";
 import { USER_ROLES } from "@/constants/roles";
-import { manilaToday } from "@/features/reports/utils/report-range";
 import { formatCurrency } from "@/lib/utils/currency";
 import {
   getDashboardOrderSummary,
@@ -43,15 +42,21 @@ function StatTile({
   );
 }
 
+export interface DashboardKpiRowProps {
+  /** Date range for the sales/orders tiles only — Pending orders, Products, Low stock, and Pending payments are always current-state, not date-scoped. */
+  from: string;
+  to: string;
+}
+
 /**
- * "What's happening in my shop right now" — six clickable KPI tiles, each
- * reused directly from an already-built data source (Reports' summary RPC,
- * the dashboard order-status counts, Inventory's low-stock report, and the
- * same pending-payments query the old standalone card used). No new RPC, no
- * new table.
+ * "What's happening in my shop" — six clickable KPI tiles, each reused
+ * directly from an already-built data source (Reports' summary RPC, the
+ * dashboard order-status counts, Inventory's low-stock report, and the same
+ * pending-payments query the old standalone card used). No new RPC, no new
+ * table.
  */
-export async function DashboardKpiRow() {
-  let today: Awaited<ReturnType<typeof getSalesSummary>>;
+export async function DashboardKpiRow({ from, to }: DashboardKpiRowProps) {
+  let summary: Awaited<ReturnType<typeof getSalesSummary>>;
   let pendingOrders: number;
   let totalProducts: number;
   let lowStockCount: number;
@@ -62,15 +67,14 @@ export async function DashboardKpiRow() {
     const isAdmin = user.role === USER_ROLES.admin;
     const owner = isAdmin ? null : { sellerId: user.id, shopId: await getOwnShopId(user.id) };
 
-    const manila = manilaToday();
-    const [summary, orderSummary, products, lowStock, payments] = await Promise.all([
-      getSalesSummary(manila, manila, null),
+    const [salesSummary, orderSummary, products, lowStock, payments] = await Promise.all([
+      getSalesSummary(from, to, null),
       getDashboardOrderSummary(),
       listDashboardProducts(owner),
       getLowStockReport(),
       listPendingPayments(),
     ]);
-    today = summary;
+    summary = salesSummary;
     pendingOrders = orderSummary.statusCounts.pending;
     totalProducts = products.length;
     lowStockCount = lowStock.length;
@@ -83,10 +87,10 @@ export async function DashboardKpiRow() {
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
       <StatTile
         href={ROUTES.reports}
-        label="Today's sales"
-        value={formatCurrency(today.revenueCents)}
+        label="Sales"
+        value={formatCurrency(summary.revenueCents)}
       />
-      <StatTile href={ROUTES.dashboardOrders} label="Today's orders" value={today.totalOrders} />
+      <StatTile href={ROUTES.dashboardOrders} label="Orders" value={summary.totalOrders} />
       <StatTile href={ROUTES.dashboardOrders} label="Pending orders" value={pendingOrders} />
       <StatTile href={ROUTES.dashboardProducts} label="Products" value={totalProducts} />
       <StatTile href={ROUTES.inventory} label="Low stock" value={lowStockCount} />
