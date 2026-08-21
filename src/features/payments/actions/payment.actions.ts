@@ -59,13 +59,18 @@ export async function submitQrPaymentAction(
 export async function verifyPaymentAction(
   paymentId: string,
   decision: PaymentDecision,
+  reason?: string,
 ): Promise<ActionResult<null>> {
-  const parsed = verifyPaymentSchema.safeParse({ paymentId, decision });
-  if (!parsed.success) return fail("Invalid request.");
+  const parsed = verifyPaymentSchema.safeParse({ paymentId, decision, reason });
+  if (!parsed.success) return fromZodError(parsed.error);
 
   try {
     await queries.requireRole(DASHBOARD_ROLES);
-    await queries.verifyPayment(parsed.data.paymentId, parsed.data.decision);
+    await queries.verifyPayment(
+      parsed.data.paymentId,
+      parsed.data.decision,
+      parsed.data.reason ?? null,
+    );
     revalidatePath(ROUTES.paymentVerification);
     return ok(null);
   } catch (error) {

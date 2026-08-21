@@ -59,10 +59,13 @@ export default async function OrderDetailPage({
     shopNames.get(order.sellerId) ??
     (order.sellerRole === USER_ROLES.seller ? order.sellerName : null);
 
-  // Only relevant while payment is undecided — once paid/failed, the
-  // PaymentStatusBadge below already reflects the outcome.
+  // Pending: shows the "submitted, awaiting verification" state. Failed:
+  // carries the seller/admin's rejection reason, shown in the Payment card
+  // below. Paid needs neither — PaymentStatusBadge already reflects it.
   const activePayment =
-    order.paymentStatus === "pending" ? await getActivePaymentForOrder(order.id) : null;
+    order.paymentStatus === "pending" || order.paymentStatus === "failed"
+      ? await getActivePaymentForOrder(order.id)
+      : null;
 
   // "Write a Review" only applies to a delivered order, and only for items
   // the buyer hasn't already reviewed.
@@ -155,6 +158,12 @@ export default async function OrderDetailPage({
             <div className="mt-3">
               <PaymentStatusBadge status={order.paymentStatus} />
             </div>
+            {order.paymentStatus === "failed" && activePayment?.failureReason ? (
+              <p className="mt-3 border-t border-rj-gray-100 pt-3 text-xs text-rj-gray-600">
+                <span className="font-semibold text-rj-black">Reason: </span>
+                {activePayment.failureReason}
+              </p>
+            ) : null}
             {shopName ? (
               <p className="mt-3 border-t border-rj-gray-100 pt-3 text-xs text-rj-gray-600">
                 Sold by{" "}

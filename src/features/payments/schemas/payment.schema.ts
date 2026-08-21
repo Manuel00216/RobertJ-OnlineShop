@@ -23,10 +23,16 @@ export const submitQrPaymentSchema = z.object({
     ),
 });
 
-export const verifyPaymentSchema = z.object({
-  paymentId: uuidSchema,
-  decision: z.enum(["paid", "failed"]),
-});
+export const verifyPaymentSchema = z
+  .object({
+    paymentId: uuidSchema,
+    decision: z.enum(["paid", "failed"]),
+    reason: z.string().trim().max(500, "Reason is too long.").optional(),
+  })
+  .refine(
+    (data) => data.decision !== "failed" || (data.reason && data.reason.length > 0),
+    { message: "A reason is required when rejecting a payment.", path: ["reason"] },
+  );
 
 export type SubmitQrPaymentInput = z.infer<typeof submitQrPaymentSchema>;
 export type VerifyPaymentInput = z.infer<typeof verifyPaymentSchema>;

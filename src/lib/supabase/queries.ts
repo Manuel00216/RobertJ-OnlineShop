@@ -1801,16 +1801,19 @@ export async function submitQrPayment(
  * Seller (of the order) or admin marks a pending payment paid/failed via the
  * `verify_payment` RPC — the sole write path for verification (no direct
  * UPDATE grant exists). Also flips the parent order's `payment_status` in the
- * same RPC transaction.
+ * same RPC transaction. `reason` is required by the RPC itself (and stored
+ * on `payments.failure_reason`) when `decision === 'failed'`; ignored for `'paid'`.
  */
 export async function verifyPayment(
   paymentId: string,
   decision: PaymentDecision,
+  reason: string | null = null,
 ): Promise<void> {
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("verify_payment", {
     p_payment_id: paymentId,
     p_decision: decision,
+    p_reason: reason ?? undefined,
   });
 
   if (error) {
@@ -2456,9 +2459,10 @@ export async function assignProductShop(
 }
 
 /**
- * The active (pending) payment for one of the buyer's own orders, or null if
- * none has been submitted yet. Used by the order detail page to decide
- * whether to show the receipt-upload prompt or a "submitted" status.
+ * The most recent non-refunded payment attempt for one of the buyer's own
+ * orders, or null if none has been submitted yet. Used by the order detail
+ * page to decide whether to show the receipt-upload prompt, a "submitted"
+ * status, or — for `failed` — the seller/admin's rejection reason.
  */
 export async function getActivePaymentForOrder(
   orderId: string,
@@ -2468,7 +2472,9 @@ export async function getActivePaymentForOrder(
     .from(DATABASE_TABLES.PAYMENTS)
     .select(PAYMENT_COLUMNS)
     .eq("order_id", orderId)
-    .in("status", [PAYMENT_STATUS.pending, PAYMENT_STATUS.paid])
+    .in("status", [PAYMENT_STATUS.pending, PAYMENT_STATUS.paid, PAYMENT_STATUS.failed])
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (error) {

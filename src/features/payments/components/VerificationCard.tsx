@@ -29,6 +29,7 @@ export interface VerificationCardProps {
  */
 export function VerificationCard({ payment, receiptUrl }: VerificationCardProps) {
   const [pendingDecision, setPendingDecision] = useState<PaymentDecision | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [decided, setDecided] = useState<PaymentDecision | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -38,7 +39,11 @@ export function VerificationCard({ payment, receiptUrl }: VerificationCardProps)
     setError(null);
     const decision = pendingDecision;
     startTransition(async () => {
-      const result = await verifyPaymentAction(payment.id, decision);
+      const result = await verifyPaymentAction(
+        payment.id,
+        decision,
+        decision === "failed" ? rejectReason : undefined,
+      );
       if (!result.success) {
         setError(result.error);
         setPendingDecision(null);
@@ -105,9 +110,34 @@ export function VerificationCard({ payment, receiptUrl }: VerificationCardProps)
               confirmVariant={pendingDecision === "paid" ? "rj" : "danger"}
               confirmLabel={`Yes, ${pendingDecision === "paid" ? "mark verified" : "reject"}`}
               isPending={isPending}
+              confirmDisabled={pendingDecision === "failed" && rejectReason.trim().length === 0}
               onConfirm={confirmDecision}
-              onCancel={() => setPendingDecision(null)}
-            />
+              onCancel={() => {
+                setPendingDecision(null);
+                setRejectReason("");
+              }}
+            >
+              {pendingDecision === "failed" ? (
+                <div className="mt-3 flex flex-col gap-1.5">
+                  <label
+                    htmlFor={`reject-reason-${payment.id}`}
+                    className="text-xs font-medium text-rj-black"
+                  >
+                    Reason (shown to the buyer)
+                  </label>
+                  <textarea
+                    id={`reject-reason-${payment.id}`}
+                    value={rejectReason}
+                    onChange={(event) => setRejectReason(event.target.value)}
+                    required
+                    maxLength={500}
+                    rows={2}
+                    className="rounded-md border border-rj-gray-200 bg-rj-white px-3 py-2 text-sm text-rj-black outline-none transition-colors focus-visible:border-rj-black focus-visible:ring-2 focus-visible:ring-rj-red/30"
+                    placeholder="e.g. Receipt image doesn't match the order total"
+                  />
+                </div>
+              ) : null}
+            </ConfirmPanel>
           </div>
         ) : (
           <div className="mt-3 flex flex-wrap gap-2">

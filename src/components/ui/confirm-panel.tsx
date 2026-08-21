@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 
 import { Button, type ButtonProps } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
@@ -28,6 +28,10 @@ export interface ConfirmPanelProps {
   isPending?: boolean;
   /** Element to return focus to when the panel closes via Escape or Cancel. */
   triggerRef?: RefObject<HTMLElement | null>;
+  /** Extra content rendered between the description and the button row — e.g. a required reason field. */
+  children?: ReactNode;
+  /** Disables the confirm button independent of isPending — e.g. until a required field is filled in. */
+  confirmDisabled?: boolean;
 }
 
 /**
@@ -48,6 +52,8 @@ export function ConfirmPanel({
   onCancel,
   isPending = false,
   triggerRef,
+  children,
+  confirmDisabled = false,
 }: ConfirmPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -80,12 +86,14 @@ export function ConfirmPanel({
     >
       <p className="text-sm font-bold text-rj-black">{title}</p>
       {description ? <p className="mt-1 text-xs text-rj-gray-600">{description}</p> : null}
+      {children}
       <div className="mt-3 flex flex-wrap gap-2">
         <Button
           type="button"
           variant={confirmVariant ?? (tone === "danger" ? "danger" : "rj")}
           size="rjSm"
           isLoading={isPending}
+          disabled={confirmDisabled}
           onClick={onConfirm}
         >
           {isPending && pendingLabel ? pendingLabel : confirmLabel}

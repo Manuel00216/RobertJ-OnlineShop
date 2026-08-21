@@ -1231,6 +1231,7 @@ export type Database = {
         Args: {
           p_decision: Database["public"]["Enums"]["payment_status"]
           p_payment_id: string
+          p_reason?: string
         }
         Returns: {
           amount_cents: number
