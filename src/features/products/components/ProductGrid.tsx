@@ -1,18 +1,88 @@
+import Image from "next/image";
+import Link from "next/link";
+
+import { USER_ROLES } from "@/constants/roles";
 import { PRODUCT_CONDITION, PRODUCT_CONDITION_LABELS } from "@/constants/status";
 import { ROUTES } from "@/constants/routes";
 import { EmptyState } from "@/components/feedback/EmptyState";
+import { formatCurrency } from "@/lib/utils/currency";
+import {
+  getSessionUser,
+  getShopNamesBySellerIds,
+  listWishlistProductIds,
+} from "@/lib/supabase/queries";
 import { ProductTile, type ProductTileItem } from "@/features/products/components/ProductTile";
+import { WishlistButton } from "@/features/wishlist/components/WishlistButton";
 import { getCoverImage, type Product } from "@/features/products/types/product.types";
 
 export interface ProductGridProps {
   products: Product[];
+  /** Defaults to "grid". "list" renders compact horizontal rows instead —
+   * same underlying tile data, just a denser layout for scanning many items. */
+  viewMode?: "grid" | "list";
+  /** When set, the empty state names the search term instead of a generic message. */
+  searchTerm?: string;
 }
 
-function toTileItem(product: Product): ProductTileItem {
+/** One row in the "list" view — same fields as `ProductTile`, laid out horizontally. */
+function ProductListRow({ item }: { item: ProductTileItem }) {
+  return (
+    <li>
+      <Link
+        href={item.href}
+        className="flex items-center gap-4 rounded-xl border border-rj-gray-100 bg-rj-white p-3 transition-colors hover:border-rj-gray-200"
+      >
+        <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-rj-gray-100">
+          {item.imageUrl ? (
+            <Image src={item.imageUrl} alt={item.name} fill sizes="64px" className="object-cover" />
+          ) : null}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[9px] font-medium tracking-widest text-rj-gray-400">
+            {item.shopName}
+          </p>
+          <p className="line-clamp-1 text-sm font-medium text-rj-black">{item.name}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          <span className="text-sm font-bold text-rj-black">
+            {formatCurrency(item.priceCents, item.currency)}
+          </span>
+          {item.wishlist ? (
+            <WishlistButton
+              productId={item.wishlist.productId}
+              initialSaved={item.wishlist.initialSaved}
+              isAuthenticated={item.wishlist.isAuthenticated}
+              variant="tile"
+            />
+          ) : null}
+        </div>
+      </Link>
+    </li>
+  );
+}
+
+function toTileItem(
+  product: Product,
+  wishlistedIds: ReadonlySet<string>,
+  isAuthenticated: boolean,
+  shopNames: ReadonlyMap<string, string>,
+): ProductTileItem {
+  // Real shop name when the seller belongs to one (see
+  // `resolve_shop_membership`); falls back to the seller's own profile
+  // name for a legacy/unassigned seller (TD-1) — but only when `seller_id`
+  // actually resolves to a `seller` account. An admin-authored or
+  // demoted-account product has no shop and no business showing that
+  // account's personal name on the storefront, so it goes straight to the
+  // generic label instead.
+  const shopName =
+    shopNames.get(product.sellerId) ??
+    (product.sellerRole === USER_ROLES.seller ? product.sellerName : null) ??
+    "RobertJ Seller";
+
   return {
     key: product.id,
     name: product.title,
-    shopName: product.sellerName ?? "RobertJ Seller",
+    shopName,
     priceCents: product.priceCents,
     originalPriceCents: null,
     currency: product.currency,
@@ -29,26 +99,72 @@ function toTileItem(product: Product): ProductTileItem {
       productId: product.id,
       slug: product.slug,
       sellerId: product.sellerId,
-      sellerName: product.sellerName,
+      // Same resolved label as `shopName` above — the cart/checkout must
+      // show the same "who sold this" identity as the catalog, not the raw
+      // personal name (see the shop-name fix this mirrors).
+      sellerName: shopName,
+    },
+    wishlist: {
+      productId: product.id,
+      initialSaved: wishlistedIds.has(product.id),
+      isAuthenticated,
     },
   };
 }
 
-export function ProductGrid({ products }: ProductGridProps) {
+export async function ProductGrid({
+  products,
+  viewMode = "grid",
+  searchTerm,
+}: ProductGridProps) {
   if (products.length === 0) {
-    return (
+    return searchTerm ? (
+      <EmptyState
+        title={`No results for "${searchTerm}"`}
+        description="Check the spelling, try a shorter term, or browse by category instead."
+      />
+    ) : (
       <EmptyState
         title="No products found"
-        description="Try a different search term or browse another category."
+        description="Try adjusting your filters or browse another category."
       />
+    );
+  }
+
+  // A couple of extra bulk queries per grid render, not per tile — same
+  // shape as the existing `getSessionUser`/`listFeaturedProducts` pattern.
+  // Either failing degrades gracefully (no hearts saved / seller-name
+  // fallback) rather than breaking the grid.
+  const user = await getSessionUser();
+  const sellerIds = [...new Set(products.map((product) => product.sellerId))];
+  const [wishlistedIds, shopNames] = await Promise.all([
+    user
+      ? listWishlistProductIds(user.id)
+          .then((ids) => new Set(ids))
+          .catch(() => new Set<string>())
+      : Promise.resolve(new Set<string>()),
+    getShopNamesBySellerIds(sellerIds).catch(() => new Map<string, string>()),
+  ]);
+
+  const items = products.map((product) =>
+    toTileItem(product, wishlistedIds, user !== null, shopNames),
+  );
+
+  if (viewMode === "list") {
+    return (
+      <ul className="flex flex-col gap-3">
+        {items.map((item) => (
+          <ProductListRow key={item.key} item={item} />
+        ))}
+      </ul>
     );
   }
 
   return (
     <ul className="grid grid-cols-2 gap-5 md:grid-cols-3 md:gap-6 lg:grid-cols-4">
-      {products.map((product) => (
-        <li key={product.id}>
-          <ProductTile item={toTileItem(product)} />
+      {items.map((item) => (
+        <li key={item.key}>
+          <ProductTile item={item} />
         </li>
       ))}
     </ul>

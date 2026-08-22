@@ -1,3 +1,4 @@
+import { RJ_CARD } from "@/components/ui/card";
 import { CHECKOUT_COPY } from "@/features/checkout/constants/checkout.constants";
 import type { PaymentMethod } from "@/features/checkout/types/checkout.types";
 import { cn } from "@/lib/utils/cn";
@@ -27,7 +28,7 @@ export function PaymentMethodCard({
   onChange: (method: PaymentMethod) => void;
 }) {
   return (
-    <fieldset className="rounded-2xl border border-rj-gray-100 bg-rj-white p-5">
+    <fieldset className={cn(RJ_CARD, "p-5")}>
       <legend className="text-[10px] font-bold uppercase tracking-[0.3em] text-rj-gray-600">
         {CHECKOUT_COPY.paymentSectionTitle}
       </legend>

@@ -182,12 +182,12 @@ Detailed purpose, boundaries, and interactions for each module are in [`ARCHITEC
 | Categories | ✅ Completed | `src/features/categories`, `src/app/(shop)/categories` |
 | Cart | ✅ Completed | `src/features/cart`, `src/app/(shop)/cart` |
 | Customer Account | ✅ Completed | `src/features/account`, `src/app/(account)` |
-| Orders | ✅ Completed | `src/features/orders`, `src/app/(account)/orders` |
+| Orders | ✅ Completed — buyer history/detail *and* Shop Owner/Admin fulfilment management | `src/features/orders`, `src/app/(account)/orders`, `src/app/dashboard/orders` |
 | Checkout | ✅ Completed (COD only — QR payment method is Phase 7/Payments scope) | `src/features/checkout`, `src/app/(shop)/checkout` |
-| Shops (multi-shop model) | ⏳ Upcoming | *(target schema; not yet built)* |
-| Inventory (dedicated module) | ⏳ Upcoming | `src/features/inventory` *(stub)* |
+| Shops (multi-shop model) | 🚧 In Progress (`shops`/`shop_users` exist and are backfilled; `products.shop_id` exists — `20260814000000_products_shop_scoping.sql`; admin can now create/manage shops and onboard sellers with no direct SQL — `20260816000000_admin_user_shop_management.sql`; `orders` still keys off `seller_id` only, no `shop_id` bridge yet) | `supabase/migrations/{20260813000000,20260814000000,20260816000000}_*.sql`, `src/features/shops`, `src/features/users`, `src/app/dashboard/{shops,users}` |
+| Inventory (dedicated module) | ✅ Completed | `supabase/migrations/20260815000000_inventory_and_stock_history.sql`, `src/features/inventory`, `src/app/dashboard/inventory` |
 | Payments (COD + QR verification) | ✅ Completed | `src/features/payments`; receipt upload on the order detail page; verification queue at `/dashboard/payments` |
-| Reports | ⏳ Upcoming | `src/features/reports` *(stub)* |
+| Reports | ✅ Completed | `src/features/reports`, `src/app/dashboard/reports`, `src/components/charts` |
 | Guided Product Selection | ⏳ Upcoming | `src/features/assistant` *(stub; landing preview only)* |
 
 Legend: ✅ Completed · 🚧 In Progress · ⏳ Upcoming
@@ -214,14 +214,26 @@ flowchart LR
 
     classDef done fill:#1f7a3d,stroke:#0d3d1f,color:#fff;
     classDef todo fill:#3a3f4b,stroke:#20242c,color:#fff;
-    class P1,P2,P3,P4,P5,P7 done;
-    class P6,P8,P9 todo;
+    classDef partial fill:#8a6d1f,stroke:#4d3c10,color:#fff;
+    class P1,P2,P3,P4,P5,P7,P8 done;
+    class P6 partial;
+    class P9 todo;
 ```
 
 > [!NOTE]
 > Phase 7 (Payments) landed before Phase 6 (Shops & Inventory) — it had no dependency on the
 > shops/inventory schema work, so it wasn't blocked on phase order. Noted here rather than
 > silently reordering the roadmap.
+>
+> Phase 6 is **mostly done**: the `shops`/`shop_users` schema foundation landed
+> (tables, RLS, backfill — see [Implementation Status](#implementation-status-target-vs-current)),
+> `products.shop_id` now exists (`products` is shop-scoped), Inventory is fully built
+> (dedicated `inventory`/`stock_adjustments` tables — see
+> [ARCHITECTURE.md → Architecture Evolution Strategy](./ARCHITECTURE.md#architecture-evolution-strategy)),
+> and Admin can now manage users/shops and onboard sellers with no direct SQL
+> (`admin_assign_seller_shop`/`admin_list_users` RPCs, `/dashboard/{users,shops}`).
+> What's left: `orders` still keys off `seller_id` only, no `shop_id` bridge yet.
+> See [ARCHITECTURE.md → TD-1](./ARCHITECTURE.md#technical-debt-register).
 
 | Phase | Focus | State |
 |-------|-------|-------|
@@ -230,9 +242,9 @@ flowchart LR
 | 3 | Authentication (UI + flows) | ✅ |
 | 4 | Customer Account & Order Tracking | ✅ |
 | 5 | **Checkout** | ✅ |
-| 6 | Shops & Inventory (align to SAD multi-shop model) | ⏳ |
+| 6 | Shops & Inventory (align to SAD multi-shop model) | 🚧 (Shops + `products.shop_id` + Inventory + Admin Users/Shops onboarding done; `orders.shop_id` bridge not started) |
 | 7 | Payments — COD + QR receipt upload + manual verification | ✅ |
-| 8 | Reports & analytics | ⏳ |
+| 8 | Reports & analytics | ✅ |
 | 9 | Guided Product Selection (rule-based) | ⏳ |
 
 ---
@@ -428,12 +440,12 @@ The interface follows modern marketplace best practices, inspired by **Lazada, S
 | **Shop Owner** role | `seller` role | Current model has **seller accounts**, not shop entities. |
 | **Administrator** role | `admin` role | Matches. |
 | **Guest** | Unauthenticated visitor (no profile) | Matches. |
-| `shops` table | ❌ Not implemented | Products currently attach to a **seller** (`products.seller_id`), not a shop. |
-| `shop_users` table | ❌ Not implemented | No shop-staffing model yet. |
+| `shops` table | 🚧 **Foundation implemented** | Table + RLS + backfill exist (one shop per seller). Products still attach to a **seller** (`products.seller_id`), not a `shop_id` — no FK bridge yet. |
+| `shop_users` table | 🚧 **Foundation implemented** | Proper junction table (supports >1 staff per shop later); today exactly one member per shop (DB-enforced via `unique (user_id)`), admin-managed via `/dashboard/users` (no self-service join). |
 | `roles` table | Role stored on `profiles.role` (enum) | Roles are an enum column, not a separate table. |
-| `inventory` table | `products.quantity` column | Stock is a column on `products`, not a dedicated table. |
+| `inventory` table | ✅ **Implemented** — dedicated `inventory` + `stock_adjustments` tables | `products.quantity` is now a trigger-synced mirror, not the source of truth. See [ARCHITECTURE.md → Architecture Evolution Strategy](./ARCHITECTURE.md#architecture-evolution-strategy). |
 | `recommendation_rules` table | ❌ Not implemented | Guided Product Selection is a landing **preview** only; `features/assistant` is a stub. |
-| `reports` table | ❌ Not implemented | `features/reports` is a stub. |
+| `reports` table | ✅ **Implemented as computed RPCs** (no physical table) | Reports are aggregated DB-side by four read-only `SECURITY DEFINER` RPCs (`report_sales_summary`/`_timeseries`/`_order_status_breakdown`/`_top_products`) over the existing `orders`/`order_items`/`payments`, scoped per shop/admin. A stored `reports` table was deliberately not modelled — see [ARCHITECTURE.md → Reporting RPCs](./ARCHITECTURE.md#reporting-rpcs-analytics-over-existing-orders). |
 | Unified **cart** | Client-side cart (localStorage + `useReducer`) | Guest cart is client-only by design; committed at checkout. |
 | **Payments:** COD + QR receipt upload, manual verification | ✅ **Implemented** — COD (no action needed) + QR (buyer uploads a receipt, seller/admin verifies at `/dashboard/payments`) | Matches target. Stripe/card spike removed (ADR-014); its columns were dropped from `payments` when this landed. |
 
@@ -473,13 +485,12 @@ Beyond the current capstone scope (kept clearly separate from committed scope):
 - Automated inventory syncing across shops.
 - Payment gateway integration (would supersede the current manual COD/QR model).
 - Courier / shipping API integration and live tracking.
-- Product reviews and ratings.
-- Realtime notifications (Supabase Realtime).
-- Saved shipping addresses and wishlists.
+- Realtime notifications (Supabase Realtime) and push/email/SMS notification infrastructure. *(A lightweight, derived, read-only buyer activity feed — not realtime, no new infrastructure — was approved separately; see [ADR-018](./DECISIONS.md#adr-018-wishlist-reviews-and-a-derived-buyer-activity-feed).)*
+- Saved shipping addresses.
 - Richer analytics and exportable reports.
 
 > [!NOTE]
-> These are **not** in scope for the capstone and must not be implemented without explicit approval. A Stripe spike toward a possible future gateway previously lived in the repo (ADR-014) and has since been removed — it was never committed scope.
+> These are **not** in scope for the capstone and must not be implemented without explicit approval. A Stripe spike toward a possible future gateway previously lived in the repo (ADR-014) and has since been removed — it was never committed scope. Product reviews/ratings and wishlists — previously listed here — were approved for the Buyer UX Improvement Phase; see [ADR-018](./DECISIONS.md#adr-018-wishlist-reviews-and-a-derived-buyer-activity-feed).
 
 ---
 

@@ -1,5 +1,6 @@
 import { Check } from "lucide-react";
 
+import { RJ_CARD } from "@/components/ui/card";
 import type { OrderStatus } from "@/constants/status";
 import { cn } from "@/lib/utils/cn";
 import {
@@ -25,7 +26,8 @@ export function OrderTimeline({ status }: { status: OrderStatus }) {
         role="status"
         aria-live="polite"
         className={cn(
-          "flex items-center gap-3 rounded-2xl border border-rj-gray-100 p-5",
+          RJ_CARD,
+          "flex items-center gap-3 p-5",
           status === "cancelled" ? "bg-danger/5" : "bg-rj-gray-50",
         )}
       >
@@ -56,7 +58,7 @@ export function OrderTimeline({ status }: { status: OrderStatus }) {
   return (
     <section
       aria-label="Order progress"
-      className="rounded-2xl border border-rj-gray-100 bg-rj-white p-5"
+      className={cn(RJ_CARD, "p-5")}
     >
       <ol className="flex items-start">
         {ORDER_TIMELINE_STEPS.map((step, index) => {

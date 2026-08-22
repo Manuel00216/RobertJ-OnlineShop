@@ -4,17 +4,26 @@ import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { RJ_CARD } from "@/components/ui/card";
+import type { UserRole } from "@/constants/roles";
 import { ROUTES } from "@/constants/routes";
 import { signOutAction } from "@/features/auth/actions/auth.actions";
+import { canViewDashboard } from "@/lib/auth/permissions";
 import { cn } from "@/lib/utils/cn";
 import { getInitials } from "@/lib/utils/format";
 import type { SessionUser } from "@/types/common.types";
 
-const MENU_ITEMS = [
+const BASE_MENU_ITEMS = [
   { href: ROUTES.account, label: "My Account" },
   { href: ROUTES.orders, label: "Orders" },
   { href: ROUTES.profile, label: "Profile" },
 ] as const;
+
+function getMenuItems(role: UserRole) {
+  return canViewDashboard(role)
+    ? [...BASE_MENU_ITEMS, { href: ROUTES.dashboard, label: "Dashboard" }]
+    : BASE_MENU_ITEMS;
+}
 
 /**
  * Signed-in user popover for the shared site header (shop chrome). Closes on
@@ -41,6 +50,7 @@ export function AccountMenu({ user }: { user: SessionUser }) {
   }, [open]);
 
   const initials = getInitials(user.fullName ?? user.email);
+  const menuItems = getMenuItems(user.role as UserRole);
 
   return (
     <div ref={ref} className="relative">
@@ -68,7 +78,7 @@ export function AccountMenu({ user }: { user: SessionUser }) {
         <div
           role="menu"
           aria-label="Account"
-          className="absolute right-0 top-full z-50 mt-2 w-56 rounded-2xl border border-rj-gray-100 bg-rj-white p-1.5 shadow-lg"
+          className={cn(RJ_CARD, "absolute right-0 top-full z-50 mt-2 w-56 p-1.5 shadow-lg")}
         >
           <div className="px-3 py-2">
             <p className="truncate text-sm font-semibold text-rj-black">
@@ -77,7 +87,7 @@ export function AccountMenu({ user }: { user: SessionUser }) {
             <p className="truncate text-xs text-rj-gray-600">{user.email}</p>
           </div>
           <div className="mt-1">
-            {MENU_ITEMS.map((item) => (
+            {menuItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}

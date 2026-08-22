@@ -1,3 +1,5 @@
+import { RJ_CARD } from "@/components/ui/card";
+import { cn } from "@/lib/utils/cn";
 import { CheckoutItemsList } from "@/features/checkout/components/CheckoutItemsList";
 import { CheckoutTotals } from "@/features/checkout/components/CheckoutTotals";
 import type { CheckoutGroup } from "@/features/checkout/types/checkout.types";
@@ -7,7 +9,7 @@ export function CheckoutGroupCard({ group }: { group: CheckoutGroup }) {
   return (
     <section
       aria-label={`Order from ${group.sellerName ?? "this seller"}`}
-      className="rounded-2xl border border-rj-gray-100 bg-rj-white p-5"
+      className={cn(RJ_CARD, "p-5")}
     >
       <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-rj-red-dark">
         {group.sellerName ?? "Seller"}

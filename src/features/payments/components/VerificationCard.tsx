@@ -2,15 +2,18 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
+import { RJ_CARD } from "@/components/ui/card";
+import { ConfirmPanel } from "@/components/ui/confirm-panel";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { ROUTES } from "@/constants/routes";
 import { verifyPaymentAction } from "@/features/payments/actions/payment.actions";
 import type { Payment, PaymentDecision } from "@/features/payments/types/payment.types";
 import { formatCurrency } from "@/lib/utils/currency";
 import { formatDate } from "@/lib/utils/date";
+import { cn } from "@/lib/utils/cn";
 
 export interface VerificationCardProps {
   payment: Payment;
@@ -26,27 +29,21 @@ export interface VerificationCardProps {
  */
 export function VerificationCard({ payment, receiptUrl }: VerificationCardProps) {
   const [pendingDecision, setPendingDecision] = useState<PaymentDecision | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [decided, setDecided] = useState<PaymentDecision | null>(null);
   const [isPending, startTransition] = useTransition();
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!pendingDecision) return;
-    panelRef.current?.focus();
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setPendingDecision(null);
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [pendingDecision]);
 
   function confirmDecision() {
     if (!pendingDecision) return;
     setError(null);
     const decision = pendingDecision;
     startTransition(async () => {
-      const result = await verifyPaymentAction(payment.id, decision);
+      const result = await verifyPaymentAction(
+        payment.id,
+        decision,
+        decision === "failed" ? rejectReason : undefined,
+      );
       if (!result.success) {
         setError(result.error);
         setPendingDecision(null);
@@ -58,7 +55,7 @@ export function VerificationCard({ payment, receiptUrl }: VerificationCardProps)
   }
 
   return (
-    <div className="flex flex-col gap-4 rounded-2xl border border-rj-gray-100 bg-rj-white p-5 sm:flex-row sm:items-start">
+    <div className={cn(RJ_CARD, "flex flex-col gap-4 p-5 sm:flex-row sm:items-start")}>
       {receiptUrl ? (
         <a
           href={receiptUrl}
@@ -100,39 +97,47 @@ export function VerificationCard({ payment, receiptUrl }: VerificationCardProps)
             Marked {decided === "paid" ? "verified" : "rejected"}.
           </p>
         ) : pendingDecision ? (
-          <div
-            ref={panelRef}
-            role="alertdialog"
-            aria-label={`Confirm: mark ${payment.orderNumber} as ${pendingDecision}`}
-            tabIndex={-1}
-            className="mt-3 rounded-xl border border-rj-gray-200 bg-rj-gray-50 p-4 outline-none"
-          >
-            <p className="text-sm font-semibold text-rj-black">
-              {pendingDecision === "paid"
-                ? "Confirm this payment was received?"
-                : "Confirm this receipt should be rejected?"}
-            </p>
-            <p className="mt-1 text-xs text-rj-gray-600">This can&apos;t be undone.</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant={pendingDecision === "paid" ? "rj" : "danger"}
-                size="sm"
-                isLoading={isPending}
-                onClick={confirmDecision}
-              >
-                Yes, {pendingDecision === "paid" ? "mark verified" : "reject"}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={isPending}
-                onClick={() => setPendingDecision(null)}
-              >
-                Cancel
-              </Button>
-            </div>
+          <div className="mt-3">
+            <ConfirmPanel
+              label={`Confirm: mark ${payment.orderNumber} as ${pendingDecision}`}
+              title={
+                pendingDecision === "paid"
+                  ? "Confirm this payment was received?"
+                  : "Confirm this receipt should be rejected?"
+              }
+              description="This can't be undone."
+              tone="neutral"
+              confirmVariant={pendingDecision === "paid" ? "rj" : "danger"}
+              confirmLabel={`Yes, ${pendingDecision === "paid" ? "mark verified" : "reject"}`}
+              isPending={isPending}
+              confirmDisabled={pendingDecision === "failed" && rejectReason.trim().length === 0}
+              onConfirm={confirmDecision}
+              onCancel={() => {
+                setPendingDecision(null);
+                setRejectReason("");
+              }}
+            >
+              {pendingDecision === "failed" ? (
+                <div className="mt-3 flex flex-col gap-1.5">
+                  <label
+                    htmlFor={`reject-reason-${payment.id}`}
+                    className="text-xs font-medium text-rj-black"
+                  >
+                    Reason (shown to the buyer)
+                  </label>
+                  <textarea
+                    id={`reject-reason-${payment.id}`}
+                    value={rejectReason}
+                    onChange={(event) => setRejectReason(event.target.value)}
+                    required
+                    maxLength={500}
+                    rows={2}
+                    className="rounded-md border border-rj-gray-200 bg-rj-white px-3 py-2 text-sm text-rj-black outline-none transition-colors focus-visible:border-rj-black focus-visible:ring-2 focus-visible:ring-rj-red/30"
+                    placeholder="e.g. Receipt image doesn't match the order total"
+                  />
+                </div>
+              ) : null}
+            </ConfirmPanel>
           </div>
         ) : (
           <div className="mt-3 flex flex-wrap gap-2">
@@ -147,7 +152,7 @@ export function VerificationCard({ payment, receiptUrl }: VerificationCardProps)
             <Button
               type="button"
               variant="danger"
-              size="sm"
+              size="rjSm"
               onClick={() => setPendingDecision("failed")}
             >
               Reject

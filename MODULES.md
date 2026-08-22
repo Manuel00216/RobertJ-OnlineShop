@@ -17,15 +17,15 @@
 |---|---|
 | **Purpose** | Let Guests become Customers (and staff sign in) securely: registration, login, logout, email verification, password reset. |
 | **Responsibilities** | Session issuance/refresh; credential validation; safe error messaging (no account enumeration); redirect-after-auth handling. |
-| **Features** | Sign up, sign in, sign out, forgot password, reset password, email verification (PKCE), role-aware post-login redirect. |
-| **Pages** | `src/app/(auth)/{sign-in,sign-up,forgot-password,reset-password}/page.tsx`; `src/app/auth/callback/route.ts` (PKCE exchange, not a page). |
-| **Components** | `features/auth/components/forms/{LoginForm,RegisterForm,ForgotPasswordForm,ResetPasswordForm}`; `fields/{EmailInput,PasswordInput}`; `layout/{AuthCard,AuthHeader,AuthFooter,AuthLayout,EditorialPanel}`; `feedback/{VerificationPending,AuthSuccessState}`; `AuthButton`. |
-| **Server Actions** | `features/auth/actions/auth.actions.ts` — `signInAction`, `signUpAction`, `signOutAction`, `requestPasswordResetAction`, `updatePasswordAction`, `resendVerificationAction`. |
-| **Services** | `lib/supabase/queries.ts` (auth section) — `signInWithPassword`, `signUpWithPassword`, `signOut`, `sendPasswordResetEmail`, `updatePassword`, `resendVerificationEmail`, `getSessionUser`. |
-| **Database Tables** | `auth.users` (Supabase-managed) · `profiles` (via `handle_new_user` trigger, auto-creates a `buyer` profile row). |
-| **Dependencies** | `src/proxy.ts` (session refresh + route gating), `src/constants/routes.ts` (`AUTH_ROUTES`, `PROTECTED_ROUTE_PREFIXES`), `auth-errors.ts` (error mapping). |
-| **Current Status** | ✅ Completed. See [`docs` history via git](./ARCHITECTURE.md#migration-notes) — planned in `auth-module-architecture-plan.md`, now fully implemented. |
-| **Future Work** | OAuth providers, seller self-upgrade flow — both explicitly out of scope today (see [README.md → Out of Scope](./README.md#out-of-scope) precedent for deliberate exclusions). |
+| **Features** | Sign up, sign in, sign out, forgot password, reset password, email verification (PKCE), role-aware post-login redirect, Google/Facebook OAuth sign-in, manual account linking. |
+| **Pages** | `src/app/(auth)/{sign-in,sign-up,forgot-password,reset-password}/page.tsx`; `src/app/auth/callback/route.ts` (PKCE exchange for email links, OAuth sign-in, and OAuth account linking — not a page). |
+| **Components** | `features/auth/components/forms/{LoginForm,RegisterForm,ForgotPasswordForm,ResetPasswordForm}`; `fields/{EmailInput,PasswordInput}`; `layout/{AuthCard,AuthHeader,AuthFooter,AuthLayout,EditorialPanel}`; `feedback/{VerificationPending,AuthSuccessState}`; `social/{SocialLoginButtons,SocialButton,Divider,icons}`; `AuthButton`. Account linking UI lives in the Customer Account module: `features/account/components/{ConnectedAccounts,UnlinkIdentityButton}`. |
+| **Server Actions** | `features/auth/actions/auth.actions.ts` — `signInAction`, `signUpAction`, `signOutAction`, `signInWithOAuthAction`, `requestPasswordResetAction`, `updatePasswordAction`, `resendVerificationAction`. Linking lives with the Account module: `features/account/actions/account.actions.ts` — `linkIdentityAction`, `unlinkIdentityAction`. |
+| **Services** | `lib/supabase/queries.ts` (auth section) — `signInWithPassword`, `signUpWithPassword`, `signInWithOAuth`, `signOut`, `sendPasswordResetEmail`, `updatePassword`, `resendVerificationEmail`, `getSessionUser`, `listUserIdentities`, `linkOAuthIdentity`, `unlinkOAuthIdentity`. |
+| **Database Tables** | `auth.users`/`auth.identities` (Supabase-managed) · `profiles` (via `handle_new_user` trigger, auto-creates a `buyer` profile row; reads Google's and Facebook's differently-named metadata keys). |
+| **Dependencies** | `src/proxy.ts` (session refresh + route gating), `src/constants/routes.ts` (`AUTH_ROUTES`, `PROTECTED_ROUTE_PREFIXES`), `auth-errors.ts` (error mapping, incl. OAuth callback codes). |
+| **Current Status** | ✅ Completed, including Google/Facebook OAuth. Account-matching for OAuth is entirely Supabase Auth's (GoTrue's) own verified-email identity linking — this app never implements its own email-based account matching (see [DECISIONS.md](./DECISIONS.md) for the rationale). Manual linking (Connected Accounts on `/profile`) is the sanctioned fallback for cases automatic linking can't safely cover, e.g. Facebook without a provider-verified email. |
+| **Future Work** | Seller self-upgrade flow — explicitly out of scope today (see [README.md → Out of Scope](./README.md#out-of-scope)). Retroactively merging an already-separate duplicate account's order history into a primary account (created when Facebook auto-linking didn't apply) is a manual admin data-migration operation, not built. |
 
 ---
 
@@ -59,7 +59,7 @@
 | **Server Actions** | `features/products/actions/product.actions.ts` — create/update/archive (guarded by `requireRole(DASHBOARD_ROLES)`), used by the (upcoming) Shop Owner/Admin dashboards. |
 | **Services** | `lib/supabase/queries.ts` (products section) — `getProductBySlug` (React `cache()`), listing/search/filter queries, `toProduct` mapper. |
 | **Database Tables** | `products`, `product_images`, `categories` (FK). |
-| **Dependencies** | Marketplace (entry point), Cart (add-to-cart), Inventory concept (`products.quantity` today). |
+| **Dependencies** | Marketplace (entry point), Cart (add-to-cart), Inventory (owns stock; `products.quantity` is a synced mirror — see [Inventory](#4-inventory)). |
 | **Current Status** | ✅ Completed for browsing/detail. Owner-side create/update actions exist; no dashboard UI consumes them yet (see Admin/Shop Owner modules). |
 | **Future Work** | Wire product mutation actions into the Shop Owner/Admin dashboards once built. |
 
@@ -70,17 +70,16 @@
 | Field | Detail |
 |---|---|
 | **Purpose** | Track and adjust stock levels per shop so updates happen once, centrally — solving the SAD's "inventory updates are repetitive and slow" problem. |
-| **Responsibilities** (target) | Stock level tracking per product (and, in the target schema, per shop); low-stock visibility; manual stock adjustment by shop owners/admin. |
-| **Features** (target) | Stock adjustment UI, low-stock indicators, stock history. |
-| **Pages** | None yet — reserved under `/dashboard/inventory` (`ROUTES.inventory`). |
-| **Components** | None yet — `src/features/inventory/` is a stub (`.gitkeep` placeholders, `index.ts` = `export {}`). |
-| **Server Actions** | None yet. |
-| **Services** | None yet. Currently, stock is read/written incidentally via `products.quantity` inside `create_order` (atomic decrement) and product actions — **not** a dedicated inventory service. |
-| **Database Tables** (current) | `products.quantity` column. |
-| **Database Tables** (target) | Dedicated `inventory` table per [ARCHITECTURE.md → Target Database Schema](./ARCHITECTURE.md#target-database-schema). |
-| **Dependencies** | Products (stock lives on the product row today); Orders (`create_order` decrements stock). |
-| **Current Status** | ⏳ Upcoming (stub). Stock exists functionally via `products.quantity`, but there is no dedicated Inventory module/UI. |
-| **Future Work** | Extract `inventory` from `products.quantity` (Evolution Step 2 in [ARCHITECTURE.md](./ARCHITECTURE.md#architecture-evolution-strategy)); build the Shop Owner inventory screen. |
+| **Responsibilities** | Stock level tracking per product; low/out-of-stock visibility; manual stock adjustment (restock/correction/shrinkage/other) by shop owners/admin; append-only stock movement history; keeping `products.quantity` accurate for every other module without those modules changing. |
+| **Features** | Dashboard stock list (cross-shop for admin, own-shop for a seller — same page, role-branched, per the Admin/Shop Owner "role-scoped view" convention below); manual stock adjustment with a required reason and optional note; per-product stock history panel; in-stock/low-stock/out-of-stock status derived from `quantity` vs. a per-product `low_stock_threshold`; automatic restock on order cancellation; automatic `sold ⇄ active` status sync. |
+| **Pages** | `src/app/dashboard/inventory/page.tsx` — mirrors `dashboard/products/page.tsx`'s exact shape (`requireSessionUser()`, `isAdmin` branch, RLS does the row-scoping). |
+| **Components** | `features/inventory/components/{InventoryTable,InventoryRow,StockStatusBadge,StockAdjustmentForm,StockHistoryPanel}`. |
+| **Server Actions** | `features/inventory/actions/inventory.actions.ts` — `adjustStockAction` (guarded by `requireRole(DASHBOARD_ROLES)` + rate limiting), `getStockHistoryAction`. |
+| **Services** | `lib/supabase/queries.ts` (inventory section) — `listDashboardInventory`, `getInventoryForProduct`, `adjustStock` (wraps the `adjust_stock` RPC), `listStockAdjustments`. `updateProduct()` (Products module) reroutes any submitted `quantity` through `adjustStock()` first, so the generic product-edit form still works but every stock write funnels through one audited path. |
+| **Database Tables** | Dedicated `inventory` (one row per product; `quantity`, `low_stock_threshold`) and append-only `stock_adjustments` (audit log — delta, previous/new quantity, reason, note, related order, actor). `products.quantity` remains as a trigger-synced, read-only-by-convention mirror (column-level `REVOKE UPDATE` for `authenticated`) so every buyer-facing read path (PDP, catalog tiles, cart, `getProductsPriceAndStock`) is unaffected. See [ARCHITECTURE.md → Current Database Mapping](./ARCHITECTURE.md#current-database-mapping-target-vs-current). |
+| **Dependencies** | Products (`products_seed_inventory`/`products_sync_inventory_shop` triggers keep an inventory row in lockstep with every product); Orders (`create_order` locks/decrements `inventory`; an `orders_restock_on_cancel` trigger restocks automatically on cancellation — no change needed in `order.actions.ts`). |
+| **Current Status** | ✅ Completed. Resolves ARCHITECTURE.md TD-2. |
+| **Future Work** | A failed/rejected QR payment does not restock today — deliberately deferred as ARCHITECTURE.md TD-9 pending a Payments-module business-rule decision. Multi-location stock (the `inventory` schema's 1:1 product:row shape leaves room for this without a breaking change) is unplanned/speculative — do not build ahead of a stated need. |
 
 ---
 
@@ -124,17 +123,17 @@
 
 | Field | Detail |
 |---|---|
-| **Purpose** | The single, centralized order pipeline — creation through fulfillment through history — shared by Customers, Shop Owners, and (eventually) Admin. |
-| **Responsibilities** | Order lifecycle state machine; order history and detail views; cancellation; status/timeline presentation. |
-| **Features** | Order list with search/status filter, order detail with timeline, shipping address display, payment-status badge, cancel-order action. |
-| **Pages** | `src/app/(account)/orders/page.tsx`, `orders/[id]/{page,loading,not-found}.tsx`. |
-| **Components** | `features/orders/components/{OrderCard,OrderHeader,OrderItemsList,OrderListSection,OrderSearchInput,OrderSkeletons,OrderStatusBadge,OrderStatusFilter,OrderSummary,OrderTimeline,PaymentStatusBadge,ShippingAddressCard,CancelOrderButton}`. |
-| **Server Actions** | `features/orders/actions/order.actions.ts` — includes buyer-side cancel; seller-side status advancement (guarded, column-level rules enforced by DB trigger). |
-| **Services** | `lib/supabase/queries.ts` — `getBuyerOrder` (`cache()`), order listing, `toOrder` mapper. |
-| **Database Tables** | `orders`, `order_items`; reads `payments` for status. |
-| **Dependencies** | Checkout (creates orders); Payments (status); Customer module (surfaces orders in account); future Admin/Shop Owner dashboards (will reuse this module, not duplicate it). |
-| **Current Status** | ✅ Completed for the Customer-facing history/detail experience. Seller/Admin order **management** UI does not exist yet (see Admin / Shop Owner). |
-| **Future Work** | Seller/Admin order management views — **must reuse** `features/orders` components/services, not fork a parallel implementation (see [CLAUDE.md → AI Non-Negotiable Rules](./CLAUDE.md#ai-non-negotiable-rules): never duplicate business logic). |
+| **Purpose** | The single, centralized order pipeline — creation through fulfillment through history — shared by Customers, Shop Owners, and Admin. |
+| **Responsibilities** | Order lifecycle state machine; order history and detail views; cancellation; fulfilment status advancement; status/timeline presentation. |
+| **Features** | Buyer: order list with search/status filter, order detail with timeline, shipping address display, payment-status badge, cancel-order action (`pending`/`confirmed` only). Shop Owner/Admin: dashboard order list (RLS-scoped to own shop, or every shop for admin), order detail with fulfilment controls, forward status advancement (`pending → confirmed → processing → shipped → delivered`) and cancellation (`pending`/`confirmed`/`processing`), one unified transition map governing both. |
+| **Pages** | `src/app/(account)/orders/page.tsx`, `orders/[id]/{page,loading,not-found}.tsx` (buyer); `src/app/dashboard/orders/page.tsx`, `orders/[id]/{page,loading,not-found}.tsx` (Shop Owner/Admin). |
+| **Components** | `features/orders/components/{OrderCard,OrderHeader,OrderItemsList,OrderListSection,DashboardOrdersPanel,OrderSearchInput,OrderSkeletons,OrderStatusBadge,OrderStatusFilter,OrderSummary,OrderTimeline,PaymentStatusBadge,ShippingAddressCard,CancelOrderButton,OrderStatusControl}`. `OrderStatusControl` is the dashboard's fulfilment/cancel control (mirrors `CancelOrderButton`'s confirm-dialog shape, driven by `ORDER_STATUS_TRANSITIONS`); every other component is shared as-is between the buyer and dashboard views — `OrderCard` takes an optional `href` override so the two contexts link to their own detail route. |
+| **Server Actions** | `features/orders/actions/order.actions.ts` — `cancelOrderAction` (buyer-side); `advanceOrderStatusAction` (Shop Owner/Admin — handles both forward advancement and dashboard-initiated cancellation through one path, guarded by `requireRole(DASHBOARD_ROLES)` + `ORDER_STATUS_TRANSITIONS`, not just the DB trigger). |
+| **Services** | `lib/supabase/queries.ts` — `getBuyerOrder`/`listBuyerOrders`/`getBuyerOrderSummary`/`cancelBuyerOrder` (buyer-scoped, hardcode `buyer_id`); `getDashboardOrder`/`listDashboardOrders` (RLS-only, no manual filter — same "RLS is the primary boundary" pattern as `listDashboardProducts`/`listDashboardInventory`); `advanceOrderStatus` (validates the transition, then an optimistic-concurrency-guarded update); `toOrder` mapper (now also carries `buyerId`/`buyerName`, needed for the dashboard view). |
+| **Database Tables** | `orders`, `order_items`; reads `payments` for status. No `shop_id` column and no new migration for this phase — `seller_id = auth.uid()` already scopes a Shop Owner to their own orders correctly under today's one-member-per-shop reality (see ARCHITECTURE.md's Orders RLS note). |
+| **Dependencies** | Checkout (creates orders); Payments (status; a `payment_status = 'failed'` order has no automatic effect — see TD-9 — but can now be manually cancelled from the dashboard, which restocks via the existing `orders_restock_on_cancel` trigger); Inventory (restock on cancellation, actor-agnostic — buyer, seller, or admin initiated); Customer module (surfaces orders in account); Shop Owner/Admin (this module **is** their order-management surface, not a fork of it). |
+| **Current Status** | ✅ Completed for both the Customer-facing history/detail experience and Shop Owner/Admin order management. |
+| **Future Work** | An admin refund flow (`refunded` status is defined in the DB enum but unreachable from any UI today) — out of scope until requested. Multi-staff-per-shop order visibility, if that ever becomes real (see ARCHITECTURE.md TD-1) — deliberately not built speculatively. |
 
 ---
 
@@ -160,17 +159,17 @@
 
 | Field | Detail |
 |---|---|
-| **Purpose** (target) | Sales and operational analytics for Shop Owners (their own shop) and Administrator (platform-wide). |
-| **Responsibilities** (target) | Aggregate order/sales data; present trends and summaries; support the SAD's "orders and sales are not centralized" problem. |
-| **Features** (target) | Sales summaries, order-volume trends, low-stock/inventory reports, exportable views. |
-| **Pages** | Reserved under `/dashboard/reports` (`ROUTES.reports`); no page built. |
-| **Components** | None — `src/features/reports/` is a stub. |
-| **Server Actions** | None. |
-| **Services** | None. |
-| **Database Tables** (target) | Dedicated `reports` table/materialized aggregates per the target schema; realistically may be computed views over `orders`/`order_items` rather than a literal stored table. |
-| **Dependencies** | Orders (primary data source), Products/Inventory (stock reports), Payments (revenue reconciliation). |
-| **Current Status** | ⏳ Upcoming (stub). |
-| **Future Work** | Design the reporting queries against existing `orders`/`order_items` before deciding whether a physical `reports` table is needed — avoid modeling a table that duplicates derivable data. |
+| **Purpose** | Sales and operational analytics for Shop Owners (their own shop) and Administrator (platform-wide, filterable by shop). |
+| **Responsibilities** | Aggregate order/sales data DB-side; present KPIs, trends, and breakdowns; support the SAD's "orders and sales are not centralized" problem. |
+| **Features** | KPI cards (revenue, orders, paid orders, avg order value, units, cancelled); sales-over-time trend (day/week/month); order-status breakdown; COD-vs-QR paid-payment split; top products; low/out-of-stock report; date-range + preset + granularity filters; admin shop filter; CSV export. |
+| **Pages** | `src/app/dashboard/reports/page.tsx` — role-branched copy (`isAdmin`), Zod-coerced `searchParams` filters, per-panel `Suspense`. |
+| **Components** | `features/reports/components/{ReportsFilters,ExportReportButton,SalesSummaryPanel,SalesTrendPanel,OrderStatusPanel,TopProductsPanel,LowStockPanel,ReportSkeletons}`; shared charts `src/components/charts/{TrendChart,BarChart}` (hand-rolled SVG/CSS, no charting dependency). |
+| **Server Actions** | `features/reports/actions/report.actions.ts` — `exportSalesReportAction` (CSV; reuses the same RLS-scoped reads, `requireRole(DASHBOARD_ROLES)`). Reads need no action — panels are async Server Components. |
+| **Services** | `lib/supabase/queries.ts` (Reports section) — `getSalesSummary`/`getSalesTimeseries`/`getOrderStatusBreakdown`/`getTopProducts` (wrap the `report_*` RPCs, `cache()`-wrapped), `getLowStockReport` (reuses `listDashboardInventory`, no new SQL). |
+| **Database Tables** | **None new.** Four read-only `SECURITY DEFINER` RPCs aggregate over existing `orders`/`order_items`/`payments`; a physical `reports` table was deliberately not modelled (derivable data). See [ARCHITECTURE.md → Reporting RPCs](./ARCHITECTURE.md#reporting-rpcs-analytics-over-existing-orders). Two additive `orders` indexes (`orders_seller_placed_idx`, `orders_placed_at_idx`). |
+| **Dependencies** | Orders (primary data source), Payments (`payment_status = 'paid'` is the revenue source of truth; COD-vs-QR split), Inventory (low-stock report, reused), Shops (admin shop filter via `shop_users`). |
+| **Current Status** | ✅ Completed. Resolves ARCHITECTURE.md TD-5. |
+| **Future Work** | An `orders.shop_id` bridge (TD-1) would let admin shop-filtering skip the `shop_users` map; richer/scheduled exports and materialized aggregates are future scaling, not current scope. |
 
 ---
 
@@ -198,15 +197,18 @@
 | Field | Detail |
 |---|---|
 | **Purpose** | Full platform administration: users, shops, products, inventory, payments, reports, settings — the Administrator's SAD scope. |
-| **Responsibilities** (target) | Cross-shop oversight; user/role management; payment verification authority; platform settings. |
-| **Pages** | `/dashboard/payments` (see Payments module) is the **first real page** under `/dashboard` — admin sees every pending payment there, per the module's own scope, not a general admin surface. No other admin-specific pages built. |
-| **Components** | `src/app/dashboard/layout.tsx` — minimal chrome only (`SiteHeader` + `requireRole` guard), not a sidebar shell; `src/features/dashboard/` is still an empty stub. |
-| **Server Actions** | `features/payments/actions/payment.actions.ts` — `verifyPaymentAction` is usable by admin today (scoped to Payments, not general admin authority). Nothing else yet; future admin actions should call into existing module services (Products, Orders) rather than duplicating their logic. |
-| **Services** | Will reuse `lib/supabase/queries.ts` functions already guarded by `requireRole(DASHBOARD_ROLES)`/`is_admin()` — see `product.actions.ts` and `payment.actions.ts` for the existing pattern. |
-| **Database Tables** | Cross-cutting: `profiles` (users), `products`, `orders`, `payments`; target: `shops`. |
+| **Responsibilities** | Cross-shop oversight; user/role management and seller onboarding; shop creation/management; payment verification authority. Platform settings still unbuilt. |
+| **Pages** | `/dashboard/{payments,products,inventory,orders,reports}` give admin a cross-shop view (role-branched, not admin-specific pages; Reports adds an admin-only shop filter). `/dashboard/users` and `/dashboard/shops` are the first genuinely **admin-only** pages (`requireRole(ADMIN_ONLY_ROLES)`, re-checked beyond the layout's coarse seller-or-admin gate). No Settings page built yet. |
+| **Components** | `src/app/dashboard/layout.tsx` — minimal chrome only (`SiteHeader` + `requireRole` guard); `src/features/dashboard/` remains chrome-only (`DashboardShell`/`DashboardSidebar`/`DashboardShortcuts`), not a business domain. `features/users/components/{UsersTable,UserRow}` and `features/shops/components/{AdminShopsPanel,ShopRow,ShopForm}` are the new admin-only screens — two separate feature folders (Users is a distinct business domain from Shops, not shoehorned into either `dashboard/` or `shops/`). |
+| **Server Actions** | `features/payments/actions/payment.actions.ts` — `verifyPaymentAction`; `features/products/actions/product.actions.ts` — create/update/archive/assign-shop; `features/inventory/actions/inventory.actions.ts` — `adjustStockAction`; `features/orders/actions/order.actions.ts` — `advanceOrderStatusAction`, all usable by admin across every shop (role-branched, not admin-forked). New admin-only actions: `features/shops/actions/shop.actions.ts` — `createShopAction`/`updateShopAction`/`toggleShopActiveAction` (RLS-gated, no RPC needed — `shops` already has `is_admin()` in its policies); `features/users/actions/user.actions.ts` — `assignSellerShopAction` (wraps the `admin_assign_seller_shop` RPC — the one privileged, cross-user write in this module). |
+| **Services** | `lib/supabase/queries.ts` — `listAdminUsers()`/`assignSellerShop()` (wrap the `admin_list_users`/`admin_assign_seller_shop` RPCs — see the Seller Onboarding note below); `createShop()`/`updateShop()`/`listShopsWithMembers()` (plain RLS-gated reads/writes, no RPC). `listShops()` itself (used by the Products/Inventory admin shop-picker) is unchanged. |
+| **Database Tables** | Cross-cutting: `profiles` (users), `products`, `orders`, `payments`, `inventory`/`stock_adjustments`, `shops`/`shop_users` (admin has full read/write via `is_admin()`); new `admin_action_log` (append-only, admin-only-readable, RPC-only-writable — logs `admin_assign_seller_shop` calls only, deliberately not every admin action). |
 | **Dependencies** | Every other module — Admin is an oversight layer, not a data owner of its own. |
-| **Current Status** | ⏳ Upcoming (stub) for general admin authority — user management, shop management, platform settings are all unbuilt. RBAC scaffolding (`DASHBOARD_ROLES`, `is_admin()`, RLS admin policies) already exists and is proven working by the one real page that does exist (`/dashboard/payments`). |
-| **Future Work** | Build the admin dashboard shell distinct in density/design from the customer-facing UI (denser tables — noted in `customer-account-architecture-plan.md`); user management; shop management (once `shops` exists). |
+| **Current Status** | ✅ Seller onboarding (Users + Shops management) is built — see the Seller Onboarding note below. ⏳ Upcoming: user disabling/banning (no such column exists on `profiles` today — not requested), platform Settings. |
+| **Future Work** | Platform settings page. Seller demotion/reversal was explicitly scoped out of the onboarding work — promotion is one-directional; what happens to a demoted seller's shop/active products/pending orders is a real design question, not yet addressed. |
+
+> [!NOTE]
+> **Seller Onboarding (Admin-only, no self-service).** `profiles` UPDATE RLS is self-only (`id = auth.uid()`) with no `is_admin()` widening — an admin cannot promote another user via a plain client call, so `admin_assign_seller_shop(p_user_id, p_shop_id)` (`SECURITY DEFINER`, explicit `is_admin()` check inside, mirrors `create_order`/`adjust_stock`'s chokepoint shape) is the sole write path: it flips `profiles.role` from `buyer` to `seller` *and* creates/replaces the `shop_users` membership in one transaction, so there is never a window where a seller exists without a shop. A new `shop_users` `unique (user_id)` constraint (verified safe against live data before adding) backs this up at the schema level — a user can never be in two shops. `admin_list_users()` (a second new `SECURITY DEFINER` RPC, mirroring `get_my_profile()`'s shape but admin- rather than self-scoped) is the only place `auth.users.email` is ever joined into a query, so the admin Users screen can show who's who. Public signup remains Buyer-only and unmodified — `handle_new_user()`, the `profiles` INSERT policy, and `prevent_role_self_escalation` were not touched.
 
 ---
 
@@ -216,14 +218,14 @@
 |---|---|
 | **Purpose** | Let each sibling shop manage its own products, inventory, orders, and reports — the Shop Owner's SAD scope. |
 | **Responsibilities** (target) | Manage **own** products/inventory only (RLS-scoped); fulfil own orders; view own sales reports. |
-| **Pages** | `/dashboard/payments` (see Payments module) is usable by a seller today — scoped to their own orders via RLS (`seller_id = auth.uid()`), not a general shop-owner surface. No products/inventory/reports pages built. |
+| **Pages** | `/dashboard/{payments,products,inventory,orders,reports}` are all usable by a seller today — scoped to their own shop via RLS (`seller_id = auth.uid()` / `is_shop_member()`) and, for Reports, the `report_*` RPCs' internal seller scoping. |
 | **Components** | Shares `src/app/dashboard/layout.tsx` (minimal chrome) with Admin; `src/features/dashboard/` is still an empty stub. |
-| **Server Actions** | `features/payments/actions/payment.actions.ts` — `verifyPaymentAction` is usable by a seller today for their own orders' payments. Will reuse `features/products/actions/product.actions.ts` (already guarded for `seller`/`admin`) and `features/orders/actions/order.actions.ts` for fulfilment. |
+| **Server Actions** | `features/payments/actions/payment.actions.ts` — `verifyPaymentAction`; `features/products/actions/product.actions.ts` — create/update/archive; `features/inventory/actions/inventory.actions.ts` — `adjustStockAction`; `features/orders/actions/order.actions.ts` — `advanceOrderStatusAction`, all scoped to the seller's own shop for their own orders/payments/inventory. |
 | **Services** | Same centralized `queries.ts` functions as Products/Orders/Inventory/Payments — **no separate seller-only service layer**. |
-| **Database Tables** | `products` (own, via `seller_id` / future `shop_id`), `orders` (own, via seller-scoped RLS), `payments` (own orders' payments, via `verify_payment`), target `inventory`. |
+| **Database Tables** | `products` (own, via `seller_id` and/or `shop_id`), `inventory`/`stock_adjustments` (own shop's products, via `is_shop_member()`), `orders` (own, via seller-scoped RLS), `payments` (own orders' payments, via `verify_payment`), `shops`/`shop_users` (own shop, via `is_shop_member()`). |
 | **Dependencies** | Products, Inventory, Orders, Payments, Reports — Shop Owner is a **role-scoped view** over those modules, not a new data domain. |
-| **Current Status** | ⏳ Upcoming (stub) for products/inventory/reports management. Payment verification for own orders already works (`/dashboard/payments`) — proof the underlying RLS/role guards (`current_user_role() in ('seller','admin')`) are correctly scoped; the rest of the UI is what's missing. |
-| **Future Work** | Build the seller dashboard shell (products table, inventory editor, incoming orders, basic sales report) by **composing existing Products/Orders components**, not rebuilding them. |
+| **Current Status** | ✅ Products, Inventory, Orders, payment verification, and Reports are all built and scoped to the seller's own shop — proof the underlying RLS/role guards (`current_user_role() in ('seller','admin')`, `is_shop_member()`, and the `report_*` RPCs' internal `seller_id = auth.uid()` scoping) are correctly scoped. |
+| **Future Work** | None outstanding for the SAD scope. Richer/scheduled report exports are future scaling, not current scope. |
 
 ---
 
@@ -233,13 +235,13 @@
 |---|---|
 | **Purpose** | The buyer-facing account experience: profile, order history, and an account hub — the Customer's SAD scope. |
 | **Responsibilities** | Present the authenticated shopper's identity and history; let them update their profile; surface recent orders. |
-| **Features** | Account overview, profile edit, recent-orders summary, navigation to full order history (owned by the Orders module). |
+| **Features** | Account overview, profile edit, recent-orders summary, navigation to full order history (owned by the Orders module), Connected Accounts (manual Google/Facebook identity linking). |
 | **Pages** | `src/app/(account)/account/page.tsx`, `profile/page.tsx` (plus `orders/*`, owned by the Orders module and linked from here). |
-| **Components** | `features/account/components/{AccountMenu,AccountShell,AccountSidebar,OverviewSummary,ProfileForm,RecentOrdersList}`. |
-| **Server Actions** | `features/account/actions/account.actions.ts` — profile update. |
-| **Services** | `lib/supabase/queries.ts` — `getMyProfile` (via `get_my_profile()` RPC, the only path to `phone`), `toProfile` mapper. |
-| **Database Tables** | `profiles`; reads `orders` (via the Orders module, not duplicated here). |
-| **Dependencies** | Authentication (identity), Orders (`RecentOrdersList` composes the Orders module — does not reimplement it). |
+| **Components** | `features/account/components/{AccountMenu,AccountShell,AccountSidebar,OverviewSummary,ProfileForm,RecentOrdersList,ConnectedAccounts,UnlinkIdentityButton}`. |
+| **Server Actions** | `features/account/actions/account.actions.ts` — `updateProfileAction`, `linkIdentityAction`, `unlinkIdentityAction`. |
+| **Services** | `lib/supabase/queries.ts` — `getMyProfile` (via `get_my_profile()` RPC, the only path to `phone`), `toProfile` mapper, `listUserIdentities`/`linkOAuthIdentity`/`unlinkOAuthIdentity` (owned by Authentication, consumed here). |
+| **Database Tables** | `profiles`; reads `orders` (via the Orders module, not duplicated here); `auth.identities` (via Authentication's Supabase Auth wrappers). |
+| **Dependencies** | Authentication (identity, and the OAuth linking primitives Connected Accounts is built on), Orders (`RecentOrdersList` composes the Orders module — does not reimplement it). |
 | **Current Status** | ✅ Completed. |
 | **Future Work** | Saved shipping addresses, wishlists — both explicitly out of scope per `customer-account-architecture-plan.md` and [README.md → Out of Scope](./README.md#out-of-scope) precedent. |
 

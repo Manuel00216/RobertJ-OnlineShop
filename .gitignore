@@ -34,8 +34,14 @@ yarn-error.log*
 .env*
 !.env.example
 
+# seeded account credentials — never commit plaintext passwords
+/credentials/
+
 # vercel
 .vercel
+
+# supabase CLI local state
+/supabase/.temp/
 
 # typescript
 *.tsbuildinfo

@@ -1,3 +1,4 @@
+import type { UserRole } from "@/constants/roles";
 import type { ProductCondition, ProductStatus } from "@/constants/status";
 
 /** One image belonging to a product, ordered by `sortOrder` (0 is the cover). */
@@ -31,6 +32,15 @@ export interface Product {
   sellerId: string;
   /** Seller's display name (full name, falling back to username), or null. */
   sellerName: string | null;
+  /**
+   * The `seller_id` profile's current role. Only `seller` is ever a genuine
+   * shop owner — `admin`-authored or legacy/demoted-account products have no
+   * shop to display, so UI resolving a "shop" label should gate `sellerName`
+   * behind `sellerRole === 'seller'` rather than showing it unconditionally.
+   */
+  sellerRole: UserRole | null;
+  /** Owning shop, or null for a legacy/unassigned product awaiting admin assignment. */
+  shopId: string | null;
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -44,6 +54,8 @@ export interface ProductListParams {
   categoryId?: string;
   status?: ProductStatus;
   sellerId?: string;
+  /** Resolved server-side to the shop's member seller ids — see `listProducts`. */
+  shopId?: string;
   sort?: ProductSort;
   /** Matches products tagged "sale" — the same seller-set tag convention ProductCard already reads. */
   onSale?: boolean;

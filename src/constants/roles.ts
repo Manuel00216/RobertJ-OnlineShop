@@ -17,3 +17,6 @@ export const DASHBOARD_ROLES: readonly UserRole[] = [
   USER_ROLES.seller,
   USER_ROLES.admin,
 ];
+
+/** Roles allowed to reach admin-only dashboard sections (Users, Shops, Settings). */
+export const ADMIN_ONLY_ROLES: readonly UserRole[] = [USER_ROLES.admin];

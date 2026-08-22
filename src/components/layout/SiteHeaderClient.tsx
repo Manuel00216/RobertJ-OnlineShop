@@ -8,10 +8,15 @@ import { useEffect, useRef, useState } from "react";
 
 import { AccountMenu } from "@/features/account/components/AccountMenu";
 import { Wordmark } from "@/components/brand/Wordmark";
+import { RJ_CARD } from "@/components/ui/card";
 import { ROUTES } from "@/constants/routes";
+import { cn } from "@/lib/utils/cn";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useCart } from "@/features/cart/hooks/useCart";
+import { searchProductSuggestionsAction } from "@/features/products/actions/product.actions";
 import type { Category } from "@/features/categories/types/category.types";
 import type { SessionUser } from "@/types/common.types";
+import type { ProductSuggestion } from "@/lib/supabase/queries";
 
 export interface SiteHeaderClientProps {
   user: SessionUser | null;
@@ -23,7 +28,10 @@ export interface SiteHeaderClientProps {
  * both real, wired controls (not decorative) — search submits to
  * `/products?search=` rather than live-filtering, since this header renders
  * on every page (including checkout), where a debounced auto-navigate on
- * keystroke would be actively harmful.
+ * keystroke would be actively harmful. A lightweight suggestions dropdown
+ * (title-only matches, `searchProductSuggestionsAction`) is layered on top
+ * of that same input — it only ever navigates on an explicit click into a
+ * specific product, never on typing.
  */
 export function SiteHeaderClient({ user, categories }: SiteHeaderClientProps) {
   const router = useRouter();
@@ -34,7 +42,10 @@ export function SiteHeaderClient({ user, categories }: SiteHeaderClientProps) {
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
+  const [suggestions, setSuggestions] = useState<ProductSuggestion[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const categoriesRef = useRef<HTMLDivElement>(null);
+  const debouncedSearchValue = useDebouncedValue(searchValue, 250);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 60);
@@ -60,11 +71,34 @@ export function SiteHeaderClient({ user, categories }: SiteHeaderClientProps) {
     };
   }, [categoriesOpen]);
 
+  // Suggestions only — this never navigates on its own. Submitting the form
+  // (Enter / the search button) is still the only thing that goes to the
+  // results page; see the class comment for why auto-navigate-on-keystroke
+  // was rejected here.
+  useEffect(() => {
+    if (debouncedSearchValue.trim().length < 2) return;
+    let cancelled = false;
+    searchProductSuggestionsAction(debouncedSearchValue).then((result) => {
+      if (!cancelled && result.success) setSuggestions(result.data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedSearchValue]);
+
   function submitSearch(value: string) {
     const trimmed = value.trim();
     router.push(trimmed ? `${ROUTES.products}?search=${encodeURIComponent(trimmed)}` : ROUTES.products);
     setMenuOpen(false);
     setMobileSearchOpen(false);
+    setShowSuggestions(false);
+  }
+
+  function goToSuggestion(slug: string) {
+    router.push(ROUTES.productDetail(slug));
+    setSearchValue("");
+    setSuggestions([]);
+    setShowSuggestions(false);
   }
 
   return (
@@ -85,7 +119,7 @@ export function SiteHeaderClient({ user, categories }: SiteHeaderClientProps) {
             onClick={() => setCategoriesOpen((v) => !v)}
             aria-expanded={categoriesOpen}
             aria-haspopup="menu"
-            className="flex items-center gap-1 rounded-full px-3 py-1.5 text-[13px] font-medium text-rj-gray-600 transition-colors hover:bg-rj-gray-100 hover:text-rj-black"
+            className="flex items-center gap-1 rounded-full px-3 py-1.5 text-[13px] font-medium text-rj-gray-600 transition-colors hover:bg-rj-gray-100 hover:text-rj-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30"
           >
             Categories
             <ChevronDown
@@ -97,7 +131,7 @@ export function SiteHeaderClient({ user, categories }: SiteHeaderClientProps) {
             <div
               role="menu"
               aria-label="Categories"
-              className="absolute left-0 top-full z-50 mt-2 w-60 rounded-2xl border border-rj-gray-100 bg-rj-white p-2 shadow-lg"
+              className={cn(RJ_CARD, "absolute left-0 top-full z-50 mt-2 w-60 p-2 shadow-lg")}
             >
               <Link
                 href={ROUTES.categories}
@@ -127,33 +161,58 @@ export function SiteHeaderClient({ user, categories }: SiteHeaderClientProps) {
         </div>
 
         {/* Search — desktop, always visible, real submit */}
-        <form
-          role="search"
-          onSubmit={(event) => {
-            event.preventDefault();
-            submitSearch(searchValue);
-          }}
-          className="hidden max-w-md flex-1 items-center gap-2 rounded-full border border-rj-gray-200 px-4 py-2 transition-colors focus-within:border-rj-black md:flex"
-        >
-          <label htmlFor="site-search" className="sr-only">
-            Search products
-          </label>
-          <input
-            id="site-search"
-            type="search"
-            value={searchValue}
-            onChange={(event) => setSearchValue(event.target.value)}
-            placeholder="Search for anything…"
-            className="w-full bg-transparent text-[13px] text-rj-black outline-none placeholder:text-rj-gray-400"
-          />
-          <button
-            type="submit"
-            aria-label="Search"
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-rj-red text-white transition-colors hover:bg-rj-red-dark"
+        <div className="relative hidden max-w-md flex-1 md:block">
+          <form
+            role="search"
+            onSubmit={(event) => {
+              event.preventDefault();
+              submitSearch(searchValue);
+            }}
+            className="flex items-center gap-2 rounded-full border border-rj-gray-200 px-4 py-2 transition-colors focus-within:border-rj-black"
           >
-            <Search className="h-3 w-3" aria-hidden="true" />
-          </button>
-        </form>
+            <label htmlFor="site-search" className="sr-only">
+              Search products
+            </label>
+            <input
+              id="site-search"
+              type="search"
+              value={searchValue}
+              onChange={(event) => setSearchValue(event.target.value)}
+              onFocus={() => setShowSuggestions(true)}
+              onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+              placeholder="Search for anything…"
+              className="w-full bg-transparent text-[13px] text-rj-black outline-none placeholder:text-rj-gray-400"
+            />
+            <button
+              type="submit"
+              aria-label="Search"
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-rj-red text-white transition-colors hover:bg-rj-red-dark"
+            >
+              <Search className="h-3 w-3" aria-hidden="true" />
+            </button>
+          </form>
+
+          {showSuggestions && debouncedSearchValue.trim().length >= 2 && suggestions.length > 0 ? (
+            <div
+              role="listbox"
+              aria-label="Search suggestions"
+              className={cn(RJ_CARD, "absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden shadow-lg")}
+            >
+              {suggestions.map((suggestion) => (
+                <button
+                  key={suggestion.id}
+                  type="button"
+                  role="option"
+                  aria-selected={false}
+                  onMouseDown={() => goToSuggestion(suggestion.slug)}
+                  className="block w-full truncate px-4 py-2.5 text-left text-[13px] text-rj-gray-700 transition-colors hover:bg-rj-gray-100 hover:text-rj-black"
+                >
+                  {suggestion.title}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
 
         {/* Right actions */}
         <div className="ml-auto flex items-center gap-1.5">
@@ -163,7 +222,7 @@ export function SiteHeaderClient({ user, categories }: SiteHeaderClientProps) {
             onClick={() => setMobileSearchOpen((v) => !v)}
             aria-label="Open search"
             aria-expanded={mobileSearchOpen}
-            className="flex h-9 w-9 items-center justify-center rounded-full transition-colors hover:bg-rj-gray-100 md:hidden"
+            className="flex h-9 w-9 items-center justify-center rounded-full transition-colors hover:bg-rj-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30 md:hidden"
           >
             <Search className="h-4 w-4 text-rj-black" aria-hidden="true" />
           </button>
@@ -199,7 +258,7 @@ export function SiteHeaderClient({ user, categories }: SiteHeaderClientProps) {
             type="button"
             aria-label={menuOpen ? "Close menu" : "Open menu"}
             aria-expanded={menuOpen}
-            className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-rj-gray-100 md:hidden"
+            className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-rj-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30 md:hidden"
             onClick={() => setMenuOpen((v) => !v)}
           >
             {menuOpen ? (

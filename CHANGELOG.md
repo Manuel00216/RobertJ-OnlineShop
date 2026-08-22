@@ -8,11 +8,39 @@ All notable changes to RoberJ Online Shop are documented here, newest first. For
 ## [Unreleased]
 
 ### Known gaps (tracked, not resolved)
-- `shops` / `shop_users` / `recommendation_rules` / `reports` tables not yet implemented.
+- `recommendation_rules` table not yet implemented (Guided Product Selection — Phase 9).
 - No automated test runner (see `DECISIONS.md` → ADR-015).
-- No Admin/Shop Owner dashboard shell beyond the single `/dashboard/payments` page (Payments module).
 
 Full current-vs-target status: [README.md → Implementation Status](./README.md#implementation-status-target-vs-current) · [ARCHITECTURE.md → Technical Debt Register](./ARCHITECTURE.md#technical-debt-register).
+
+---
+
+## 2026-08-13 — Reports & analytics (Phase 8)
+
+### Added
+- Reports module: `/dashboard/reports` for Shop Owners (own shop) and the Administrator
+  (platform-wide, with an admin-only shop filter). KPI cards (revenue, orders, paid orders, avg
+  order value, units, cancelled), a sales-over-time trend (day/week/month), an order-status
+  breakdown, a COD-vs-QR paid-payment split, top products, and a low/out-of-stock report. Date-range
+  presets + explicit range + granularity, plus CSV export.
+- Four read-only `SECURITY DEFINER` aggregation RPCs — `report_sales_summary`,
+  `report_sales_timeseries`, `report_order_status_breakdown`, `report_top_products` —
+  (`20260818000000_reports_analytics_rpcs.sql`). Each re-enforces scoping internally (seller →
+  own orders; admin → all, or one shop via `p_shop_id`; a seller's `p_shop_id` is ignored), with
+  `EXECUTE` granted to `authenticated` only. **No `reports` table** was modelled — resolves TD-5.
+- Reports service section in `queries.ts` (`getSalesSummary`/`getSalesTimeseries`/
+  `getOrderStatusBreakdown`/`getTopProducts`, plus `getLowStockReport` reusing the existing
+  RLS-scoped inventory read), a new `features/reports/` module, and hand-rolled dependency-free
+  charts in `src/components/charts` (`TrendChart`, `BarChart`).
+- Two additive `orders` indexes (`orders_seller_placed_idx`, `orders_placed_at_idx`) for
+  date-range scans. `scripts/e2e-reports.mjs` asserts the RPCs reject anonymous callers.
+
+### Design notes
+- **Single date axis:** every metric buckets on `placed_at` in `Asia/Manila`. Revenue counts only
+  orders with `payment_status = 'paid'` (the confirmed-revenue source of truth for both COD and QR);
+  `payments.amount_cents` is never summed directly. See `DECISIONS.md` → ADR-016.
+- No existing Orders/Payments/Products/Inventory/RLS behaviour was changed — the migration is purely
+  additive (new functions + indexes).
 
 ---
 

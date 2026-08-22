@@ -6,6 +6,7 @@ import { Package } from "lucide-react";
 import { useEffect, useMemo, useState, useTransition } from "react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
+import { RJ_CARD } from "@/components/ui/card";
 import { QuantityStepper } from "@/components/ui/quantity-stepper";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { ROUTES } from "@/constants/routes";
@@ -13,6 +14,7 @@ import { formatCurrency } from "@/lib/utils/currency";
 import { cn } from "@/lib/utils/cn";
 import { checkCartAvailabilityAction } from "@/features/cart/actions/cart.actions";
 import { useCart } from "@/features/cart/hooks/useCart";
+import { groupCartBySeller } from "@/features/checkout/utils/groupCartBySeller";
 import type { ProductPriceAndStock } from "@/lib/supabase/queries";
 
 /** Line items plus subtotal on rj surfaces, shared by the cart page. */
@@ -35,6 +37,10 @@ export function CartSummary() {
     () => [...new Set(items.map((item) => item.productId))].sort().join(","),
     [items],
   );
+
+  // One order is placed per seller at checkout (ADR-012) — grouping the cart
+  // the same way here means the buyer never sees a surprise split later.
+  const groups = useMemo(() => groupCartBySeller(items), [items]);
 
   useEffect(() => {
     if (!idsKey) return;
@@ -59,7 +65,9 @@ export function CartSummary() {
         action={
           <Link
             href={ROUTES.products}
-            className={cn(buttonVariants({ variant: "rjOutline", size: "rjSm" }))}
+            className={cn(
+              buttonVariants({ variant: "rjOutline", size: "rjSm" }),
+            )}
           >
             Browse products
           </Link>
@@ -79,134 +87,157 @@ export function CartSummary() {
 
   return (
     <div className="flex flex-col gap-4">
-      <ul className="flex flex-col gap-3">
-        {items.map((item) => {
-          const live = availability?.data.get(item.productId);
-          const isUnavailable =
-            checked && (!live || live.status !== "active" || live.quantity <= 0);
-          const priceChanged =
-            !isUnavailable && live && live.priceCents !== item.unitPriceCents;
-          const lowStock =
-            !isUnavailable && live && live.quantity < item.quantity;
+      <div className="flex flex-col gap-6">
+        {groups.map((group) => (
+          <section key={group.sellerId} className="flex flex-col gap-3">
+            <h3 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-rj-gray-600">
+              <span aria-hidden="true">🏪</span>
+              {group.sellerName ?? "Shop"}
+            </h3>
+            <ul className="flex flex-col gap-3">
+              {group.items.map((item) => {
+                const live = availability?.data.get(item.productId);
+                const isUnavailable =
+                  checked &&
+                  (!live || live.status !== "active" || live.quantity <= 0);
+                const priceChanged =
+                  !isUnavailable &&
+                  live &&
+                  live.priceCents !== item.unitPriceCents;
+                const lowStock =
+                  !isUnavailable && live && live.quantity < item.quantity;
 
-          return (
-            <li
-              key={item.productId}
-              className="flex flex-col gap-3 rounded-2xl border border-rj-gray-100 bg-rj-white p-4 shadow-sm"
-            >
-              <div className="flex items-center gap-4">
-                {item.imageUrl ? (
-                  <Image
-                    src={item.imageUrl}
-                    alt={item.title}
-                    width={64}
-                    height={64}
-                    className="h-16 w-16 shrink-0 rounded-xl object-cover"
-                  />
-                ) : (
-                  <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-rj-gray-100">
-                    <Package className="h-6 w-6 text-rj-gray-400" aria-hidden="true" />
-                  </span>
-                )}
-
-                <div className="min-w-0 flex-1">
-                  <Link
-                    href={ROUTES.productDetail(item.slug)}
-                    className="text-sm font-semibold text-rj-black hover:underline"
+                return (
+                  <li
+                    key={item.productId}
+                    className={cn(RJ_CARD, "flex flex-col gap-3 p-4 shadow-sm")}
                   >
-                    {item.title}
-                  </Link>
-                  <p className="mt-0.5 text-xs text-rj-gray-600">
-                    {formatCurrency(item.unitPriceCents, item.currency)} each
-                  </p>
-                </div>
+                    <div className="flex items-center gap-4">
+                      {item.imageUrl ? (
+                        <Image
+                          src={item.imageUrl}
+                          alt={item.title}
+                          width={64}
+                          height={64}
+                          className="h-16 w-16 shrink-0 rounded-xl object-cover"
+                        />
+                      ) : (
+                        <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-rj-gray-100">
+                          <Package
+                            className="h-6 w-6 text-rj-gray-400"
+                            aria-hidden="true"
+                          />
+                        </span>
+                      )}
 
-                <div className="flex shrink-0 items-center gap-2">
-                  {isUnavailable ? null : (
-                    <QuantityStepper
-                      id={`qty-${item.productId}`}
-                      value={item.quantity}
-                      max={item.maxQuantity}
-                      onChange={(quantity) => setQuantity(item.productId, quantity)}
-                      aria-label={`Quantity for ${item.title}`}
-                    />
-                  )}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-11"
-                    onClick={() => removeItem(item.productId)}
-                    aria-label={`Remove ${item.title} from cart`}
-                  >
-                    Remove
-                  </Button>
-                </div>
-              </div>
+                      <div className="min-w-0 flex-1">
+                        <Link
+                          href={ROUTES.productDetail(item.slug)}
+                          className="text-sm font-semibold text-rj-black hover:underline"
+                        >
+                          {item.title}
+                        </Link>
+                        <p className="mt-0.5 text-xs text-rj-gray-600">
+                          {formatCurrency(item.unitPriceCents, item.currency)}{" "}
+                          each
+                        </p>
+                      </div>
 
-              {isUnavailable ? (
-                <div
-                  role="status"
-                  aria-live="polite"
-                  className="flex flex-wrap items-center gap-2 rounded-xl bg-danger/5 px-3 py-2 text-xs font-semibold text-rj-red-dark"
-                >
-                  <span>This item is no longer available.</span>
-                  <button
-                    type="button"
-                    onClick={() => removeItem(item.productId)}
-                    className="underline underline-offset-2"
-                  >
-                    Remove from cart
-                  </button>
-                </div>
-              ) : null}
+                      <div className="flex shrink-0 items-center gap-2">
+                        {isUnavailable ? null : (
+                          <QuantityStepper
+                            id={`qty-${item.productId}`}
+                            value={item.quantity}
+                            max={item.maxQuantity}
+                            onChange={(quantity) =>
+                              setQuantity(item.productId, quantity)
+                            }
+                            aria-label={`Quantity for ${item.title}`}
+                          />
+                        )}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-11"
+                          onClick={() => removeItem(item.productId)}
+                          aria-label={`Remove ${item.title} from cart`}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
 
-              {priceChanged && live ? (
-                <div
-                  role="status"
-                  aria-live="polite"
-                  className="flex flex-wrap items-center gap-2 rounded-xl bg-rj-gold/10 px-3 py-2 text-xs font-semibold text-rj-black"
-                >
-                  <span>
-                    Price changed: was{" "}
-                    {formatCurrency(item.unitPriceCents, item.currency)}, now{" "}
-                    {formatCurrency(live.priceCents, item.currency)}.
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      updateItem(item.productId, { unitPriceCents: live.priceCents })
-                    }
-                    className="underline underline-offset-2"
-                  >
-                    Update price
-                  </button>
-                </div>
-              ) : null}
+                    {isUnavailable ? (
+                      <div
+                        role="status"
+                        aria-live="polite"
+                        className="flex flex-wrap items-center gap-2 rounded-xl bg-danger/5 px-3 py-2 text-xs font-semibold text-rj-red-dark"
+                      >
+                        <span>This item is no longer available.</span>
+                        <button
+                          type="button"
+                          onClick={() => removeItem(item.productId)}
+                          className="underline underline-offset-2"
+                        >
+                          Remove from cart
+                        </button>
+                      </div>
+                    ) : null}
 
-              {lowStock && live ? (
-                <div
-                  role="status"
-                  aria-live="polite"
-                  className="flex flex-wrap items-center gap-2 rounded-xl bg-rj-gold/10 px-3 py-2 text-xs font-semibold text-rj-black"
-                >
-                  <span>Only {live.quantity} left in stock.</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      updateItem(item.productId, { maxQuantity: live.quantity });
-                      setQuantity(item.productId, live.quantity);
-                    }}
-                    className="underline underline-offset-2"
-                  >
-                    Reduce to {live.quantity}
-                  </button>
-                </div>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
+                    {priceChanged && live ? (
+                      <div
+                        role="status"
+                        aria-live="polite"
+                        className="flex flex-wrap items-center gap-2 rounded-xl bg-rj-gold/10 px-3 py-2 text-xs font-semibold text-rj-black"
+                      >
+                        <span>
+                          Price changed: was{" "}
+                          {formatCurrency(item.unitPriceCents, item.currency)},
+                          now {formatCurrency(live.priceCents, item.currency)}.
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateItem(item.productId, {
+                              unitPriceCents: live.priceCents,
+                            })
+                          }
+                          className="underline underline-offset-2"
+                        >
+                          Update price
+                        </button>
+                      </div>
+                    ) : null}
+
+                    {lowStock && live ? (
+                      <div
+                        role="status"
+                        aria-live="polite"
+                        className="flex flex-wrap items-center gap-2 rounded-xl bg-rj-gold/10 px-3 py-2 text-xs font-semibold text-rj-black"
+                      >
+                        <span>Only {live.quantity} left in stock.</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            updateItem(item.productId, {
+                              maxQuantity: live.quantity,
+                            });
+                            setQuantity(item.productId, live.quantity);
+                          }}
+                          className="underline underline-offset-2"
+                        >
+                          Reduce to {live.quantity}
+                        </button>
+                      </div>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ))}
+      </div>
 
       <div className="flex flex-col gap-3 rounded-2xl border border-rj-gray-100 bg-rj-gray-50 p-5">
         <div className="flex items-center justify-between text-sm font-semibold text-rj-black">
@@ -233,6 +264,12 @@ export function CartSummary() {
           >
             Proceed to checkout
           </Button>
+        </Link>
+        <Link
+          href={ROUTES.products}
+          className="text-center text-xs font-semibold text-rj-gray-600 hover:text-rj-black hover:underline"
+        >
+          ← Continue shopping
         </Link>
       </div>
     </div>

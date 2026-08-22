@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { AUTH_ROUTES, PROTECTED_ROUTE_PREFIXES, ROUTES } from "@/constants/routes";
 import { updateSupabaseSession } from "@/lib/supabase/session";
+import { isInternalPath } from "@/lib/utils/url";
 
 /**
  * `NextResponse.redirect()` builds a brand-new response, so it does not
@@ -14,10 +15,6 @@ function withSessionCookies(redirect: NextResponse, source: NextResponse) {
     redirect.cookies.set(cookie);
   }
   return redirect;
-}
-
-function isInternalPath(path: string | null): path is string {
-  return !!path && path.startsWith("/") && !path.startsWith("//");
 }
 
 export default async function proxy(request: NextRequest) {

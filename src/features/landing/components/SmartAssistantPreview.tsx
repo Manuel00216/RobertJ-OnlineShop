@@ -87,7 +87,7 @@ export function SmartAssistantPreview() {
           <button
             type="button"
             onClick={focusDemo}
-            className="rounded-full bg-rj-red px-7 py-3.5 text-[13px] font-bold text-white shadow-lg shadow-rj-red/25 transition-colors hover:bg-rj-red-dark"
+            className="rounded-full bg-rj-red px-7 py-3.5 text-sm font-bold text-white shadow-lg shadow-rj-red/25 transition-colors hover:bg-rj-red-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30 focus-visible:ring-offset-2"
           >
             Try the Assistant
           </button>
@@ -176,7 +176,7 @@ export function SmartAssistantPreview() {
                 onClick={send}
                 disabled={!input.trim()}
                 aria-label="Send message"
-                className="flex-shrink-0 rounded-full bg-rj-red p-2.5 text-white transition-all hover:bg-rj-red-dark active:scale-95 disabled:opacity-40"
+                className="flex-shrink-0 rounded-full bg-rj-red p-2.5 text-white transition-all hover:bg-rj-red-dark active:scale-95 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30 focus-visible:ring-offset-2"
               >
                 <Send className="h-[15px] w-[15px]" aria-hidden="true" />
               </button>

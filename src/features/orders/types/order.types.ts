@@ -1,3 +1,4 @@
+import type { UserRole } from "@/constants/roles";
 import type { OrderStatus, PaymentStatus } from "@/constants/status";
 
 /**
@@ -44,9 +45,20 @@ export interface Order {
   currency: string;
   shippingAddress: ShippingAddress | null;
   notes: string | null;
+  buyerId: string;
+  /** Buyer display name (full name, falling back to username), or null — shown on the dashboard, not the buyer's own view. */
+  buyerName: string | null;
   sellerId: string;
   /** Seller display name (full name, falling back to username), or null. */
   sellerName: string | null;
+  /**
+   * The `seller_id` profile's current role — see `Product.sellerRole` for
+   * why this matters: `create_order` doesn't require `seller_id` to be a
+   * `seller` account, so a "Sold by" label must gate on this before showing
+   * `sellerName` (an admin-authored product's order should never expose the
+   * admin's personal name).
+   */
+  sellerRole: UserRole | null;
   /** Seller's receiving QR code image, shown to the buyer for a QR payment. */
   sellerPaymentQrUrl: string | null;
   items: OrderItem[];

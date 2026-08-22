@@ -14,10 +14,10 @@ export function ErrorState({
   return (
     <div
       role="alert"
-      className="flex flex-col items-center gap-2 rounded-lg border border-danger/40 bg-danger/5 p-10 text-center"
+      className="flex flex-col items-center gap-2 rounded-2xl border border-danger/40 bg-danger/5 p-10 text-center"
     >
       <p className="text-sm font-medium text-danger">{title}</p>
-      <p className="max-w-sm text-sm text-muted-foreground">{message}</p>
+      <p className="max-w-sm text-sm text-rj-gray-600">{message}</p>
       {action ? <div className="mt-2">{action}</div> : null}
     </div>
   );

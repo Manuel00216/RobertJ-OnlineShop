@@ -36,6 +36,9 @@ Every decision is a numbered ADR with a fixed shape: **Context → Problem → O
 | [ADR-013](#adr-013-guest-cart-is-client-side-only) | Guest cart is client-side only | ✅ Accepted |
 | [ADR-014](#adr-014-stripe-integration-is-a-provisional-spike) | Stripe integration is a provisional spike | ⛔ Retired |
 | [ADR-015](#adr-015-no-automated-test-runner-yet) | No automated test runner yet | ✅ Accepted (deferred) |
+| [ADR-016](#adr-016-reports-as-security-definer-rpcs-over-existing-orders) | Reports as SECURITY DEFINER RPCs over existing orders | ✅ Accepted |
+| [ADR-017](#adr-017-oauth-account-linking-trusts-supabases-verified-email-matching-only) | OAuth account linking trusts Supabase's verified-email matching only | ✅ Accepted |
+| [ADR-018](#adr-018-wishlist-reviews-and-a-derived-buyer-activity-feed) | Wishlist, Reviews, and a Derived Buyer Activity Feed | ✅ Accepted |
 
 ---
 
@@ -401,3 +404,84 @@ Original decision: Option 2. The Stripe code stayed in the repo (real, working c
 - Tracked as technical debt (TD-6 in [ARCHITECTURE.md](./ARCHITECTURE.md#technical-debt-register)).
 
 **Future Revisit:** Once Checkout (current phase) and Payments (target) stabilize, introduce Vitest for the service layer (`queries.ts` mappers, pure utils) and Playwright for the checkout/order critical path — the highest-value, lowest-effort starting point. Requires a new ADR before adding the dependency.
+
+---
+
+## ADR-016: Reports as SECURITY DEFINER RPCs over existing orders
+
+**Status:** ✅ Accepted
+
+**Context:** The SAD lists a `reports` entity and requires sales/operational analytics for Shop Owners (own shop) and the Administrator (platform-wide). The data needed already lives in `orders`/`order_items`/`payments`. Reporting requires GROUP BY / date bucketing / SUM that PostgREST does not express well, and must be computed server/DB-side, correctly scoped per shop.
+
+**Problem:** Where do report aggregates live and run — a physical/materialized `reports` table, plain PostgREST aggregate reads relying on RLS, or SQL functions?
+
+**Options Considered:**
+1. A stored `reports` table (or materialized views) populated by triggers/jobs — duplicates derivable data and adds write paths + staleness to keep in sync.
+2. Plain PostgREST aggregate queries under RLS — but Supabase aggregate functions are limited/often disabled, GROUP BY + timezone bucketing is awkward, and the per-row `EXISTS` in `order_items`/`payments` RLS is costly at scale.
+3. **Read-only `SECURITY DEFINER` RPCs** that aggregate over the existing tables and re-enforce seller/admin scoping internally (the same chokepoint pattern as `create_order`/`verify_payment`/`adjust_stock`).
+
+**Decision:** Option 3. Four RPCs — `report_sales_summary`/`report_sales_timeseries`/`report_order_status_breakdown`/`report_top_products` (`20260818000000_reports_analytics_rpcs.sql`). No physical `reports` table. Consequential sub-decisions:
+- **Single date axis:** every metric buckets on `placed_at` in **`Asia/Manila`** (the PHP business timezone) for consistent date handling across all metrics.
+- **Revenue = `payment_status = 'paid'`** (the confirmed-revenue source of truth covering both COD and QR); count/volume metrics include all placed orders. Never sum `payments.amount_cents` directly (COD orders have no payment row; an order may have several).
+- **Charts are hand-rolled SVG/CSS** in `src/components/charts` — no charting dependency added (honours [CLAUDE.md → AI Non-Negotiable Rules](./CLAUDE.md#ai-non-negotiable-rules)).
+
+**Consequences:**
+- Zero schema duplication and no aggregate staleness — numbers are always live. Scoping is defence-in-depth: the RPC re-checks `seller_id = auth.uid() OR is_admin()` (DEFINER bypasses RLS), `EXECUTE` is `authenticated`-only, and a seller's `p_shop_id` is ignored so scope can't be widened.
+- Admin per-shop filtering maps shop→seller via `shop_users` because `orders` has no `shop_id` yet (TD-1); an `orders.shop_id` bridge would simplify this later.
+- Two additive `orders` indexes back the date-range scans. Verified against seeded data (in rolled-back transactions) that seller/admin numbers match independent ground-truth aggregates. Resolves [ARCHITECTURE.md TD-5](./ARCHITECTURE.md#technical-debt-register).
+
+---
+
+## ADR-017: OAuth account linking trusts Supabase's verified-email matching only
+
+**Status:** ✅ Accepted
+
+**Context:** Adding Google/Facebook sign-in (Module 1, Authentication) requires deciding when a Google/Facebook sign-in should land in an existing email/password account versus create a new one. The obvious-looking approach — "if the email string matches, it's the same person" — is exactly the mistake Supabase Auth's own documentation warns against: an OAuth provider that doesn't verify email ownership could let an attacker claim someone else's email and get folded into their real account (a pre-account-takeover attack). Facebook, specifically, does not reliably mark its email claim as verified, and can omit email entirely depending on the user's Facebook settings and the permissions granted.
+
+**Problem:** Where does "same person, different sign-in method" get decided, and on what evidence?
+
+**Options Considered:**
+1. Implement our own matching in `handle_new_user()` or a Server Action: look up `profiles`/`auth.users` by email and attach the new identity if found.
+2. **Trust Supabase Auth's (GoTrue's) built-in automatic identity linking**, which only links a new OAuth identity to an existing user when that identity's email is provider-verified, and never touches `handle_new_user()`'s job (GoTrue decides account identity before our trigger's `AFTER INSERT ON auth.users` even fires) — plus Supabase's manual-linking API (`linkIdentity()`), gated on the user already being authenticated, as the safe fallback for cases automatic linking can't cover.
+3. Always create a new account per provider and never link anything, leaving merging entirely to the user's memory of which method they used.
+
+**Decision:** Option 2. `handle_new_user()` (`20260819000200_oauth_profile_metadata_coalesce.sql`) only widens which `raw_user_meta_data` keys it reads (Facebook uses `name`/`picture` instead of Google's `full_name`/`avatar_url`) — it adds no email-matching logic. Google reliably auto-links (its email is always provider-verified). Facebook auto-links only when Facebook itself confirms the email; when it can't, sign-in still succeeds but creates a separate account, by design — the user recovers via **Connected Accounts** (`/profile`, `features/account/components/ConnectedAccounts.tsx`), which uses `linkIdentity()` while the user is already signed into their primary account, the only point at which "same person" is actually proven rather than guessed.
+
+**Consequences:**
+- No app code anywhere performs email-based account matching — the entire trust decision lives in Supabase Auth, upstream of every layer this app controls, so there is nothing here to audit for that specific vulnerability class.
+- A user whose Facebook sign-in didn't qualify for auto-linking gets a second account until they manually connect it. This is a real, user-visible rough edge, not swept under the rug — the sign-in UI captions this expectation, and the callback/error mapping (`mapOAuthCallbackError`) gives Facebook-specific failures a distinct message.
+- Manual linking does not retroactively merge an already-created duplicate account's order history into the primary account — that would require a manual admin data migration, out of scope here (see MODULES.md → Authentication → Future Work).
+- Requires **Authentication → Enable Manual Linking** turned on in the Supabase dashboard (off by default) for Connected Accounts to function at all.
+
+**Future Revisit:** If report volume grows enough to matter, revisit materialized aggregates or an `orders.shop_id` column — neither is needed at current scale.
+
+---
+
+## ADR-018: Wishlist, Reviews, and a Derived Buyer Activity Feed
+
+**Status:** ✅ Accepted
+
+**Context:** The original capstone scope ([README.md → Future Enhancements](./README.md#future-enhancements)) explicitly deferred product reviews/ratings, wishlists, and realtime notifications, pending explicit approval — kept out to keep the initial build focused on the core three-shop purchase journey. A subsequent buyer/guest UX audit (browse → cart → checkout → COD/QR → fulfilment) found that journey complete, and identified these three specific buyer-trust and convenience features as high-value, low-complexity additions that require none of the infrastructure the SAD actually excludes (no payment gateway, no courier API, no messaging system, no realtime subsystem).
+
+**Problem:** Should RoberJ add wishlist, reviews/ratings, and a notification mechanism — and if so, in a form that doesn't compromise the project's curated three-shop scope or the hardened invariants in `create_order`, `verify_payment`, `submit_qr_payment`, and the order-status trigger chain?
+
+**Options Considered:**
+1. Adopt full-featured versions of each (photo/video reviews, Q&A, wishlist sharing, realtime push notifications), matching a general-marketplace reference implementation.
+2. Defer all three indefinitely, per the original Future Enhancements list.
+3. Adopt deliberately minimal versions: wishlist as a plain user-owned join table; reviews gated by verified purchase through a `SECURITY DEFINER` RPC, one review per order item, a dynamically computed rating aggregate; notifications as a read-only feed derived from existing order/payment timestamps, with no new table, no triggers, and no realtime infrastructure.
+
+**Decision:** Option 3.
+- **Wishlist** — `wishlists(user_id, product_id)`, RLS-scoped directly to `auth.uid()` on INSERT/SELECT/DELETE, no RPC. This is the first plain user-owned CRUD table in this schema (every other user-owned write goes through a `SECURITY DEFINER` RPC); justified because, unlike orders/inventory/payments, there is no cross-entity invariant to protect — RLS alone gives the same guarantee an RPC would.
+- **Reviews** — `reviews` table, one row per `order_item_id` (`unique`), publicly readable, but writes go only through a new `submit_review` `SECURITY DEFINER` RPC that re-verifies `buyer_id = auth.uid()` and `order_status = 'delivered'` inside the function — never trusts RLS alone, mirroring `submit_qr_payment`/`verify_payment`. Reviewer display name is snapshotted into the row at submission time (`profiles` RLS does not allow buyer-to-buyer visibility, so a live join is not available — this mirrors how `order_items` already snapshots `product_title`/`unit_price_cents`). The rating average/count is computed on read; it is never denormalized onto `products`.
+- **Notifications** — a `get_buyer_activity_feed` read-only `SECURITY DEFINER` RPC, structurally identical to the existing `report_*` RPCs, unioning `orders.placed_at/paid_at/shipped_at/delivered_at/cancelled_at` and `payments.created_at/verified_at`, scoped to the caller. No new table. No triggers added anywhere. `create_order`, `verify_payment`, `submit_qr_payment`, `enforce_order_update_rules`, and `track_order_status_timestamps` are unmodified. No Supabase Realtime, no push/email/SMS infrastructure.
+- **Shop identity** — as part of the same improvement phase, `shops` gains one additive public-read RLS policy (active shops readable by `anon`/`authenticated`) so buyer-facing surfaces (PDP "Sold by," shop filter, Featured Shops) can resolve a real shop name via `products.seller_id → shop_users.user_id → shop_id → shops.name`, since `products.shop_id` itself is not populated on any live row yet (TD-1 is still open).
+
+**Consequences:**
+- Buyer trust/convenience features land without expanding the payment, courier, or messaging surface the SAD explicitly excludes.
+- Reviews require verified purchase — no anonymous or unverifiable review is possible, without needing a moderation subsystem.
+- The activity feed cannot represent "confirmed" or "processing" as discrete events, because no column captures those transitions (`orders` only stamps `paid_at`/`shipped_at`/`delivered_at`/`cancelled_at`). This is an accepted, documented limitation, not an oversight.
+- Wishlist introduces the first plain-RLS (non-RPC-gated) user-owned write path in this schema. Future user-owned-data features should default to this lighter pattern only when no cross-entity invariant is at stake, and to the RPC pattern otherwise.
+- The new `shops` public-read policy is additive only; existing `is_shop_member(id) OR is_admin()` read/write policies on `shops` are untouched, and inactive shops remain invisible to `anon`/`authenticated`.
+- [README.md → Future Enhancements](./README.md#future-enhancements) is updated accordingly — "Product reviews and ratings" and "wishlists" are removed from the deferred list; "Realtime notifications" remains deferred, since what's built here is explicitly not that.
+
+**Future Revisit:** If review volume or spam becomes a problem, revisit rate-limiting `submit_review` via the existing `check_rate_limit` RPC/`rate_limit_hits` table (already used elsewhere), or a lightweight moderation flag — deliberately not built now. If buyers need an unread badge or push delivery for the activity feed, revisit the optional `profiles.activity_last_seen_at` column path raised during the improvement-phase audit — deliberately deferred to keep v1 a zero-schema-change feature. If `products.shop_id` is later fully backfilled (closing TD-1), the shop-identity joins added here should switch from the `shop_users` bridge to `products.shop_id` directly.

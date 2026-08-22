@@ -2,15 +2,18 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useActionState } from "react";
 
 import { ErrorState } from "@/components/feedback/ErrorState";
+import { Turnstile } from "@/components/Turnstile";
 import { ROUTES } from "@/constants/routes";
 import { signInAction } from "@/features/auth/actions/auth.actions";
 import { AuthButton } from "@/features/auth/components/AuthButton";
 import { AuthHeader } from "@/features/auth/components/layout/AuthHeader";
 import { AUTH_COPY } from "@/features/auth/constants/auth.constants";
+import { mapOAuthCallbackError } from "@/features/auth/constants/auth-errors";
+import { isInternalPath } from "@/lib/utils/url";
 import type { ActionResult } from "@/types/action.types";
 
 import { EmailInput } from "../fields/EmailInput";
@@ -31,19 +34,42 @@ export function LoginForm() {
     ActionResult<null> | null,
     FormData
   >(signInAction, null);
+  const [oauthError, setOauthError] = useState<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaKey, setCaptchaKey] = useState(0);
 
   useEffect(() => {
     if (state?.success) {
       const redirectTo = new URLSearchParams(window.location.search).get("redirectTo");
       // Only navigate to internal paths — never an external / open-redirect target.
-      const isInternal =
-        redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//");
-      router.replace(isInternal ? redirectTo : ROUTES.home);
+      router.replace(isInternalPath(redirectTo) ? redirectTo : ROUTES.home);
     }
   }, [state, router]);
 
+  // Turnstile tokens are single-use — remount the widget for a fresh one
+  // after every submit attempt (success or failure).
+  useEffect(() => {
+    if (!state) return;
+    // Turnstile tokens are single-use — this must reset after every submit
+    // attempt (success or failure), not just on external-system sync.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCaptchaToken("");
+    setCaptchaKey((k) => k + 1);
+  }, [state]);
+
+  // Set once on mount from the /auth/callback redirect's ?error= — e.g. the
+  // user cancelled the Google/Facebook consent screen, or Facebook couldn't
+  // supply an email. See mapOAuthCallbackError for the code → copy mapping.
+  useEffect(() => {
+    // Same hydration-safety reasoning as SocialLoginButtons' redirectTo read:
+    // window is unavailable during SSR, so this can only run post-mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setOauthError(mapOAuthCallbackError(new URLSearchParams(window.location.search).get("error")));
+  }, []);
+
   const fieldErrors = state && !state.success ? state.fieldErrors : undefined;
-  const formError = state && !state.success && !state.fieldErrors ? state.error : undefined;
+  const formError =
+    (state && !state.success && !state.fieldErrors ? state.error : undefined) ?? oauthError ?? undefined;
 
   return (
     <>
@@ -88,7 +114,10 @@ export function LoginForm() {
           errors={fieldErrors?.password}
         />
 
-        <AuthButton type="submit" isLoading={isPending}>
+        <Turnstile key={captchaKey} onVerify={setCaptchaToken} />
+        <input type="hidden" name="captchaToken" value={captchaToken} />
+
+        <AuthButton type="submit" isLoading={isPending} disabled={!captchaToken}>
           {AUTH_COPY.signIn.submitLabel}
         </AuthButton>
       </form>

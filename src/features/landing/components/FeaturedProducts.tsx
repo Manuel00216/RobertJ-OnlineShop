@@ -1,9 +1,15 @@
+import { USER_ROLES } from "@/constants/roles";
 import { ROUTES } from "@/constants/routes";
 import { FeaturedProductsGrid } from "@/features/landing/components/FeaturedProductsGrid";
 import { FEATURED_PRODUCTS_PLACEHOLDER } from "@/features/landing/constants/landing.constants";
 import type { FeaturedProductView } from "@/features/landing/types/landing.types";
 import { getCoverImage } from "@/features/products/types/product.types";
-import { listFeaturedProducts } from "@/lib/supabase/queries";
+import {
+  getSessionUser,
+  getShopNamesBySellerIds,
+  listFeaturedProducts,
+  listWishlistProductIds,
+} from "@/lib/supabase/queries";
 
 const FALLBACK_IMAGE = "/landing/product-knit-pullover.jpg";
 
@@ -39,12 +45,24 @@ export async function FeaturedProducts() {
 
   try {
     const products = await listFeaturedProducts(8);
+    const shopNames =
+      products.length > 0
+        ? await getShopNamesBySellerIds(
+            [...new Set(products.map((product) => product.sellerId))],
+          ).catch(() => new Map<string, string>())
+        : new Map<string, string>();
+
     views =
       products.length > 0
         ? products.map((product) => ({
             key: product.id,
             name: product.title,
-            shop: product.sellerName ?? "RobertJ Seller",
+            // See ProductGrid.tsx's toTileItem for why sellerName is gated
+            // on role: only a genuine `seller` account is ever a real shop owner.
+            shop:
+              shopNames.get(product.sellerId) ??
+              (product.sellerRole === USER_ROLES.seller ? product.sellerName : null) ??
+              "RobertJ Seller",
             priceCents: product.priceCents,
             originalPriceCents: null,
             imageUrl: getCoverImage(product)?.url ?? FALLBACK_IMAGE,
@@ -63,10 +81,19 @@ export async function FeaturedProducts() {
     views = placeholderViews();
   }
 
+  const user = await getSessionUser();
+  const wishlistedProductIds = user
+    ? await listWishlistProductIds(user.id).catch(() => [])
+    : [];
+
   return (
     <section className="bg-rj-white py-24">
       <div className="mx-auto max-w-7xl px-5 md:px-8">
-        <FeaturedProductsGrid products={views} />
+        <FeaturedProductsGrid
+          products={views}
+          wishlistedProductIds={wishlistedProductIds}
+          isAuthenticated={user !== null}
+        />
       </div>
     </section>
   );

@@ -4,17 +4,27 @@ import { useState } from "react";
 
 import { QuantityStepper } from "@/components/ui/quantity-stepper";
 import { AddToCartButton } from "@/features/cart/components/AddToCartButton";
+import { BuyNowButton } from "@/features/cart/components/BuyNowButton";
+import { WishlistButton } from "@/features/wishlist/components/WishlistButton";
+import type { WishlistState } from "@/features/wishlist/types/wishlist.types";
 import type { Product } from "@/features/products/types/product.types";
 
 export interface ProductQuantityAndAddToCartProps {
   product: Product;
+  wishlist: WishlistState;
   className?: string;
+  /** The same resolved "Sold by" label already shown on this page — passed
+   * through so the cart line never disagrees with it. */
+  shopName?: string | null;
 }
 
-/** PDP quantity selector + Add to cart, kept together since the button needs the live quantity. */
+/** PDP quantity selector + Add to cart + wishlist, kept together since the
+ * cart button needs the live quantity. */
 export function ProductQuantityAndAddToCart({
   product,
+  wishlist,
   className,
+  shopName,
 }: ProductQuantityAndAddToCartProps) {
   const [quantity, setQuantity] = useState(1);
   const isOutOfStock = product.quantity <= 0;
@@ -31,12 +41,27 @@ export function ProductQuantityAndAddToCart({
           />
         </div>
       )}
-      <AddToCartButton
-        product={product}
-        quantity={quantity}
-        buttonVariant="rj"
-        className="w-full sm:w-auto"
-      />
+      <div className="flex flex-wrap items-center gap-3">
+        <AddToCartButton
+          product={product}
+          quantity={quantity}
+          buttonVariant="rj"
+          className="w-full sm:w-auto"
+          sellerName={shopName}
+        />
+        <BuyNowButton
+          product={product}
+          quantity={quantity}
+          className="w-full sm:w-auto"
+          sellerName={shopName}
+        />
+        <WishlistButton
+          productId={wishlist.productId}
+          initialSaved={wishlist.initialSaved}
+          isAuthenticated={wishlist.isAuthenticated}
+          variant="pdp"
+        />
+      </div>
     </div>
   );
 }

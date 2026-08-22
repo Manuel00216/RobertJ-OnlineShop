@@ -4,8 +4,10 @@ import Image from "next/image";
 import { useActionState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { RJ_CARD } from "@/components/ui/card";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { submitQrPaymentAction } from "@/features/payments/actions/payment.actions";
+import { cn } from "@/lib/utils/cn";
 import type { ActionResult } from "@/types/action.types";
 
 export interface ReceiptUploadProps {
@@ -36,7 +38,7 @@ export function ReceiptUpload({
   return (
     <section
       aria-label="Pay via QR transfer (optional)"
-      className="rounded-2xl border border-rj-gray-100 bg-rj-white p-5"
+      className={cn(RJ_CARD, "p-5")}
     >
       <h2 className="text-[10px] font-bold uppercase tracking-[0.3em] text-rj-gray-600">
         Paying via QR transfer? (optional)
