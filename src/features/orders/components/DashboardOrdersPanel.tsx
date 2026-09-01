@@ -15,6 +15,9 @@ import { OrderCard } from "./OrderCard";
 
 export interface DashboardOrdersPanelProps {
   searchParams: Record<string, string | string[] | undefined>;
+  /** Overridable for the Admin Portal, which links into `/admin/orders` instead of `/dashboard/orders`. */
+  clearFiltersHref?: string;
+  orderHref?: (id: string) => string;
 }
 
 /**
@@ -26,6 +29,8 @@ export interface DashboardOrdersPanelProps {
  */
 export async function DashboardOrdersPanel({
   searchParams,
+  clearFiltersHref = ROUTES.dashboardOrders,
+  orderHref = ROUTES.dashboardOrderDetail,
 }: DashboardOrdersPanelProps) {
   const parsed = buyerOrderListParamsSchema.safeParse(searchParams);
   if (!parsed.success) {
@@ -58,7 +63,7 @@ export async function DashboardOrdersPanel({
         action={
           filtering ? (
             <Link
-              href={ROUTES.dashboardOrders}
+              href={clearFiltersHref}
               className={cn(buttonVariants({ variant: "rjOutline", size: "rjSm" }))}
             >
               Clear filters
@@ -80,7 +85,7 @@ export async function DashboardOrdersPanel({
       <ul className="flex flex-col gap-3">
         {items.map((order) => (
           <li key={order.id}>
-            <OrderCard order={order} href={ROUTES.dashboardOrderDetail(order.id)} />
+            <OrderCard order={order} href={orderHref(order.id)} />
           </li>
         ))}
       </ul>

@@ -27,6 +27,8 @@ export async function adjustStockAction(
     const item = await queries.adjustStock(parsed.data);
     revalidatePath(ROUTES.inventory);
     revalidatePath(ROUTES.dashboardProducts);
+    revalidatePath(ROUTES.adminInventory);
+    revalidatePath(ROUTES.adminProducts);
     return ok(item);
   } catch (error) {
     return fail(error instanceof Error ? error.message : "Could not adjust stock.");

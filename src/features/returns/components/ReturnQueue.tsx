@@ -46,7 +46,7 @@ export async function ReturnQueue() {
       {withEvidence.map(({ request, evidenceUrl }) => (
         <li key={request.id} className="flex flex-col gap-2">
           <Link
-            href={ROUTES.dashboardOrderDetail(request.orderId)}
+            href={ROUTES.adminOrderDetail(request.orderId)}
             className="text-xs font-semibold text-rj-black hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30"
           >
             {request.orderNumber} →

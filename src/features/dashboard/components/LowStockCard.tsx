@@ -10,8 +10,13 @@ import { getLowStockReport } from "@/lib/supabase/queries";
 
 const MAX_ROWS = 5;
 
+export interface LowStockCardProps {
+  /** Overridable for the Admin Portal, which links into `/admin/inventory` instead of `/dashboard/inventory`. */
+  viewAllHref?: string;
+}
+
 /** Products needing restock attention — Inventory's own low-stock report, capped for the overview. */
-export async function LowStockCard() {
+export async function LowStockCard({ viewAllHref = ROUTES.inventory }: LowStockCardProps = {}) {
   let items;
   try {
     items = await getLowStockReport();
@@ -24,7 +29,7 @@ export async function LowStockCard() {
       <CardContent className="flex flex-col gap-4 p-5">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-bold text-rj-black">Low stock</h2>
-          <Link href={ROUTES.inventory} className="text-xs font-semibold text-rj-black underline">
+          <Link href={viewAllHref} className="text-xs font-semibold text-rj-black underline">
             View inventory →
           </Link>
         </div>

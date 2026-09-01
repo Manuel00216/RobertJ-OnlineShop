@@ -1,7 +1,9 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
-import type { UserRole } from "@/constants/roles";
+import { USER_ROLES, type UserRole } from "@/constants/roles";
+import { ROUTES } from "@/constants/routes";
 import { DashboardDateFilter } from "@/features/dashboard/components/DashboardDateFilter";
 import { DashboardKpiRow, DashboardKpiRowSkeleton } from "@/features/dashboard/components/DashboardKpiRow";
 import { DashboardShortcuts } from "@/features/dashboard/components/DashboardShortcuts";
@@ -22,6 +24,9 @@ export default async function DashboardOverviewPage({
 }: DashboardOverviewPageProps) {
   const user = await requireSessionUser();
   const role = user.role as UserRole;
+  if (role === USER_ROLES.admin) {
+    redirect(ROUTES.adminDashboard);
+  }
   const params = await searchParams;
   const { from, to } = parseDashboardDateRange(params);
 

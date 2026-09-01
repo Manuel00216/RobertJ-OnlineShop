@@ -8,8 +8,17 @@ import { ROUTES } from "@/constants/routes";
 import { OrderCard } from "@/features/orders/components/OrderCard";
 import { getDashboardOrderSummary } from "@/lib/supabase/queries";
 
+export interface RecentOrdersCardProps {
+  /** Overridable for the Admin Portal, which links into `/admin/orders` instead of `/dashboard/orders`. */
+  viewAllHref?: string;
+  orderHref?: (id: string) => string;
+}
+
 /** The 5 most recent orders visible to the caller (own shop, or every shop for admin). */
-export async function RecentOrdersCard() {
+export async function RecentOrdersCard({
+  viewAllHref = ROUTES.dashboardOrders,
+  orderHref = ROUTES.dashboardOrderDetail,
+}: RecentOrdersCardProps = {}) {
   let recentOrders;
   try {
     ({ recentOrders } = await getDashboardOrderSummary());
@@ -22,7 +31,7 @@ export async function RecentOrdersCard() {
       <CardContent className="flex flex-col gap-4 p-5">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-bold text-rj-black">Recent orders</h2>
-          <Link href={ROUTES.dashboardOrders} className="text-xs font-semibold text-rj-black underline">
+          <Link href={viewAllHref} className="text-xs font-semibold text-rj-black underline">
             View all orders →
           </Link>
         </div>
@@ -32,7 +41,7 @@ export async function RecentOrdersCard() {
         ) : (
           <div className="flex flex-col gap-3">
             {recentOrders.map((order) => (
-              <OrderCard key={order.id} order={order} href={ROUTES.dashboardOrderDetail(order.id)} />
+              <OrderCard key={order.id} order={order} href={orderHref(order.id)} />
             ))}
           </div>
         )}

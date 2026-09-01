@@ -65,8 +65,10 @@ export async function createProductAction(
 
     const product = await queries.createProduct(parsed.data, seller.id, shopId);
     revalidatePath(ROUTES.inventory);
+    revalidatePath(ROUTES.adminInventory);
     revalidatePath(ROUTES.products);
     revalidatePath(ROUTES.dashboardProducts);
+    revalidatePath(ROUTES.adminProducts);
     return ok(product);
   } catch (error) {
     return fail(
@@ -90,6 +92,7 @@ export async function assignProductShopAction(
       parsed.data.shopId,
     );
     revalidatePath(ROUTES.dashboardProducts);
+    revalidatePath(ROUTES.adminProducts);
     return ok(product);
   } catch (error) {
     return fail(
@@ -115,6 +118,7 @@ export async function updateProductAction(
         : { sellerId: seller.id, shopId: await queries.getOwnShopId(seller.id) };
     const product = await queries.updateProduct(parsed.data, owner);
     revalidatePath(ROUTES.inventory);
+    revalidatePath(ROUTES.adminInventory);
     revalidatePath(ROUTES.productDetail(product.slug));
     return ok(product);
   } catch (error) {
@@ -135,6 +139,7 @@ export async function archiveProductAction(
         : { sellerId: seller.id, shopId: await queries.getOwnShopId(seller.id) };
     await queries.archiveProduct(id, owner);
     revalidatePath(ROUTES.inventory);
+    revalidatePath(ROUTES.adminInventory);
     revalidatePath(ROUTES.products);
     return ok(null);
   } catch (error) {
@@ -178,6 +183,7 @@ export async function uploadProductImageAction(
     );
     const image = await queries.addProductImage(parsed.data.productId, url);
     revalidatePath(ROUTES.dashboardProducts);
+    revalidatePath(ROUTES.adminProducts);
     revalidatePath(ROUTES.products);
     return ok(image);
   } catch (error) {
@@ -200,6 +206,7 @@ export async function deleteProductImageAction(
     const owner = seller.role === USER_ROLES.admin ? null : { sellerId: seller.id };
     await queries.deleteProductImage(parsed.data.imageId, owner);
     revalidatePath(ROUTES.dashboardProducts);
+    revalidatePath(ROUTES.adminProducts);
     revalidatePath(ROUTES.products);
     return ok(null);
   } catch (error) {

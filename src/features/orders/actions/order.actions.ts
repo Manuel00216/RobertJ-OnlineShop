@@ -68,6 +68,8 @@ export async function advanceOrderStatusAction(
     );
     revalidatePath(ROUTES.dashboardOrders, "layout");
     revalidatePath(ROUTES.dashboardOrderDetail(order.id), "layout");
+    revalidatePath(ROUTES.adminOrders, "layout");
+    revalidatePath(ROUTES.adminOrderDetail(order.id), "layout");
     revalidatePath(ROUTES.orderDetail(order.id), "layout");
     revalidatePath(ROUTES.orders, "layout");
     return ok(order);

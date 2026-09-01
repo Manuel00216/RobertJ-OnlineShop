@@ -72,6 +72,7 @@ export async function verifyPaymentAction(
       parsed.data.reason ?? null,
     );
     revalidatePath(ROUTES.paymentVerification);
+    revalidatePath(ROUTES.adminPayments);
     return ok(null);
   } catch (error) {
     return fail(

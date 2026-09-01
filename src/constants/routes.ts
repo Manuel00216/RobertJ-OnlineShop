@@ -20,13 +20,22 @@ export const ROUTES = {
   inventory: "/dashboard/inventory",
   paymentVerification: "/dashboard/payments",
   reports: "/dashboard/reports",
+  /** Admin Portal — separate from the Shop Owner `/dashboard` tree. See ARCHITECTURE.md admin-portal-separation notes. */
+  admin: "/admin",
+  adminDashboard: "/admin/dashboard",
+  adminProducts: "/admin/products",
+  adminInventory: "/admin/inventory",
+  adminOrders: "/admin/orders",
+  adminOrderDetail: (id: string) => `/admin/orders/${id}`,
+  adminPayments: "/admin/payments",
   /** Admin-only: sellers see their own return requests inline on their own orders, not this queue. */
-  dashboardReturns: "/dashboard/returns",
-  /** Admin-only dashboard sections — distinct from the (nonexistent) `shops` table. */
-  adminUsers: "/dashboard/users",
-  adminShops: "/dashboard/shops",
-  adminSettings: "/dashboard/settings",
-  adminAuditLogs: "/dashboard/audit-logs",
+  adminReturns: "/admin/returns-refunds",
+  adminReports: "/admin/reports",
+  /** Admin-only sections — distinct from the (nonexistent) `shops` table. */
+  adminUsers: "/admin/users",
+  adminShops: "/admin/shops",
+  adminAuditLog: "/admin/audit-log",
+  adminSettings: "/admin/settings",
   notifications: "/notifications",
   assistant: "/assistant",
   signIn: "/sign-in",
@@ -45,6 +54,7 @@ export const ROUTES = {
  */
 export const PROTECTED_ROUTE_PREFIXES = [
   "/dashboard",
+  "/admin",
   "/account",
   "/orders",
   "/checkout",

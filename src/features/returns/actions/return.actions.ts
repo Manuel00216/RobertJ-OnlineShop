@@ -84,7 +84,8 @@ export async function respondToReturnAction(
       parsed.data.note ?? null,
     );
     revalidatePath(ROUTES.dashboardOrders);
-    revalidatePath(ROUTES.dashboardReturns);
+    revalidatePath(ROUTES.adminOrders);
+    revalidatePath(ROUTES.adminReturns);
     return ok(null);
   } catch (error) {
     return fail(
@@ -114,8 +115,9 @@ export async function decideReturnAction(
       parsed.data.decision,
       parsed.data.note ?? null,
     );
-    revalidatePath(ROUTES.dashboardReturns);
+    revalidatePath(ROUTES.adminReturns);
     revalidatePath(ROUTES.dashboardOrders);
+    revalidatePath(ROUTES.adminOrders);
     return ok(null);
   } catch (error) {
     return fail(
