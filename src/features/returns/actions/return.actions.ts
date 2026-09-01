@@ -85,6 +85,7 @@ export async function respondToReturnAction(
     );
     revalidatePath(ROUTES.dashboardOrders);
     revalidatePath(ROUTES.adminOrders);
+    revalidatePath(ROUTES.sellerOrders);
     revalidatePath(ROUTES.adminReturns);
     return ok(null);
   } catch (error) {
@@ -118,6 +119,7 @@ export async function decideReturnAction(
     revalidatePath(ROUTES.adminReturns);
     revalidatePath(ROUTES.dashboardOrders);
     revalidatePath(ROUTES.adminOrders);
+    revalidatePath(ROUTES.sellerOrders);
     return ok(null);
   } catch (error) {
     return fail(

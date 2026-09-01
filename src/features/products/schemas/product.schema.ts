@@ -77,25 +77,30 @@ export const createProductSchema = z.object({
   tags: z.array(z.string().trim().min(1).max(30)).max(20).default([]),
   status: productStatusSchema.default(PRODUCT_STATUS.draft),
   /**
-   * Admin-only field: which shop this new product belongs to. A seller's
-   * submission is always ignored server-side in favor of their own
-   * server-resolved shop (`requireOwnShopId()`) — this field exists purely
-   * for the admin create-form's shop-picker.
+   * Whether this product appears in the homepage's "Picked for You" section
+   * (`listFeaturedProducts`). Checkboxes are absent from FormData when
+   * unchecked, hence the string-to-boolean transform (mirrors
+   * `productListParamsSchema`'s `onSale`). Gated the same way as every other
+   * field here — by who's authorized to create/update *this* product
+   * (`createProductAction`/`updateProductAction`), not specially restricted.
    */
-  shopId: z.uuid().optional(),
+  featured: z
+    .string()
+    .optional()
+    .transform((value) => value === "on"),
 });
 
 /**
- * `shopId` is deliberately omitted, not just left unset: a product's shop is
- * never reassignable through the general edit form (see `assignProductShopSchema`
- * for the distinct, admin-only reassignment path).
+ * A product's shop is never reassignable through the general edit form (see
+ * `assignProductShopSchema` for the distinct, admin-only reassignment path)
+ * — there's no `shopId` field here to omit, since `createProductSchema`
+ * doesn't have one either: only a seller ever creates a product, and their
+ * shop is always resolved server-side via `requireOwnShopId()`, never taken
+ * from client input.
  */
-export const updateProductSchema = createProductSchema
-  .omit({ shopId: true })
-  .partial()
-  .extend({
-    id: z.uuid(),
-  });
+export const updateProductSchema = createProductSchema.partial().extend({
+  id: z.uuid(),
+});
 
 /** Admin-only: assign a shop to a legacy/unassigned product. */
 export const assignProductShopSchema = z.object({

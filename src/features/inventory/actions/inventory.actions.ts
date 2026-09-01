@@ -29,6 +29,8 @@ export async function adjustStockAction(
     revalidatePath(ROUTES.dashboardProducts);
     revalidatePath(ROUTES.adminInventory);
     revalidatePath(ROUTES.adminProducts);
+    revalidatePath(ROUTES.sellerInventory);
+    revalidatePath(ROUTES.sellerProducts);
     return ok(item);
   } catch (error) {
     return fail(error instanceof Error ? error.message : "Could not adjust stock.");

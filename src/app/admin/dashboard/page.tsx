@@ -24,7 +24,7 @@ interface AdminDashboardPageProps {
 
 function ChartCardSkeleton() {
   return (
-    <Card className="border-gray-200">
+    <Card className="border-border">
       <CardContent className="p-5">
         <Skeleton className="h-40 w-full" />
       </CardContent>
@@ -42,10 +42,12 @@ export default async function AdminDashboardPage({ searchParams }: AdminDashboar
     <div className="flex flex-col gap-6 p-5 lg:p-7">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">
+          <h2 className="text-lg font-semibold text-foreground">
             Welcome back{user.fullName ? `, ${user.fullName}` : ""}
           </h2>
-          <p className="text-sm text-gray-500">Here&apos;s what&apos;s happening across the marketplace.</p>
+          <p className="text-sm text-muted-foreground">
+            Here&apos;s what&apos;s happening across the marketplace.
+          </p>
         </div>
         <DashboardDateFilter from={from} to={to} />
       </div>

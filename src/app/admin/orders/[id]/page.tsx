@@ -27,14 +27,16 @@ export async function generateMetadata({
   params,
 }: AdminOrderDetailPageProps): Promise<Metadata> {
   const { id } = await params;
-  const order = await getDashboardOrder(id);
+  // `null`: admin's unrestricted access is authorized once, at the layout
+  // (`requireRole(ADMIN_ONLY_ROLES)`), matching RLS's own `is_admin()` bypass.
+  const order = await getDashboardOrder(id, null);
   return { title: order ? `${order.orderNumber} — Admin Portal` : "Order not found" };
 }
 
 /** Admin Portal order detail — same composition as the seller dashboard's order detail page, moved to `/admin`. */
 export default async function AdminOrderDetailPage({ params }: AdminOrderDetailPageProps) {
   const { id } = await params;
-  const order = await getDashboardOrder(id);
+  const order = await getDashboardOrder(id, null);
 
   if (!order) notFound();
 

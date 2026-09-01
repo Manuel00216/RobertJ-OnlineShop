@@ -39,6 +39,15 @@ export async function searchProductSuggestionsAction(
   }
 }
 
+/**
+ * Seller-only: sellers create and own marketplace products. Admin is
+ * deliberately excluded here (`requireRole([USER_ROLES.seller])`, not
+ * `DASHBOARD_ROLES`) rather than merely hidden in the UI — an admin account
+ * must never become a product's `seller_id`. Admin's product capability is
+ * limited to managing/moderating *existing* seller products (see
+ * `updateProductAction`, `archiveProductAction`, `assignProductShopAction`),
+ * never creating new ones.
+ */
 export async function createProductAction(
   _prevState: ActionResult<Product> | null,
   formData: FormData,
@@ -47,28 +56,17 @@ export async function createProductAction(
   if (!parsed.success) return fromZodError(parsed.error);
 
   try {
-    const seller = await queries.requireRole(DASHBOARD_ROLES);
-
-    // The shop is always server-resolved, never taken from the client
-    // submission as-is: a seller's own shop is looked up via shop_users; an
-    // admin must have explicitly picked one (parsed.data.shopId, validated
-    // here, not trusted blindly — RLS would reject a mismatched id anyway,
-    // but this gives a friendly error instead of a raw database failure).
-    const shopId =
-      seller.role === USER_ROLES.admin
-        ? parsed.data.shopId
-        : await queries.requireOwnShopId();
-
-    if (!shopId) {
-      return fail("Select which shop this product belongs to.");
-    }
-
+    const seller = await queries.requireRole([USER_ROLES.seller]);
+    const shopId = await queries.requireOwnShopId();
     const product = await queries.createProduct(parsed.data, seller.id, shopId);
     revalidatePath(ROUTES.inventory);
     revalidatePath(ROUTES.adminInventory);
+    revalidatePath(ROUTES.sellerInventory);
     revalidatePath(ROUTES.products);
     revalidatePath(ROUTES.dashboardProducts);
     revalidatePath(ROUTES.adminProducts);
+    revalidatePath(ROUTES.sellerProducts);
+    revalidatePath(ROUTES.home);
     return ok(product);
   } catch (error) {
     return fail(
@@ -101,6 +99,14 @@ export async function assignProductShopAction(
   }
 }
 
+/**
+ * Shared by seller (own product, or any product in a shop they belong to)
+ * and admin (any product — moderation, not ownership: `owner = null` below
+ * bypasses the ownership filter without ever writing the admin's id
+ * anywhere). This is also how admin marks/unmarks an existing seller
+ * product as Featured — `featured` is just another field here, gated the
+ * same way as title/price/status, not specially restricted.
+ */
 export async function updateProductAction(
   _prevState: ActionResult<Product> | null,
   formData: FormData,
@@ -119,7 +125,12 @@ export async function updateProductAction(
     const product = await queries.updateProduct(parsed.data, owner);
     revalidatePath(ROUTES.inventory);
     revalidatePath(ROUTES.adminInventory);
+    revalidatePath(ROUTES.sellerInventory);
+    revalidatePath(ROUTES.dashboardProducts);
+    revalidatePath(ROUTES.adminProducts);
+    revalidatePath(ROUTES.sellerProducts);
     revalidatePath(ROUTES.productDetail(product.slug));
+    revalidatePath(ROUTES.home);
     return ok(product);
   } catch (error) {
     return fail(
@@ -140,7 +151,11 @@ export async function archiveProductAction(
     await queries.archiveProduct(id, owner);
     revalidatePath(ROUTES.inventory);
     revalidatePath(ROUTES.adminInventory);
+    revalidatePath(ROUTES.sellerInventory);
     revalidatePath(ROUTES.products);
+    revalidatePath(ROUTES.dashboardProducts);
+    revalidatePath(ROUTES.adminProducts);
+    revalidatePath(ROUTES.sellerProducts);
     return ok(null);
   } catch (error) {
     return fail(
@@ -170,10 +185,10 @@ export async function uploadProductImageAction(
   try {
     const seller = await queries.requireRole(DASHBOARD_ROLES);
     if (seller.role !== USER_ROLES.admin) {
-      const owned = await queries.productBelongsToSeller(
-        parsed.data.productId,
-        seller.id,
-      );
+      const owned = await queries.productBelongsToOwner(parsed.data.productId, {
+        sellerId: seller.id,
+        shopId: await queries.getOwnShopId(seller.id),
+      });
       if (!owned) return fail("Product not found.");
     }
 
@@ -184,6 +199,7 @@ export async function uploadProductImageAction(
     const image = await queries.addProductImage(parsed.data.productId, url);
     revalidatePath(ROUTES.dashboardProducts);
     revalidatePath(ROUTES.adminProducts);
+    revalidatePath(ROUTES.sellerProducts);
     revalidatePath(ROUTES.products);
     return ok(image);
   } catch (error) {
@@ -203,10 +219,14 @@ export async function deleteProductImageAction(
 
   try {
     const seller = await queries.requireRole(DASHBOARD_ROLES);
-    const owner = seller.role === USER_ROLES.admin ? null : { sellerId: seller.id };
+    const owner =
+      seller.role === USER_ROLES.admin
+        ? null
+        : { sellerId: seller.id, shopId: await queries.getOwnShopId(seller.id) };
     await queries.deleteProductImage(parsed.data.imageId, owner);
     revalidatePath(ROUTES.dashboardProducts);
     revalidatePath(ROUTES.adminProducts);
+    revalidatePath(ROUTES.sellerProducts);
     revalidatePath(ROUTES.products);
     return ok(null);
   } catch (error) {

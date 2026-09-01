@@ -478,6 +478,7 @@ export async function createProduct(
       category_id: input.categoryId ?? null,
       seller_id: sellerId,
       shop_id: shopId,
+      featured: input.featured ?? false,
     })
     .select(PRODUCT_COLUMNS)
     .single();
@@ -604,21 +605,26 @@ export async function archiveProduct(
 }
 
 /**
- * Cheap ownership check for a seller before an image write — mirrors the
- * `product_images` RLS policies' own `p.seller_id = auth.uid()` check
- * (no `shopId` clause: unlike `products`, `product_images` RLS was never
- * shop-aware, so there's nothing to gain by checking shop membership here).
+ * Cheap ownership check for a seller before an image write — same "own it,
+ * or it's in my shop" rule as `updateProduct`/`archiveProduct` (and, since
+ * the accompanying migration, the `product_images`/storage RLS policies
+ * too). A shop's product can have a `seller_id` that predates shop
+ * assignment or belongs to a different shop member; checking `seller_id`
+ * alone rejected uploads on products the seller can otherwise see and edit.
  */
-export async function productBelongsToSeller(
+export async function productBelongsToOwner(
   productId: string,
-  sellerId: string,
+  owner: { sellerId: string; shopId: string | null },
 ): Promise<boolean> {
   const supabase = await createSupabaseServerClient();
+  const ownerFilter = owner.shopId
+    ? `seller_id.eq.${owner.sellerId},shop_id.eq.${owner.shopId}`
+    : `seller_id.eq.${owner.sellerId}`;
   const { data, error } = await supabase
     .from(DATABASE_TABLES.PRODUCTS)
     .select("id")
     .eq("id", productId)
-    .eq("seller_id", sellerId)
+    .or(ownerFilter)
     .maybeSingle();
 
   if (error) {
@@ -703,23 +709,24 @@ export async function addProductImage(
  * Removes a product image row and its Storage object.
  * `owner`: same defense-in-depth scope as `updateProduct`/`archiveProduct`
  * (`null` = admin, RLS is the complete boundary; otherwise re-verify the
- * image's parent product belongs to this seller before deleting anything).
+ * image's parent product belongs to this seller or their shop before
+ * deleting anything).
  */
 export async function deleteProductImage(
   imageId: string,
-  owner: { sellerId: string } | null,
+  owner: { sellerId: string; shopId: string | null } | null,
 ): Promise<void> {
   const supabase = await createSupabaseServerClient();
 
   const { data: image, error: readError } = await supabase
     .from(DATABASE_TABLES.PRODUCT_IMAGES)
-    .select("id, url, product_id, products!inner ( seller_id )")
+    .select("id, url, product_id, products!inner ( seller_id, shop_id )")
     .eq("id", imageId)
     .maybeSingle<{
       id: string;
       url: string;
       product_id: string;
-      products: { seller_id: string };
+      products: { seller_id: string; shop_id: string | null };
     }>();
 
   if (readError) {
@@ -728,7 +735,11 @@ export async function deleteProductImage(
   if (!image) {
     throw new Error("Image not found.");
   }
-  if (owner && image.products.seller_id !== owner.sellerId) {
+  if (
+    owner &&
+    image.products.seller_id !== owner.sellerId &&
+    !(owner.shopId && image.products.shop_id === owner.shopId)
+  ) {
     throw new Error("Image not found.");
   }
 
@@ -1488,14 +1499,28 @@ export async function listDashboardOrders(
  * deliberately narrows to "orders where I'm the buyer" even though RLS would
  * already scope it — collapsing them would blur that intent.
  */
+/**
+ * `sellerId`: defense-in-depth beyond RLS, same precedent as `getBuyerOrder`'s
+ * explicit `buyer_id` filter — pass the caller's own id for a seller, `null`
+ * for an admin (unconditional access, matching RLS's own `is_admin()`
+ * bypass). Deliberately just `seller_id`, not `is_shop_member`-aware: orders
+ * are intentionally not shop-scoped yet (see the shop-scoping migrations'
+ * own "orders are NOT touched here" notes) — this mirrors the existing RLS
+ * boundary exactly rather than expanding or narrowing it.
+ */
 export const getDashboardOrder = cache(
-  async (orderId: string): Promise<Order | null> => {
+  async (orderId: string, sellerId: string | null): Promise<Order | null> => {
     const supabase = await createSupabaseServerClient();
-    const { data, error } = await supabase
+    let query = supabase
       .from(DATABASE_TABLES.ORDERS)
       .select(ORDER_COLUMNS)
-      .eq("id", orderId)
-      .maybeSingle();
+      .eq("id", orderId);
+
+    if (sellerId) {
+      query = query.eq("seller_id", sellerId);
+    }
+
+    const { data, error } = await query.maybeSingle();
 
     if (error) {
       throw new Error(`Failed to load order: ${error.message}`);

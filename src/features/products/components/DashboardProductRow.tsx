@@ -52,11 +52,7 @@ export function DashboardProductRow({
     return (
       <Card className="border-rj-gray-100">
         <CardContent className="p-5">
-          <ProductForm
-            categories={categories}
-            product={product}
-            onDone={() => setMode("view")}
-          />
+          <ProductForm categories={categories} product={product} onDone={() => setMode("view")} />
           <Button
             type="button"
             variant="outline"

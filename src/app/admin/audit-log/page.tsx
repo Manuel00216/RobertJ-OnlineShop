@@ -12,7 +12,7 @@ function AuditLogSkeleton() {
     <div className="flex flex-col gap-3" role="status" aria-live="polite">
       <span className="sr-only">Loading audit log</span>
       {Array.from({ length: 4 }).map((_, index) => (
-        <Skeleton key={index} className="h-20 w-full rounded-2xl bg-gray-100" />
+        <Skeleton key={index} className="h-20 w-full rounded-2xl" />
       ))}
     </div>
   );

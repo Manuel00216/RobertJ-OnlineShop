@@ -30,6 +30,8 @@ export async function createShopAction(
     revalidatePath(ROUTES.inventory);
     revalidatePath(ROUTES.adminProducts);
     revalidatePath(ROUTES.adminInventory);
+    revalidatePath(ROUTES.sellerProducts);
+    revalidatePath(ROUTES.sellerInventory);
     return ok(shop);
   } catch (error) {
     return fail(error instanceof Error ? error.message : "Could not create the shop.");

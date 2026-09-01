@@ -19,10 +19,11 @@ export interface DashboardProductsPanelProps {
 }
 
 /**
- * Client wrapper for `/dashboard/products`: owns the "show create form"
- * toggle and renders the management list. Data (`products`/`categories`/
- * `shops`) is fetched once, server-side, by the page — this component does
- * no fetching of its own.
+ * Client wrapper for the products management list: owns the "show create
+ * form" toggle (seller-only — admin creates nothing, see `createProductAction`)
+ * and renders the management list. Data (`products`/`categories`/`shops`) is
+ * fetched once, server-side, by the page — this component does no fetching
+ * of its own.
  */
 export function DashboardProductsPanel({
   products,
@@ -38,23 +39,23 @@ export function DashboardProductsPanel({
         <p className="text-sm text-rj-gray-600">
           {products.length} product{products.length === 1 ? "" : "s"}
         </p>
-        <Button
-          type="button"
-          variant="rj"
-          size="rjSm"
-          onClick={() => setShowCreateForm((value) => !value)}
-        >
-          {showCreateForm ? "Cancel" : "New product"}
-        </Button>
+        {/* Admin manages/moderates existing products only — never creates
+            one, so this action (and the form below) is seller-only. */}
+        {!isAdmin ? (
+          <Button
+            type="button"
+            variant="rj"
+            size="rjSm"
+            onClick={() => setShowCreateForm((value) => !value)}
+          >
+            {showCreateForm ? "Cancel" : "New product"}
+          </Button>
+        ) : null}
       </div>
 
-      {showCreateForm ? (
+      {!isAdmin && showCreateForm ? (
         <div className="rounded-2xl border border-rj-gray-100 bg-rj-gray-50 p-5">
-          <ProductForm
-            categories={categories}
-            shops={isAdmin ? shops : undefined}
-            onDone={() => setShowCreateForm(false)}
-          />
+          <ProductForm categories={categories} onDone={() => setShowCreateForm(false)} />
         </div>
       ) : null}
 

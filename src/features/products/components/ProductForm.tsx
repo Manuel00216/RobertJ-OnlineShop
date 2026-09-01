@@ -16,7 +16,6 @@ import {
 } from "@/features/products/actions/product.actions";
 import type { Category } from "@/features/categories/types/category.types";
 import type { Product, ProductImage } from "@/features/products/types/product.types";
-import type { Shop } from "@/features/shops/types/shop.types";
 import { fromCents } from "@/lib/utils/currency";
 import type { ActionResult } from "@/types/action.types";
 
@@ -35,24 +34,21 @@ const textareaClasses =
 
 export interface ProductFormProps {
   categories: Category[];
-  /**
-   * Shops the caller may create/reassign into — only ever populated for an
-   * admin (from `listShops()`). A seller never sees this field; their shop
-   * is always resolved server-side (`requireOwnShopId()`), never taken from
-   * this form even if a value were somehow present in the submission.
-   */
-  shops?: Shop[];
   /** Omit for create mode; pass the product being edited for edit mode. */
   product?: Product;
   onDone?: () => void;
 }
 
 /**
- * Shared create/edit form — one component for both roles and both modes.
- * The only role-conditional rendering is the admin-only shop picker; every
- * other field and the submit action are identical regardless of who's using it.
+ * Shared create/edit form. Only sellers ever create (see
+ * `createProductAction` — admin is excluded server-side, not just in the
+ * UI, so there's no shop-picker here anymore: a seller's shop is always
+ * resolved server-side via `requireOwnShopId()`). Both seller (own product)
+ * and admin (any product, moderating rather than owning) can reach edit
+ * mode, where every field — including "Featured" — is identical regardless
+ * of who's using it.
  */
-export function ProductForm({ categories, shops, product, onDone }: ProductFormProps) {
+export function ProductForm({ categories, product, onDone }: ProductFormProps) {
   const isEdit = Boolean(product);
   const [state, formAction, isPending] = useActionState<
     ActionResult<Product> | null,
@@ -296,6 +292,16 @@ export function ProductForm({ categories, shops, product, onDone }: ProductFormP
         </div>
       </div>
 
+      <label className="flex items-center gap-2.5 text-sm font-medium">
+        <input
+          type="checkbox"
+          name="featured"
+          defaultChecked={product?.featured ?? false}
+          className="h-4 w-4 rounded border-rj-gray-200 text-rj-black focus-visible:ring-2 focus-visible:ring-rj-red/30"
+        />
+        Featured on homepage
+      </label>
+
       <div className="flex flex-col gap-1.5">
         <label htmlFor="product-category" className="text-sm font-medium">
           Category
@@ -322,22 +328,6 @@ export function ProductForm({ categories, shops, product, onDone }: ProductFormP
         placeholder="e.g. Quezon City"
         errors={fieldErrors?.location}
       />
-
-      {!isEdit && shops && shops.length > 0 ? (
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="product-shop" className="text-sm font-medium">
-            Shop
-          </label>
-          <select id="product-shop" name="shopId" className={selectClasses} required>
-            <option value="">Select a shop…</option>
-            {shops.map((shop) => (
-              <option key={shop.id} value={shop.id}>
-                {shop.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      ) : null}
 
       <Button type="submit" variant="rj" size="rj" isLoading={isPending} className="w-full sm:w-auto">
         {isPending ? "Saving…" : isEdit ? "Save changes" : "Create product"}
