@@ -36,6 +36,15 @@ export const ROUTES = {
   adminShops: "/admin/shops",
   adminAuditLog: "/admin/audit-log",
   adminSettings: "/admin/settings",
+  /** Seller Portal — separate from the `/dashboard` tree, mirrors the Admin Portal split. */
+  seller: "/seller",
+  sellerDashboard: "/seller/dashboard",
+  sellerProducts: "/seller/products",
+  sellerInventory: "/seller/inventory",
+  sellerOrders: "/seller/orders",
+  sellerOrderDetail: (id: string) => `/seller/orders/${id}`,
+  sellerPayments: "/seller/payments",
+  sellerReports: "/seller/reports",
   notifications: "/notifications",
   assistant: "/assistant",
   signIn: "/sign-in",
@@ -55,6 +64,7 @@ export const ROUTES = {
 export const PROTECTED_ROUTE_PREFIXES = [
   "/dashboard",
   "/admin",
+  "/seller",
   "/account",
   "/orders",
   "/checkout",
