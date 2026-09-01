@@ -31,14 +31,14 @@ function StatCard({
 }) {
   return (
     <Link href={href} className="block">
-      <div className="h-full rounded-xl border border-gray-200 bg-white p-5 transition-shadow hover:shadow-md">
+      <div className="h-full rounded-xl border border-border bg-card p-5 transition-shadow hover:shadow-md">
         <div className={`mb-4 flex h-9 w-9 items-center justify-center rounded-lg ${iconBg}`}>
           <Icon className={`h-4.5 w-4.5 ${iconColor}`} />
         </div>
-        <div className="mb-1 truncate text-2xl font-semibold leading-none tabular-nums text-gray-900">
+        <div className="mb-1 truncate text-2xl font-semibold leading-none tabular-nums text-foreground">
           {value}
         </div>
-        <div className="text-xs text-gray-500">{label}</div>
+        <div className="text-xs text-muted-foreground">{label}</div>
       </div>
     </Link>
   );
@@ -86,48 +86,48 @@ export async function AdminKpiRow({ from, to }: AdminKpiRowProps) {
         label="Total Revenue"
         value={formatCurrency(summary.revenueCents)}
         icon={TrendingUp}
-        iconBg="bg-indigo-50"
-        iconColor="text-indigo-600"
+        iconBg="bg-primary/10"
+        iconColor="text-primary"
       />
       <StatCard
         href={ROUTES.adminOrders}
         label="Total Orders"
         value={summary.totalOrders}
         icon={ShoppingBag}
-        iconBg="bg-blue-50"
-        iconColor="text-blue-600"
+        iconBg="bg-info/10"
+        iconColor="text-info"
       />
       <StatCard
         href={ROUTES.adminOrders}
         label="Pending Orders"
         value={pendingOrders}
         icon={Timer}
-        iconBg="bg-amber-50"
-        iconColor="text-amber-600"
+        iconBg="bg-warning/10"
+        iconColor="text-warning"
       />
       <StatCard
         href={ROUTES.adminProducts}
         label="Total Products"
         value={totalProducts}
         icon={Package}
-        iconBg="bg-emerald-50"
-        iconColor="text-emerald-600"
+        iconBg="bg-success/10"
+        iconColor="text-success"
       />
       <StatCard
         href={ROUTES.adminInventory}
         label="Low Stock"
         value={lowStockCount}
         icon={AlertTriangle}
-        iconBg="bg-red-50"
-        iconColor="text-red-500"
+        iconBg="bg-danger/10"
+        iconColor="text-danger"
       />
       <StatCard
         href={ROUTES.adminPayments}
         label="Pending Payments"
         value={pendingPayments}
         icon={CreditCard}
-        iconBg="bg-purple-50"
-        iconColor="text-purple-600"
+        iconBg="bg-primary/10"
+        iconColor="text-primary"
       />
     </div>
   );
@@ -137,7 +137,7 @@ export function AdminKpiRowSkeleton() {
   return (
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
       {Array.from({ length: 6 }).map((_, i) => (
-        <div key={i} className="rounded-xl border border-gray-200 bg-white p-5">
+        <div key={i} className="rounded-xl border border-border bg-card p-5">
           <Skeleton className="mb-4 h-9 w-9 rounded-lg" />
           <Skeleton className="mb-2 h-7 w-16" />
           <Skeleton className="h-3 w-20" />

@@ -21,7 +21,7 @@ export function AdminLayout({ user, notifications, children }: AdminLayoutProps)
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div data-theme-scope="admin" className="flex min-h-screen bg-background">
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"

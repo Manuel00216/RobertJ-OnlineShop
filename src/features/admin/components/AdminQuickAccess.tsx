@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronRight, Plus } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ROUTES } from "@/constants/routes";
@@ -24,41 +25,33 @@ export async function AdminQuickAccess() {
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5">
-      <h2 className="mb-3 text-sm font-semibold text-gray-900">Quick Access</h2>
+    <div className="rounded-xl border border-border bg-card p-5">
+      <h2 className="mb-3 text-sm font-semibold text-foreground">Quick Access</h2>
       <div className="grid grid-cols-2 gap-2">
         <Link
           href={ROUTES.adminProducts}
-          className="flex flex-col items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-3 text-xs font-medium text-white transition-all hover:bg-indigo-700"
+          className="flex flex-col items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-3 text-xs font-medium text-primary-foreground transition-all hover:bg-primary/90"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
           <span>Add Product</span>
         </Link>
         <Link
           href={ROUTES.adminOrders}
-          className="flex flex-col items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-3 text-xs font-medium text-gray-700 transition-all hover:bg-gray-50"
+          className="flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-3 py-3 text-xs font-medium text-foreground transition-all hover:bg-muted"
         >
           <span>Pending Orders</span>
-          {pendingOrders > 0 && (
-            <span className="rounded-full bg-red-100 px-1.5 text-[10px] font-semibold text-red-600">
-              {pendingOrders}
-            </span>
-          )}
+          {pendingOrders > 0 && <Badge tone="danger">{pendingOrders}</Badge>}
         </Link>
         <Link
           href={ROUTES.adminReturns}
-          className="flex flex-col items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-3 text-xs font-medium text-gray-700 transition-all hover:bg-gray-50"
+          className="flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-3 py-3 text-xs font-medium text-foreground transition-all hover:bg-muted"
         >
           <span>Process Returns</span>
-          {pendingReturns > 0 && (
-            <span className="rounded-full bg-red-100 px-1.5 text-[10px] font-semibold text-red-600">
-              {pendingReturns}
-            </span>
-          )}
+          {pendingReturns > 0 && <Badge tone="danger">{pendingReturns}</Badge>}
         </Link>
         <Link
           href={ROUTES.adminReports}
-          className="flex flex-col items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-3 text-xs font-medium text-gray-700 transition-all hover:bg-gray-50"
+          className="flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-3 py-3 text-xs font-medium text-foreground transition-all hover:bg-muted"
         >
           <ChevronRight className="h-4 w-4" aria-hidden="true" />
           <span>Generate Report</span>
@@ -70,7 +63,7 @@ export async function AdminQuickAccess() {
 
 export function AdminQuickAccessSkeleton() {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5">
+    <div className="rounded-xl border border-border bg-card p-5">
       <Skeleton className="mb-3 h-5 w-24" />
       <div className="grid grid-cols-2 gap-2">
         {Array.from({ length: 4 }).map((_, i) => (

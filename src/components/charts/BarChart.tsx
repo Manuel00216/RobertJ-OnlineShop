@@ -18,7 +18,9 @@ export interface BarChartProps {
 }
 
 const TONE_BAR: Record<BarChartTone, string> = {
-  neutral: "bg-rj-gray-300",
+  // `rj-gray-300` was never a defined token — this tone rendered invisibly
+  // before. `rj-gray-200` gives "neutral" an actual visible bar.
+  neutral: "bg-rj-gray-200",
   info: "bg-info",
   success: "bg-success",
   warning: "bg-warning",
