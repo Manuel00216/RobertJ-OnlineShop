@@ -36,6 +36,7 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${dmSans.variable} ${dmSerif.variable} h-full overflow-x-clip antialiased`}
+      suppressHydrationWarning
     >
       {/* overflow-x-clip (not `hidden`) guards against transform-induced horizontal
           overflow — e.g. Reveal's pre-animation translate-x offsets — without

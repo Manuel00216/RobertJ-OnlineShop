@@ -1,6 +1,13 @@
 @import "tailwindcss";
 
-/* Design tokens. Every colour used by components resolves through these. */
+/*
+ * Design tokens. Every colour used by components resolves through these.
+ * UNCHANGED from the original generic values — Buyer/Marketing and the
+ * Seller `/dashboard` both consume these (via Button/Badge/Card's default,
+ * non-"rj" tone), so this block must stay exactly as it always was. Do not
+ * "brand-align" these — that belongs in the `[data-theme-scope="admin"]`
+ * block below, which only the Admin Portal's root layout renders.
+ */
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -25,6 +32,85 @@
   --info: #0284c7;
 }
 
+/*
+ * Portal theme — light (default) values, scoped to `[data-theme-scope]`
+ * (rendered only by the Admin/Seller Portal root layout wrappers) so
+ * Buyer/Marketing — which never renders that attribute — is structurally
+ * incapable of picking up these values, however `:root` above is defined.
+ * Brand-aligned to rj-black/rj-white/rj-red/rj-gray (see the @theme block)
+ * so both portals read as the same brand as the rj-*-driven buyer/marketing
+ * surfaces, without touching the rj-* tokens or the shared `:root` defaults.
+ * Admin and Seller share one block (identical brand, identical values) —
+ * add a separate `[data-theme-scope="X"]` selector here if a future portal
+ * ever needs to diverge.
+ */
+[data-theme-scope="admin"],
+[data-theme-scope="seller"] {
+  --background: #f8f7f5; /* rj-white */
+  --foreground: #0d0d0d; /* rj-black */
+  --card: #ffffff;
+  --card-foreground: #0d0d0d;
+  --muted: #ebebeb; /* rj-gray-100 */
+  --muted-foreground: #6b6b6b; /* rj-gray-600 */
+  --border: #d4d4d4; /* rj-gray-200 */
+  --ring: #e8192c; /* rj-red */
+  --primary: #e8192c; /* rj-red */
+  --primary-foreground: #ffffff;
+  --secondary: #ebebeb; /* rj-gray-100 */
+  --secondary-foreground: #0d0d0d;
+  --success: #16a34a;
+  --warning: #b45309;
+  --danger: #c8111e; /* rj-red-dark, same as :root */
+  --danger-foreground: #ffffff;
+  --info: #0284c7;
+
+  /* Sidebar is a deliberately distinct surface from --background/--card in
+     both themes (a near-white chrome against the page's off-white canvas
+     here; a near-black chrome against a lifted-black canvas in dark mode
+     below) — same convention shadcn's Sidebar primitive uses. */
+  --sidebar-background: #ffffff;
+  --sidebar-foreground: #0d0d0d;
+  --sidebar-muted-foreground: #6b6b6b;
+  --sidebar-border: #d4d4d4;
+  --sidebar-accent: rgba(232, 25, 44, 0.1);
+  --sidebar-accent-foreground: #e8192c;
+}
+
+/*
+ * Portal theme — dark overrides. Still scoped to `[data-theme-scope]`,
+ * additionally gated on `.dark` (which next-themes toggles on the shared
+ * <html>). The rj-* tokens are NOT overridden here — marketing/buyer
+ * surfaces stay one fixed light palette by design (see the @theme block
+ * below).
+ */
+.dark [data-theme-scope="admin"],
+.dark [data-theme-scope="seller"] {
+  --background: #121212;
+  --foreground: #f2f2f0;
+  --card: #1a1a1a;
+  --card-foreground: #f2f2f0;
+  --muted: #232323;
+  --muted-foreground: #a3a3a3;
+  --border: #2d2d2d; /* rj-gray-800 */
+  --ring: #ff4d5e;
+  --primary: #ff4d5e; /* brightened rj-red for AA contrast on a near-black surface */
+  --primary-foreground: #ffffff;
+  --secondary: #232323;
+  --secondary-foreground: #f2f2f0;
+  --success: #22c55e; /* rj-green */
+  --warning: #f4b942; /* rj-gold */
+  --danger: #f0384a;
+  --danger-foreground: #ffffff;
+  --info: #38bdf8;
+
+  --sidebar-background: #0d0d0d; /* rj-black */
+  --sidebar-foreground: #f8f7f5; /* rj-white */
+  --sidebar-muted-foreground: #a3a3a3;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-accent: rgba(255, 77, 94, 0.18);
+  --sidebar-accent-foreground: #ff4d5e;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -43,6 +129,13 @@
   --color-danger: var(--danger);
   --color-danger-foreground: var(--danger-foreground);
   --color-info: var(--info);
+
+  --color-sidebar-background: var(--sidebar-background);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted-foreground: var(--sidebar-muted-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
 
   /*
    * Landing-page ("RobertJ") design tokens. Fixed values — deliberately NOT in
