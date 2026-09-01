@@ -83,7 +83,6 @@ export async function respondToReturnAction(
       parsed.data.decision,
       parsed.data.note ?? null,
     );
-    revalidatePath(ROUTES.dashboardOrders);
     revalidatePath(ROUTES.adminOrders);
     revalidatePath(ROUTES.sellerOrders);
     revalidatePath(ROUTES.adminReturns);
@@ -117,7 +116,6 @@ export async function decideReturnAction(
       parsed.data.note ?? null,
     );
     revalidatePath(ROUTES.adminReturns);
-    revalidatePath(ROUTES.dashboardOrders);
     revalidatePath(ROUTES.adminOrders);
     revalidatePath(ROUTES.sellerOrders);
     return ok(null);

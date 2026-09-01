@@ -13,6 +13,9 @@ export const ROUTES = {
   orderDetail: (id: string) => `/orders/${id}`,
   profile: "/profile",
   wishlist: "/wishlist",
+  /** Legacy Shop Owner/Admin routes — every page under here is now a redirect
+   * stub to its `/admin/*` or `/seller/*` equivalent (see `redirectToPortal`),
+   * kept so old bookmarks/links keep working. Never build new features here. */
   dashboard: "/dashboard",
   dashboardProducts: "/dashboard/products",
   dashboardOrders: "/dashboard/orders",
@@ -20,7 +23,7 @@ export const ROUTES = {
   inventory: "/dashboard/inventory",
   paymentVerification: "/dashboard/payments",
   reports: "/dashboard/reports",
-  /** Admin Portal — separate from the Shop Owner `/dashboard` tree. See ARCHITECTURE.md admin-portal-separation notes. */
+  /** Admin Portal — separate from the Buyer marketplace and the Seller Portal (`/seller/*`). */
   admin: "/admin",
   adminDashboard: "/admin/dashboard",
   adminProducts: "/admin/products",

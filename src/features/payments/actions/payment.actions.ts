@@ -71,7 +71,6 @@ export async function verifyPaymentAction(
       parsed.data.decision,
       parsed.data.reason ?? null,
     );
-    revalidatePath(ROUTES.paymentVerification);
     revalidatePath(ROUTES.adminPayments);
     revalidatePath(ROUTES.sellerPayments);
     return ok(null);

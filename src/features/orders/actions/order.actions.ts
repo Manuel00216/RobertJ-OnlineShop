@@ -66,8 +66,6 @@ export async function advanceOrderStatusAction(
       parsed.data.newStatus,
       user.role === USER_ROLES.admin ? null : user.id,
     );
-    revalidatePath(ROUTES.dashboardOrders, "layout");
-    revalidatePath(ROUTES.dashboardOrderDetail(order.id), "layout");
     revalidatePath(ROUTES.adminOrders, "layout");
     revalidatePath(ROUTES.adminOrderDetail(order.id), "layout");
     revalidatePath(ROUTES.sellerOrders, "layout");

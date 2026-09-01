@@ -25,8 +25,6 @@ export async function adjustStockAction(
     const user = await queries.requireRole(DASHBOARD_ROLES);
     await queries.requireRateLimit(`adjustStock:${user.id}`, 30, 60);
     const item = await queries.adjustStock(parsed.data);
-    revalidatePath(ROUTES.inventory);
-    revalidatePath(ROUTES.dashboardProducts);
     revalidatePath(ROUTES.adminInventory);
     revalidatePath(ROUTES.adminProducts);
     revalidatePath(ROUTES.sellerInventory);

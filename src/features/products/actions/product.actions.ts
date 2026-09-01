@@ -59,11 +59,9 @@ export async function createProductAction(
     const seller = await queries.requireRole([USER_ROLES.seller]);
     const shopId = await queries.requireOwnShopId();
     const product = await queries.createProduct(parsed.data, seller.id, shopId);
-    revalidatePath(ROUTES.inventory);
     revalidatePath(ROUTES.adminInventory);
     revalidatePath(ROUTES.sellerInventory);
     revalidatePath(ROUTES.products);
-    revalidatePath(ROUTES.dashboardProducts);
     revalidatePath(ROUTES.adminProducts);
     revalidatePath(ROUTES.sellerProducts);
     revalidatePath(ROUTES.home);
@@ -89,7 +87,6 @@ export async function assignProductShopAction(
       parsed.data.productId,
       parsed.data.shopId,
     );
-    revalidatePath(ROUTES.dashboardProducts);
     revalidatePath(ROUTES.adminProducts);
     return ok(product);
   } catch (error) {
@@ -123,10 +120,8 @@ export async function updateProductAction(
         ? null
         : { sellerId: seller.id, shopId: await queries.getOwnShopId(seller.id) };
     const product = await queries.updateProduct(parsed.data, owner);
-    revalidatePath(ROUTES.inventory);
     revalidatePath(ROUTES.adminInventory);
     revalidatePath(ROUTES.sellerInventory);
-    revalidatePath(ROUTES.dashboardProducts);
     revalidatePath(ROUTES.adminProducts);
     revalidatePath(ROUTES.sellerProducts);
     revalidatePath(ROUTES.productDetail(product.slug));
@@ -149,11 +144,9 @@ export async function archiveProductAction(
         ? null
         : { sellerId: seller.id, shopId: await queries.getOwnShopId(seller.id) };
     await queries.archiveProduct(id, owner);
-    revalidatePath(ROUTES.inventory);
     revalidatePath(ROUTES.adminInventory);
     revalidatePath(ROUTES.sellerInventory);
     revalidatePath(ROUTES.products);
-    revalidatePath(ROUTES.dashboardProducts);
     revalidatePath(ROUTES.adminProducts);
     revalidatePath(ROUTES.sellerProducts);
     return ok(null);
@@ -197,7 +190,6 @@ export async function uploadProductImageAction(
       parsed.data.image,
     );
     const image = await queries.addProductImage(parsed.data.productId, url);
-    revalidatePath(ROUTES.dashboardProducts);
     revalidatePath(ROUTES.adminProducts);
     revalidatePath(ROUTES.sellerProducts);
     revalidatePath(ROUTES.products);
@@ -224,7 +216,6 @@ export async function deleteProductImageAction(
         ? null
         : { sellerId: seller.id, shopId: await queries.getOwnShopId(seller.id) };
     await queries.deleteProductImage(parsed.data.imageId, owner);
-    revalidatePath(ROUTES.dashboardProducts);
     revalidatePath(ROUTES.adminProducts);
     revalidatePath(ROUTES.sellerProducts);
     revalidatePath(ROUTES.products);

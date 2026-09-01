@@ -26,8 +26,6 @@ export async function createShopAction(
     await queries.requireRole([USER_ROLES.admin]);
     const shop = await queries.createShop(parsed.data);
     revalidatePath(ROUTES.adminShops);
-    revalidatePath(ROUTES.dashboardProducts);
-    revalidatePath(ROUTES.inventory);
     revalidatePath(ROUTES.adminProducts);
     revalidatePath(ROUTES.adminInventory);
     revalidatePath(ROUTES.sellerProducts);

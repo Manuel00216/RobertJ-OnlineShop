@@ -223,7 +223,7 @@ Every decision is a numbered ADR with a fixed shape: **Context → Problem → O
 2. **Manual verification**: buyer chooses COD, or uploads a QR-transfer receipt image; an admin/shop owner manually confirms payment.
 3. No payment tracking at all (trust-based).
 
-**Decision:** Option 2, per the SAD. This is the **official, committed payment path** for the capstone. **Implemented**: `submit_qr_payment`/`verify_payment` RPCs (see [ARCHITECTURE.md → Payments RPCs](./ARCHITECTURE.md#payments-rpcs-qr-receipt-upload-manual-verification)), the private `payment-receipts` Storage bucket, and the verification queue at `/dashboard/payments`.
+**Decision:** Option 2, per the SAD. This is the **official, committed payment path** for the capstone. **Implemented**: `submit_qr_payment`/`verify_payment` RPCs (see [ARCHITECTURE.md → Payments RPCs](./ARCHITECTURE.md#payments-rpcs-qr-receipt-upload-manual-verification)), the private `payment-receipts` Storage bucket, and the verification queue at `/admin/payments` (Admin) and `/seller/payments` (Shop Owner).
 
 **Consequences:**
 - No PCI compliance burden; no gateway fees; no external payment API dependency.

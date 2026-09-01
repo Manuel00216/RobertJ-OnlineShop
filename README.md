@@ -182,12 +182,12 @@ Detailed purpose, boundaries, and interactions for each module are in [`ARCHITEC
 | Categories | ✅ Completed | `src/features/categories`, `src/app/(shop)/categories` |
 | Cart | ✅ Completed | `src/features/cart`, `src/app/(shop)/cart` |
 | Customer Account | ✅ Completed | `src/features/account`, `src/app/(account)` |
-| Orders | ✅ Completed — buyer history/detail *and* Shop Owner/Admin fulfilment management | `src/features/orders`, `src/app/(account)/orders`, `src/app/dashboard/orders` |
+| Orders | ✅ Completed — buyer history/detail *and* Shop Owner/Admin fulfilment management | `src/features/orders`, `src/app/(account)/orders`, `src/app/admin/orders`, `src/app/seller/orders` |
 | Checkout | ✅ Completed (COD only — QR payment method is Phase 7/Payments scope) | `src/features/checkout`, `src/app/(shop)/checkout` |
-| Shops (multi-shop model) | 🚧 In Progress (`shops`/`shop_users` exist and are backfilled; `products.shop_id` exists — `20260814000000_products_shop_scoping.sql`; admin can now create/manage shops and onboard sellers with no direct SQL — `20260816000000_admin_user_shop_management.sql`; `orders` still keys off `seller_id` only, no `shop_id` bridge yet) | `supabase/migrations/{20260813000000,20260814000000,20260816000000}_*.sql`, `src/features/shops`, `src/features/users`, `src/app/dashboard/{shops,users}` |
-| Inventory (dedicated module) | ✅ Completed | `supabase/migrations/20260815000000_inventory_and_stock_history.sql`, `src/features/inventory`, `src/app/dashboard/inventory` |
-| Payments (COD + QR verification) | ✅ Completed | `src/features/payments`; receipt upload on the order detail page; verification queue at `/dashboard/payments` |
-| Reports | ✅ Completed | `src/features/reports`, `src/app/dashboard/reports`, `src/components/charts` |
+| Shops (multi-shop model) | 🚧 In Progress (`shops`/`shop_users` exist and are backfilled; `products.shop_id` exists — `20260814000000_products_shop_scoping.sql`; admin can now create/manage shops and onboard sellers with no direct SQL — `20260816000000_admin_user_shop_management.sql`; `orders` still keys off `seller_id` only, no `shop_id` bridge yet) | `supabase/migrations/{20260813000000,20260814000000,20260816000000}_*.sql`, `src/features/shops`, `src/features/users`, `src/app/admin/{shops,users}` |
+| Inventory (dedicated module) | ✅ Completed | `supabase/migrations/20260815000000_inventory_and_stock_history.sql`, `src/features/inventory`, `src/app/admin/inventory`, `src/app/seller/inventory` |
+| Payments (COD + QR verification) | ✅ Completed | `src/features/payments`; receipt upload on the order detail page; verification queue at `/admin/payments` and `/seller/payments` |
+| Reports | ✅ Completed | `src/features/reports`, `src/app/admin/reports`, `src/app/seller/reports`, `src/components/charts` |
 | Guided Product Selection | ⏳ Upcoming | `src/features/assistant` *(stub; landing preview only)* |
 
 Legend: ✅ Completed · 🚧 In Progress · ⏳ Upcoming
@@ -231,7 +231,7 @@ flowchart LR
 > (dedicated `inventory`/`stock_adjustments` tables — see
 > [ARCHITECTURE.md → Architecture Evolution Strategy](./ARCHITECTURE.md#architecture-evolution-strategy)),
 > and Admin can now manage users/shops and onboard sellers with no direct SQL
-> (`admin_assign_seller_shop`/`admin_list_users` RPCs, `/dashboard/{users,shops}`).
+> (`admin_assign_seller_shop`/`admin_list_users` RPCs, `/admin/{users,shops}`).
 > What's left: `orders` still keys off `seller_id` only, no `shop_id` bridge yet.
 > See [ARCHITECTURE.md → TD-1](./ARCHITECTURE.md#technical-debt-register).
 
@@ -441,13 +441,13 @@ The interface follows modern marketplace best practices, inspired by **Lazada, S
 | **Administrator** role | `admin` role | Matches. |
 | **Guest** | Unauthenticated visitor (no profile) | Matches. |
 | `shops` table | 🚧 **Foundation implemented** | Table + RLS + backfill exist (one shop per seller). Products still attach to a **seller** (`products.seller_id`), not a `shop_id` — no FK bridge yet. |
-| `shop_users` table | 🚧 **Foundation implemented** | Proper junction table (supports >1 staff per shop later); today exactly one member per shop (DB-enforced via `unique (user_id)`), admin-managed via `/dashboard/users` (no self-service join). |
+| `shop_users` table | 🚧 **Foundation implemented** | Proper junction table (supports >1 staff per shop later); today exactly one member per shop (DB-enforced via `unique (user_id)`), admin-managed via `/admin/users` (no self-service join). |
 | `roles` table | Role stored on `profiles.role` (enum) | Roles are an enum column, not a separate table. |
 | `inventory` table | ✅ **Implemented** — dedicated `inventory` + `stock_adjustments` tables | `products.quantity` is now a trigger-synced mirror, not the source of truth. See [ARCHITECTURE.md → Architecture Evolution Strategy](./ARCHITECTURE.md#architecture-evolution-strategy). |
 | `recommendation_rules` table | ❌ Not implemented | Guided Product Selection is a landing **preview** only; `features/assistant` is a stub. |
 | `reports` table | ✅ **Implemented as computed RPCs** (no physical table) | Reports are aggregated DB-side by four read-only `SECURITY DEFINER` RPCs (`report_sales_summary`/`_timeseries`/`_order_status_breakdown`/`_top_products`) over the existing `orders`/`order_items`/`payments`, scoped per shop/admin. A stored `reports` table was deliberately not modelled — see [ARCHITECTURE.md → Reporting RPCs](./ARCHITECTURE.md#reporting-rpcs-analytics-over-existing-orders). |
 | Unified **cart** | Client-side cart (localStorage + `useReducer`) | Guest cart is client-only by design; committed at checkout. |
-| **Payments:** COD + QR receipt upload, manual verification | ✅ **Implemented** — COD (no action needed) + QR (buyer uploads a receipt, seller/admin verifies at `/dashboard/payments`) | Matches target. Stripe/card spike removed (ADR-014); its columns were dropped from `payments` when this landed. |
+| **Payments:** COD + QR receipt upload, manual verification | ✅ **Implemented** — COD (no action needed) + QR (buyer uploads a receipt, seller verifies at `/seller/payments`, admin at `/admin/payments`) | Matches target. Stripe/card spike removed (ADR-014); its columns were dropped from `payments` when this landed. |
 
 ---
 

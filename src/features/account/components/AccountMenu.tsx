@@ -5,7 +5,7 @@ import { ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { RJ_CARD } from "@/components/ui/card";
-import type { UserRole } from "@/constants/roles";
+import { USER_ROLES, type UserRole } from "@/constants/roles";
 import { ROUTES } from "@/constants/routes";
 import { signOutAction } from "@/features/auth/actions/auth.actions";
 import { canViewDashboard } from "@/lib/auth/permissions";
@@ -19,10 +19,11 @@ const BASE_MENU_ITEMS = [
   { href: ROUTES.profile, label: "Profile" },
 ] as const;
 
+/** Links straight to the user's own portal — Admin and Seller each have a dedicated dashboard, not a shared one. */
 function getMenuItems(role: UserRole) {
-  return canViewDashboard(role)
-    ? [...BASE_MENU_ITEMS, { href: ROUTES.dashboard, label: "Dashboard" }]
-    : BASE_MENU_ITEMS;
+  if (!canViewDashboard(role)) return BASE_MENU_ITEMS;
+  const dashboardHref = role === USER_ROLES.admin ? ROUTES.adminDashboard : ROUTES.sellerDashboard;
+  return [...BASE_MENU_ITEMS, { href: dashboardHref, label: "Dashboard" }];
 }
 
 /**
