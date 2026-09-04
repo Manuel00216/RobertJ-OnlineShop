@@ -28,7 +28,10 @@ export async function placeOrderAction(
 
   try {
     // Throws when unauthenticated — the action never trusts the client.
-    await queries.requireSessionUser();
+    const user = await queries.requireSessionUser();
+    // Throttle order creation per buyer, matching the other order mutations
+    // (cancel/advance). Guards against order-spam and repeated stock-lock churn.
+    await queries.requireRateLimit(`placeOrder:${user.id}`, 10, 60);
 
     const created: PlacedOrder[] = [];
     const failed: FailedGroup[] = [];

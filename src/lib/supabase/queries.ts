@@ -22,6 +22,7 @@ import {
   createSupabaseServerClient,
 } from "@/lib/supabase/server";
 import { mapPostgresError } from "@/lib/supabase/postgres-errors";
+import { queryError, rpcError } from "@/lib/supabase/query-error";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { slugify } from "@/lib/utils/format";
 import { toCents } from "@/lib/utils/currency";
@@ -262,7 +263,7 @@ export async function listProducts(
   const { data, error, count } = await query.range(from, to);
 
   if (error) {
-    throw new Error(`Failed to load products: ${error.message}`);
+    throw queryError("Failed to load products", error);
   }
 
   const total = count ?? 0;
@@ -292,7 +293,7 @@ export async function listFeaturedProducts(limit = 8): Promise<Product[]> {
     .limit(limit);
 
   if (error) {
-    throw new Error(`Failed to load featured products: ${error.message}`);
+    throw queryError("Failed to load featured products", error);
   }
 
   return (data ?? []).map((row) => toProduct(row as ProductRowWithImages));
@@ -313,7 +314,7 @@ export const getProductBySlug = cache(
       .maybeSingle();
 
     if (error) {
-      throw new Error(`Failed to load product: ${error.message}`);
+      throw queryError("Failed to load product", error);
     }
 
     return data ? toProduct(data as ProductRowWithImages) : null;
@@ -341,7 +342,7 @@ export async function listRelatedProducts(
     .limit(limit);
 
   if (error) {
-    throw new Error(`Failed to load related products: ${error.message}`);
+    throw queryError("Failed to load related products", error);
   }
 
   return (data ?? []).map((row) => toProduct(row as ProductRowWithImages));
@@ -377,7 +378,7 @@ export async function searchProductSuggestions(
     .limit(limit);
 
   if (error) {
-    throw new Error(`Failed to search products: ${error.message}`);
+    throw queryError("Failed to search products", error);
   }
   return data ?? [];
 }
@@ -414,7 +415,7 @@ export async function getProductsPriceAndStock(
     .in("id", ids);
 
   if (error) {
-    throw new Error(`Failed to check product availability: ${error.message}`);
+    throw queryError("Failed to check product availability", error);
   }
 
   return (data ?? []).map((row) => ({
@@ -441,7 +442,7 @@ export async function listActiveProductSlugsForSitemap(): Promise<
     .eq("status", PRODUCT_STATUS.active);
 
   if (error) {
-    throw new Error(`Failed to load product slugs: ${error.message}`);
+    throw queryError("Failed to load product slugs", error);
   }
 
   return (data ?? []).map((row) => ({
@@ -484,7 +485,7 @@ export async function createProduct(
     .single();
 
   if (error) {
-    throw new Error(`Failed to create product: ${error.message}`);
+    throw queryError("Failed to create product", error);
   }
 
   return toProduct(data as ProductRowWithImages);
@@ -557,7 +558,7 @@ export async function updateProduct(
     .single();
 
   if (error) {
-    throw new Error(`Failed to update product: ${error.message}`);
+    throw queryError("Failed to update product", error);
   }
 
   return toProduct(data as ProductRowWithImages);
@@ -600,7 +601,7 @@ export async function archiveProduct(
     .eq("id", id);
 
   if (error) {
-    throw new Error(`Failed to archive product: ${error.message}`);
+    throw queryError("Failed to archive product", error);
   }
 }
 
@@ -628,7 +629,7 @@ export async function productBelongsToOwner(
     .maybeSingle();
 
   if (error) {
-    throw new Error(`Failed to verify product ownership: ${error.message}`);
+    throw queryError("Failed to verify product ownership", error);
   }
   return Boolean(data);
 }
@@ -654,7 +655,7 @@ export async function uploadProductImage(
     .upload(path, file, { contentType: file.type });
 
   if (error) {
-    throw new Error(`Failed to upload image: ${error.message}`);
+    throw queryError("Failed to upload image", error);
   }
 
   const { data } = supabase.storage.from("product-images").getPublicUrl(path);
@@ -694,7 +695,7 @@ export async function addProductImage(
     .single();
 
   if (error) {
-    throw new Error(`Failed to save image: ${error.message}`);
+    throw queryError("Failed to save image", error);
   }
 
   return {
@@ -772,7 +773,7 @@ export async function listWishlistProductIds(userId: string): Promise<string[]> 
     .eq("user_id", userId);
 
   if (error) {
-    throw new Error(`Failed to load wishlist: ${error.message}`);
+    throw queryError("Failed to load wishlist", error);
   }
   return (data ?? []).map((row) => row.product_id);
 }
@@ -791,7 +792,7 @@ export async function isProductWishlisted(
     .maybeSingle();
 
   if (error) {
-    throw new Error(`Failed to check wishlist: ${error.message}`);
+    throw queryError("Failed to check wishlist", error);
   }
   return data !== null;
 }
@@ -916,7 +917,7 @@ export async function listProductReviews(
     .order("created_at", { ascending: false });
 
   if (error) {
-    throw new Error(`Failed to load reviews: ${error.message}`);
+    throw queryError("Failed to load reviews", error);
   }
 
   const reviews = (data ?? []).map((row) => toReview(row as ReviewRow));
@@ -971,7 +972,7 @@ export async function listReviewedOrderItemIds(
     .in("order_item_id", orderItemIds);
 
   if (error) {
-    throw new Error(`Failed to check existing reviews: ${error.message}`);
+    throw queryError("Failed to check existing reviews", error);
   }
   return new Set((data ?? []).map((row) => row.order_item_id));
 }
@@ -996,7 +997,7 @@ export async function getBuyerActivityFeed(
   });
 
   if (error) {
-    throw new Error(`Failed to load activity: ${error.message}`);
+    throw queryError("Failed to load activity", error);
   }
 
   return (data ?? []).map((row) => ({
@@ -1066,7 +1067,7 @@ export async function listActiveCategories(limit?: number): Promise<Category[]> 
   const { data, error } = await query;
 
   if (error) {
-    throw new Error(`Failed to load categories: ${error.message}`);
+    throw queryError("Failed to load categories", error);
   }
 
   return (data ?? []).map((row) => toCategory(row as CategoryRowWithCount));
@@ -1090,7 +1091,7 @@ export async function getCategoryBySlug(slug: string): Promise<Category | null> 
     .maybeSingle();
 
   if (error) {
-    throw new Error(`Failed to load category: ${error.message}`);
+    throw queryError("Failed to load category", error);
   }
 
   return data
@@ -1120,7 +1121,7 @@ export async function listActiveCategorySlugsForSitemap(): Promise<
     .eq("active", true);
 
   if (error) {
-    throw new Error(`Failed to load category slugs: ${error.message}`);
+    throw queryError("Failed to load category slugs", error);
   }
 
   return (data ?? []).map((row) => ({
@@ -1318,7 +1319,7 @@ export async function listBuyerOrders(
   const { data, error, count } = await query.range(from, to);
 
   if (error) {
-    throw new Error(`Failed to load orders: ${error.message}`);
+    throw queryError("Failed to load orders", error);
   }
 
   const total = count ?? 0;
@@ -1347,7 +1348,7 @@ export const getBuyerOrder = cache(
       .maybeSingle();
 
     if (error) {
-      throw new Error(`Failed to load order: ${error.message}`);
+      throw queryError("Failed to load order", error);
     }
 
     return data ? toOrder(data as OrderRowWithItems) : null;
@@ -1446,7 +1447,7 @@ export async function cancelBuyerOrder(
     .eq("buyer_id", buyerId);
 
   if (error) {
-    throw new Error(`Failed to cancel order: ${error.message}`);
+    throw queryError("Failed to cancel order", error);
   }
 }
 
@@ -1480,7 +1481,7 @@ export async function listDashboardOrders(
   const { data, error, count } = await query.range(from, to);
 
   if (error) {
-    throw new Error(`Failed to load orders: ${error.message}`);
+    throw queryError("Failed to load orders", error);
   }
 
   const total = count ?? 0;
@@ -1523,7 +1524,7 @@ export const getDashboardOrder = cache(
     const { data, error } = await query.maybeSingle();
 
     if (error) {
-      throw new Error(`Failed to load order: ${error.message}`);
+      throw queryError("Failed to load order", error);
     }
 
     return data ? toOrder(data as OrderRowWithItems) : null;
@@ -1589,7 +1590,7 @@ export async function advanceOrderStatus(
   const { data, error } = await writeQuery.select(ORDER_COLUMNS).maybeSingle();
 
   if (error) {
-    throw new Error(`Failed to update order status: ${error.message}`);
+    throw queryError("Failed to update order status", error);
   }
   if (!data) {
     throw new Error(
@@ -1633,7 +1634,9 @@ export async function createOrder(
   });
 
   if (error) {
-    throw new Error(error.message);
+    // create_order RAISEs curated, user-facing messages ("Only 2 left of …",
+    // "Product X is not available") — preserve them; log the raw error.
+    throw rpcError("Could not place this order.", error);
   }
   if (!data) {
     throw new Error("Could not create the order.");
@@ -1686,7 +1689,7 @@ export async function getMyProfile(): Promise<Profile | null> {
   const { data, error } = await supabase.rpc("get_my_profile");
 
   if (error) {
-    throw new Error(`Failed to load profile: ${error.message}`);
+    throw queryError("Failed to load profile", error);
   }
 
   return data ? toProfile(data) : null;
@@ -1795,7 +1798,7 @@ export async function uploadPaymentReceipt(
     .upload(path, file, { contentType: file.type });
 
   if (error) {
-    throw new Error(`Failed to upload receipt: ${error.message}`);
+    throw queryError("Failed to upload receipt", error);
   }
   return path;
 }
@@ -1878,7 +1881,7 @@ export async function listPendingPayments(): Promise<Payment[]> {
     .order("created_at", { ascending: true });
 
   if (error) {
-    throw new Error(`Failed to load pending payments: ${error.message}`);
+    throw queryError("Failed to load pending payments", error);
   }
 
   return (data ?? []).map((row) => toPayment(row as PaymentRowWithOrder));
@@ -1954,7 +1957,7 @@ export async function uploadReturnEvidence(
     .upload(path, file, { contentType: file.type });
 
   if (error) {
-    throw new Error(`Failed to upload evidence photo: ${error.message}`);
+    throw queryError("Failed to upload evidence photo", error);
   }
   return path;
 }
@@ -2067,7 +2070,7 @@ export async function getReturnRequestForOrder(
   const { data, error } = await query.maybeSingle();
 
   if (error) {
-    throw new Error(`Failed to load return request: ${error.message}`);
+    throw queryError("Failed to load return request", error);
   }
   return data ? toReturnRequest(data as ReturnRequestRowWithJoins) : null;
 }
@@ -2093,7 +2096,7 @@ export async function listReturnRequests(status?: ReturnStatus): Promise<ReturnR
   const { data, error } = await query;
 
   if (error) {
-    throw new Error(`Failed to load return requests: ${error.message}`);
+    throw queryError("Failed to load return requests", error);
   }
   return (data ?? []).map((row) => toReturnRequest(row as ReturnRequestRowWithJoins));
 }
@@ -2147,7 +2150,7 @@ export async function listAdminActionLog(): Promise<AdminActionLogEntry[]> {
     .order("created_at", { ascending: false });
 
   if (error) {
-    throw new Error(`Failed to load audit log: ${error.message}`);
+    throw queryError("Failed to load audit log", error);
   }
   return (data ?? []).map((row) => toAdminActionLogEntry(row as AdminActionLogRowWithJoins));
 }
@@ -2183,7 +2186,7 @@ export async function listShops(): Promise<Shop[]> {
     .order("name", { ascending: true });
 
   if (error) {
-    throw new Error(`Failed to load shops: ${error.message}`);
+    throw queryError("Failed to load shops", error);
   }
 
   return (data ?? []).map((row) => toShop(row as ShopRow));
@@ -2213,7 +2216,7 @@ export async function getShopNamesBySellerIds(
   });
 
   if (error) {
-    throw new Error(`Failed to resolve shop names: ${error.message}`);
+    throw queryError("Failed to resolve shop names", error);
   }
   return new Map(
     ((data ?? []) as ShopMembershipRow[]).map((row) => [
@@ -2231,7 +2234,7 @@ export async function getShopSellerIds(shopId: string): Promise<string[]> {
   });
 
   if (error) {
-    throw new Error(`Failed to resolve shop members: ${error.message}`);
+    throw queryError("Failed to resolve shop members", error);
   }
   return ((data ?? []) as ShopMembershipRow[]).map((row) => row.seller_id);
 }
@@ -2348,7 +2351,7 @@ export async function updateShop(input: UpdateShopInput): Promise<Shop> {
     .single();
 
   if (error) {
-    throw new Error(`Failed to update shop: ${error.message}`);
+    throw queryError("Failed to update shop", error);
   }
 
   return toShop(data as ShopRow);
@@ -2392,7 +2395,7 @@ export async function listShopsWithMembers(): Promise<ShopWithMember[]> {
     .order("name", { ascending: true });
 
   if (error) {
-    throw new Error(`Failed to load shops: ${error.message}`);
+    throw queryError("Failed to load shops", error);
   }
 
   return (data ?? []).map((row) => toShopWithMember(row as ShopRowWithMembers));
@@ -2414,7 +2417,7 @@ export async function listAdminUsers(): Promise<AdminUser[]> {
   const { data, error } = await supabase.rpc("admin_list_users");
 
   if (error) {
-    throw new Error(error.message);
+    throw rpcError("Could not load users.", error);
   }
 
   return (data ?? []).map((row) => ({
@@ -2449,7 +2452,7 @@ export async function assignSellerShop(
   });
 
   if (error) {
-    throw new Error(error.message);
+    throw rpcError("Could not assign the seller to a shop.", error);
   }
 }
 
@@ -2471,7 +2474,9 @@ export async function setUserActive(
   });
 
   if (error) {
-    throw new Error(error.message);
+    // admin_set_user_active RAISEs curated messages ("Cannot deactivate an
+    // admin", "You cannot deactivate your own account") — preserve them.
+    throw rpcError("Could not update the user's status.", error);
   }
 }
 
@@ -2508,7 +2513,7 @@ export async function listDashboardProducts(
   const { data, error } = await query.order("created_at", { ascending: false });
 
   if (error) {
-    throw new Error(`Failed to load products: ${error.message}`);
+    throw queryError("Failed to load products", error);
   }
 
   return (data ?? []).map((row) => toProduct(row as ProductRowWithImages));
@@ -2532,7 +2537,7 @@ export async function assignProductShop(
     .single();
 
   if (error) {
-    throw new Error(`Failed to assign shop: ${error.message}`);
+    throw queryError("Failed to assign shop", error);
   }
 
   return toProduct(data as ProductRowWithImages);
@@ -2558,7 +2563,7 @@ export async function getActivePaymentForOrder(
     .maybeSingle();
 
   if (error) {
-    throw new Error(`Failed to load payment: ${error.message}`);
+    throw queryError("Failed to load payment", error);
   }
   return data ? toPayment(data as PaymentRowWithOrder) : null;
 }
@@ -2618,7 +2623,7 @@ export async function listDashboardInventory(): Promise<InventoryItem[]> {
     .order("updated_at", { ascending: false });
 
   if (error) {
-    throw new Error(`Failed to load inventory: ${error.message}`);
+    throw queryError("Failed to load inventory", error);
   }
 
   return (data ?? []).map((row) => toInventoryItem(row as InventoryRowWithJoins));
@@ -2636,7 +2641,7 @@ export async function getInventoryForProduct(
     .maybeSingle();
 
   if (error) {
-    throw new Error(`Failed to load inventory: ${error.message}`);
+    throw queryError("Failed to load inventory", error);
   }
   return data ? toInventoryItem(data as InventoryRowWithJoins) : null;
 }
@@ -2659,7 +2664,9 @@ export async function adjustStock(input: AdjustStockInput): Promise<InventoryIte
   });
 
   if (error) {
-    throw new Error(error.message);
+    // adjust_stock RAISEs curated messages ("Cannot reduce stock below zero
+    // (currently N)") — preserve them; log the raw error.
+    throw rpcError("Could not adjust stock.", error);
   }
 
   const item = await getInventoryForProduct(input.productId);
@@ -2715,7 +2722,7 @@ export async function listStockAdjustments(
     .limit(limit);
 
   if (error) {
-    throw new Error(`Failed to load stock history: ${error.message}`);
+    throw queryError("Failed to load stock history", error);
   }
 
   return (data ?? []).map((row) =>
@@ -2759,7 +2766,7 @@ export const getSalesSummary = cache(async function getSalesSummary(
   });
 
   if (error) {
-    throw new Error(`Failed to load sales summary: ${error.message}`);
+    throw queryError("Failed to load sales summary", error);
   }
 
   const row = data?.[0];
@@ -2793,7 +2800,7 @@ export const getSalesTimeseries = cache(async function getSalesTimeseries(
   });
 
   if (error) {
-    throw new Error(`Failed to load sales trend: ${error.message}`);
+    throw queryError("Failed to load sales trend", error);
   }
 
   return (data ?? []).map((row) => ({
@@ -2817,7 +2824,7 @@ export const getOrderStatusBreakdown = cache(
     );
 
     if (error) {
-      throw new Error(`Failed to load status breakdown: ${error.message}`);
+      throw queryError("Failed to load status breakdown", error);
     }
 
     return (data ?? []).map((row) => ({
@@ -2843,7 +2850,7 @@ export const getTopProducts = cache(async function getTopProducts(
   });
 
   if (error) {
-    throw new Error(`Failed to load top products: ${error.message}`);
+    throw queryError("Failed to load top products", error);
   }
 
   return (data ?? []).map((row) => ({
@@ -2988,7 +2995,7 @@ export async function getOwnShopId(userId: string): Promise<string | null> {
     .maybeSingle();
 
   if (error) {
-    throw new Error(`Failed to resolve your shop: ${error.message}`);
+    throw queryError("Failed to resolve your shop", error);
   }
   return data?.shop_id ?? null;
 }
