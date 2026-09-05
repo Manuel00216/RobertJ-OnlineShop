@@ -10,7 +10,9 @@ import type { ActionResult } from "@/types/action.types";
 import {
   createShopSchema,
   toggleShopActiveSchema,
+  updateOwnShopDescriptionSchema,
   updateShopSchema,
+  uploadShopImageSchema,
 } from "@/features/shops/schemas/shop.schema";
 import type { Shop } from "@/features/shops/types/shop.types";
 
@@ -69,5 +71,72 @@ export async function toggleShopActiveAction(
     return ok(shop);
   } catch (error) {
     return fail(error instanceof Error ? error.message : "Could not update the shop.");
+  }
+}
+
+/**
+ * Seller-only: edits the caller's own shop's description. Never accepts an
+ * `id`/shop id from the form — `requireOwnShopId()` resolves it server-side —
+ * and never touches `name`/`active`/`slug`/image columns.
+ */
+export async function updateOwnShopDescriptionAction(
+  _prevState: ActionResult<Shop> | null,
+  formData: FormData,
+): Promise<ActionResult<Shop>> {
+  const parsed = updateOwnShopDescriptionSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return fromZodError(parsed.error);
+
+  try {
+    await queries.requireRole([USER_ROLES.seller]);
+    const shopId = await queries.requireOwnShopId();
+    const shop = await queries.updateOwnShopDescription(shopId, parsed.data.description ?? null);
+    revalidatePath(ROUTES.sellerShop);
+    revalidatePath(ROUTES.products);
+    revalidatePath(ROUTES.home);
+    return ok(shop);
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : "Could not update your shop.");
+  }
+}
+
+/**
+ * Seller-only: uploads (or replaces) the caller's own shop's logo/banner.
+ * `kind` is a fixed argument the client binds per-uploader, never a form
+ * field; `shopId` always comes from `requireOwnShopId()`, never the client.
+ */
+export async function uploadShopImageAction(
+  kind: "logo" | "banner",
+  formData: FormData,
+): Promise<ActionResult<Shop>> {
+  const parsed = uploadShopImageSchema.safeParse({ image: formData.get("image") });
+  if (!parsed.success) return fromZodError(parsed.error);
+
+  try {
+    await queries.requireRole([USER_ROLES.seller]);
+    const shopId = await queries.requireOwnShopId();
+    const shop = await queries.replaceShopImage(shopId, kind, parsed.data.image);
+    revalidatePath(ROUTES.sellerShop);
+    revalidatePath(ROUTES.products);
+    revalidatePath(ROUTES.home);
+    return ok(shop);
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : "Could not upload the image.");
+  }
+}
+
+/** Seller-only: removes the caller's own shop's logo/banner. */
+export async function removeShopImageAction(
+  kind: "logo" | "banner",
+): Promise<ActionResult<Shop>> {
+  try {
+    await queries.requireRole([USER_ROLES.seller]);
+    const shopId = await queries.requireOwnShopId();
+    const shop = await queries.removeShopImage(shopId, kind);
+    revalidatePath(ROUTES.sellerShop);
+    revalidatePath(ROUTES.products);
+    revalidatePath(ROUTES.home);
+    return ok(shop);
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : "Could not remove the image.");
   }
 }

@@ -42,6 +42,7 @@ export const ROUTES = {
   /** Seller Portal — separate from the `/dashboard` tree, mirrors the Admin Portal split. */
   seller: "/seller",
   sellerDashboard: "/seller/dashboard",
+  sellerShop: "/seller/shop",
   sellerProducts: "/seller/products",
   sellerInventory: "/seller/inventory",
   sellerOrders: "/seller/orders",

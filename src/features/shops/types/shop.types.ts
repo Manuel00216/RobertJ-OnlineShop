@@ -5,6 +5,11 @@ export interface Shop {
   active: boolean;
   createdAt: string;
   updatedAt: string;
+  /** Real, seller-uploaded branding — null until the shop's owner sets it.
+   * Never a fabricated/placeholder value; always a `shop-images` Storage URL. */
+  logoUrl: string | null;
+  bannerUrl: string | null;
+  description: string | null;
 }
 
 /** A shop plus its current `shop_users` member (if any) — for the admin Shops management screen. */

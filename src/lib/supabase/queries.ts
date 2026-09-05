@@ -2161,6 +2161,12 @@ export async function listAdminActionLog(): Promise<AdminActionLogEntry[]> {
 
 type ShopRow = Database["public"]["Tables"]["shops"]["Row"];
 
+/** Full column list for every read that maps through `toShop` — keeping this
+ * in one place means widening `Shop` (e.g. adding a branding field) can never
+ * silently omit a column from an individual `.select()` call. */
+const SHOP_COLUMNS =
+  "id, name, slug, active, created_at, updated_at, logo_url, banner_url, description";
+
 function toShop(row: ShopRow): Shop {
   return {
     id: row.id,
@@ -2169,6 +2175,9 @@ function toShop(row: ShopRow): Shop {
     active: row.active,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    logoUrl: row.logo_url,
+    bannerUrl: row.banner_url,
+    description: row.description,
   };
 }
 
@@ -2182,7 +2191,7 @@ export async function listShops(): Promise<Shop[]> {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from(DATABASE_TABLES.SHOPS)
-    .select("id, name, slug, active, created_at, updated_at")
+    .select(SHOP_COLUMNS)
     .order("name", { ascending: true });
 
   if (error) {
@@ -2190,6 +2199,23 @@ export async function listShops(): Promise<Shop[]> {
   }
 
   return (data ?? []).map((row) => toShop(row as ShopRow));
+}
+
+/** Single shop by id, or null if it doesn't exist / isn't visible to the
+ * caller under RLS (e.g. an inactive shop to a guest). Used by the buyer
+ * catalog's shop-branding header and the seller "My Shop" page. */
+export async function getShopById(shopId: string): Promise<Shop | null> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.SHOPS)
+    .select(SHOP_COLUMNS)
+    .eq("id", shopId)
+    .maybeSingle();
+
+  if (error) {
+    throw queryError("Failed to load shop", error);
+  }
+  return data ? toShop(data as ShopRow) : null;
 }
 
 type ShopMembershipRow = {
@@ -2244,14 +2270,18 @@ export interface FeaturedShopView {
   name: string;
   slug: string;
   productCount: number;
+  /** Real, seller-uploaded logo — null renders the existing letter-avatar
+   * fallback. Never fabricated. */
+  logoUrl: string | null;
 }
 
 /**
  * Active shops with a real active-product count, for the homepage's Featured
  * Shops carousel. Composed from two already-public reads (`listShops`,
  * `resolve_shop_membership`) plus one lightweight `products` read — no new
- * RPC beyond `resolve_shop_membership`, and no fabricated rating/badge/image
- * fields (there is no data source for any of those).
+ * RPC beyond `resolve_shop_membership`. Ranking (by active-product count) is
+ * unchanged by shop branding — a shop's logo/banner/description never affects
+ * its Featured placement, only real product activity does.
  */
 export async function getFeaturedShops(limit = 4): Promise<FeaturedShopView[]> {
   const shops = await listShops();
@@ -2302,6 +2332,7 @@ export async function getFeaturedShops(limit = 4): Promise<FeaturedShopView[]> {
       name: shop.name,
       slug: shop.slug,
       productCount: countsByShop.get(shop.id) ?? 0,
+      logoUrl: shop.logoUrl,
     }))
     .sort((a, b) => b.productCount - a.productCount)
     .slice(0, limit);
@@ -2321,7 +2352,7 @@ export async function createShop(input: CreateShopInput): Promise<Shop> {
       name: input.name,
       slug: `${slugify(input.name)}-${Date.now().toString(36)}`,
     })
-    .select("id, name, slug, active, created_at, updated_at")
+    .select(SHOP_COLUMNS)
     .single();
 
   if (error) {
@@ -2347,11 +2378,155 @@ export async function updateShop(input: UpdateShopInput): Promise<Shop> {
     .from(DATABASE_TABLES.SHOPS)
     .update(rest)
     .eq("id", id)
-    .select("id, name, slug, active, created_at, updated_at")
+    .select(SHOP_COLUMNS)
     .single();
 
   if (error) {
     throw queryError("Failed to update shop", error);
+  }
+
+  return toShop(data as ShopRow);
+}
+
+/**
+ * Seller-scoped: writes ONLY `description`. Never touches `name`/`active`/
+ * `slug`/image columns — the RLS policy ("shop members update own shop
+ * profile") is row-level and would technically permit more, so this
+ * function, not RLS, is what keeps the actual write surface narrow. `shopId`
+ * must come from `requireOwnShopId()`, never a client-submitted value.
+ */
+export async function updateOwnShopDescription(
+  shopId: string,
+  description: string | null,
+): Promise<Shop> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.SHOPS)
+    .update({ description })
+    .eq("id", shopId)
+    .select(SHOP_COLUMNS)
+    .single();
+
+  if (error) {
+    throw queryError("Failed to update your shop", error);
+  }
+
+  return toShop(data as ShopRow);
+}
+
+type ShopImageKind = "logo" | "banner";
+
+/** Extracts the Storage object path out of a public `shop-images` URL, the
+ * same way `deleteProductImage` does for `product-images`. */
+function shopImagePathFromUrl(url: string): string | undefined {
+  return new URL(url).pathname.split("/shop-images/")[1];
+}
+
+/**
+ * Uploads a new shop logo/banner, persists it, and only then removes the
+ * previous one — never any other order:
+ *
+ * 1. Upload the new file. If this fails, nothing else has happened yet — the
+ *    previous DB value and previous file are both untouched.
+ * 2. Only once the upload succeeds, update `shops.{kind}_url` to the new
+ *    file's URL. If THIS fails, the just-uploaded file is removed
+ *    (best-effort) and the previous DB value is left exactly as it was —
+ *    the shop is never left pointing at a file that was never persisted.
+ * 3. Only once the DB write succeeds — the new image is now the shop's
+ *    source of truth — the previous file is removed from Storage
+ *    (best-effort; a cleanup failure here must never surface as an error,
+ *    since the shop is already in a fully correct, consistent state).
+ *
+ * `shopId` must come from `requireOwnShopId()`, never a client-submitted
+ * value. The uploaded path is always `{shopId}/{kind}/{uuid}.{ext}` —
+ * server-controlled, never derived from client input beyond the file itself.
+ */
+export async function replaceShopImage(
+  shopId: string,
+  kind: ShopImageKind,
+  file: File,
+): Promise<Shop> {
+  const supabase = await createSupabaseServerClient();
+
+  const { data: current, error: readError } = await supabase
+    .from(DATABASE_TABLES.SHOPS)
+    .select("logo_url, banner_url")
+    .eq("id", shopId)
+    .single();
+  if (readError) {
+    throw queryError("Failed to load your shop", readError);
+  }
+  const previousUrl = kind === "logo" ? current.logo_url : current.banner_url;
+
+  const ext = file.name.split(".").pop() ?? "jpg";
+  const path = `${shopId}/${kind}/${crypto.randomUUID()}.${ext}`;
+  const { error: uploadError } = await supabase.storage
+    .from("shop-images")
+    .upload(path, file, { contentType: file.type });
+  if (uploadError) {
+    throw queryError("Failed to upload image", uploadError);
+  }
+
+  const { data: publicUrlData } = supabase.storage.from("shop-images").getPublicUrl(path);
+  const newUrl = publicUrlData.publicUrl;
+
+  const { data, error: updateError } = await supabase
+    .from(DATABASE_TABLES.SHOPS)
+    .update(kind === "logo" ? { logo_url: newUrl } : { banner_url: newUrl })
+    .eq("id", shopId)
+    .select(SHOP_COLUMNS)
+    .single();
+
+  if (updateError) {
+    // The new file was never made the shop's source of truth — remove the
+    // orphan and leave the previous, still-valid image/DB value untouched.
+    await supabase.storage.from("shop-images").remove([path]).catch(() => undefined);
+    throw queryError("Failed to update your shop", updateError);
+  }
+
+  if (previousUrl) {
+    const oldPath = shopImagePathFromUrl(previousUrl);
+    if (oldPath) {
+      await supabase.storage.from("shop-images").remove([oldPath]).catch(() => undefined);
+    }
+  }
+
+  return toShop(data as ShopRow);
+}
+
+/**
+ * Nulls the column and removes its Storage object — same DB-write-first
+ * ordering as `replaceShopImage`: if the DB write fails, the previous file is
+ * left in place and the shop keeps its previous, still-valid image.
+ */
+export async function removeShopImage(shopId: string, kind: ShopImageKind): Promise<Shop> {
+  const supabase = await createSupabaseServerClient();
+
+  const { data: current, error: readError } = await supabase
+    .from(DATABASE_TABLES.SHOPS)
+    .select("logo_url, banner_url")
+    .eq("id", shopId)
+    .single();
+  if (readError) {
+    throw queryError("Failed to load your shop", readError);
+  }
+  const previousUrl = kind === "logo" ? current.logo_url : current.banner_url;
+
+  const { data, error: updateError } = await supabase
+    .from(DATABASE_TABLES.SHOPS)
+    .update(kind === "logo" ? { logo_url: null } : { banner_url: null })
+    .eq("id", shopId)
+    .select(SHOP_COLUMNS)
+    .single();
+  if (updateError) {
+    throw queryError("Failed to update your shop", updateError);
+  }
+
+  if (previousUrl) {
+    const oldPath = shopImagePathFromUrl(previousUrl);
+    if (oldPath) {
+      await supabase.storage.from("shop-images").remove([oldPath]).catch(() => undefined);
+    }
   }
 
   return toShop(data as ShopRow);
@@ -2373,6 +2548,9 @@ function toShopWithMember(row: ShopRowWithMembers): ShopWithMember {
     active: row.active,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    logoUrl: row.logo_url,
+    bannerUrl: row.banner_url,
+    description: row.description,
     memberId: membership?.user_id ?? null,
     memberName: membership?.member?.full_name ?? membership?.member?.username ?? null,
   };
@@ -2389,7 +2567,7 @@ export async function listShopsWithMembers(): Promise<ShopWithMember[]> {
   const { data, error } = await supabase
     .from(DATABASE_TABLES.SHOPS)
     .select(`
-      id, name, slug, active, created_at, updated_at,
+      ${SHOP_COLUMNS},
       shop_users ( user_id, member:profiles!shop_users_user_id_fkey ( full_name, username ) )
     `)
     .order("name", { ascending: true });

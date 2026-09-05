@@ -1,4 +1,4 @@
-import { BarChart3, Boxes, CreditCard, LayoutGrid, Package, ShoppingBag, type LucideIcon } from "lucide-react";
+import { BarChart3, Boxes, CreditCard, LayoutGrid, Package, ShoppingBag, Store, type LucideIcon } from "lucide-react";
 
 import { ROUTES } from "@/constants/routes";
 
@@ -19,6 +19,7 @@ export const SELLER_NAV_GROUPS: readonly SellerNavGroup[] = [
     label: "Main",
     items: [
       { href: ROUTES.sellerDashboard, label: "Dashboard", icon: LayoutGrid },
+      { href: ROUTES.sellerShop, label: "My Shop", icon: Store },
       { href: ROUTES.sellerProducts, label: "Products", icon: Package },
       { href: ROUTES.sellerInventory, label: "Inventory", icon: Boxes },
       { href: ROUTES.sellerOrders, label: "Orders", icon: ShoppingBag },
@@ -34,6 +35,7 @@ export const SELLER_NAV_GROUPS: readonly SellerNavGroup[] = [
 /** Page title/subtitle per seller route, keyed by the exact `ROUTES.seller*` path — mirrors `getAdminPageMeta`. */
 export const SELLER_PAGE_META: Record<string, { title: string; subtitle: string }> = {
   [ROUTES.sellerDashboard]: { title: "Dashboard", subtitle: "Overview of your shop's performance" },
+  [ROUTES.sellerShop]: { title: "My Shop", subtitle: "Manage your shop's public branding" },
   [ROUTES.sellerProducts]: { title: "Products", subtitle: "Manage your product catalog" },
   [ROUTES.sellerInventory]: { title: "Inventory", subtitle: "Track your shop's stock levels" },
   [ROUTES.sellerOrders]: { title: "Orders", subtitle: "Fulfil and track your shop's orders" },

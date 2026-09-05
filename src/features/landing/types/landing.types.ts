@@ -2,16 +2,19 @@ import type { ReactNode } from "react";
 
 /**
  * Featured-shop card model — real `shops` rows plus a real active-product
- * count (see `getFeaturedShops` in queries.ts). No rating/badge/cover-image
- * fields: the schema has no data source for any of those, and this project
- * doesn't fabricate marketplace signals (same principle `ProductJsonLd`
- * already follows for product ratings).
+ * count (see `getFeaturedShops` in queries.ts). `logoUrl` is real,
+ * seller-uploaded branding when set, else null (renders the letter-avatar
+ * fallback) — never fabricated. No rating/badge fields: the schema has no
+ * data source for those, and this project doesn't fabricate marketplace
+ * signals (same principle `ProductJsonLd` already follows for product
+ * ratings).
  */
 export interface FeaturedShop {
   id: string;
   name: string;
   slug: string;
   productCount: number;
+  logoUrl: string | null;
 }
 
 /** A "why RobertJ" value-proposition card. `icon` is a Lucide element. */

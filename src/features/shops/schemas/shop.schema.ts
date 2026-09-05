@@ -17,6 +17,42 @@ export const toggleShopActiveSchema = z.object({
   active: z.boolean(),
 });
 
+/** Mirrors `product.schema.ts`'s upload constants exactly — no reason for
+ * shop images to be more permissive than product photos. */
+const MAX_SHOP_IMAGE_BYTES = 5 * 1024 * 1024;
+const ALLOWED_SHOP_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
+/** Payload for editing a seller's own shop description — name only via
+ * `updateOwnShopNameSchema`-equivalent scope is not included: this is
+ * description-only, and never accepts an `id` (the caller's shop is always
+ * resolved server-side via `requireOwnShopId()`). */
+export const updateOwnShopDescriptionSchema = z.object({
+  description: z
+    .string()
+    .trim()
+    .max(500, "Description must be 500 characters or fewer.")
+    .optional(),
+});
+
+/** Payload for uploading a seller's own shop logo/banner. `kind` is never
+ * part of this schema — it's fixed per-action (`uploadShopImageAction`'s
+ * first argument), never client-submitted. */
+export const uploadShopImageSchema = z.object({
+  image: z
+    .instanceof(File, { message: "An image is required." })
+    .refine((file) => file.size > 0, "An image is required.")
+    .refine(
+      (file) => file.size <= MAX_SHOP_IMAGE_BYTES,
+      "Image must be 5MB or smaller.",
+    )
+    .refine(
+      (file) => ALLOWED_SHOP_IMAGE_TYPES.includes(file.type),
+      "Image must be a JPEG, PNG, or WebP file.",
+    ),
+});
+
 export type CreateShopInput = z.infer<typeof createShopSchema>;
 export type UpdateShopInput = z.infer<typeof updateShopSchema>;
 export type ToggleShopActiveInput = z.infer<typeof toggleShopActiveSchema>;
+export type UpdateOwnShopDescriptionInput = z.infer<typeof updateOwnShopDescriptionSchema>;
+export type UploadShopImageInput = z.infer<typeof uploadShopImageSchema>;
