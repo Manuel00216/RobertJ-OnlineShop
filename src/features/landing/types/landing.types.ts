@@ -47,26 +47,28 @@ export interface AssistantMessage {
 }
 
 /**
- * Flattened product model consumed by the Featured Products grid. Built from
- * either real DB products or placeholder data. When `productId` is set the item
- * is a real, purchasable product; when null it is a placeholder that routes to
- * the catalog instead of adding to the cart.
+ * Flattened product model consumed by the Featured Products grid. Built only
+ * from real, active, `featured` DB products (see `FeaturedProducts.tsx`) —
+ * this project doesn't fabricate marketplace signals (same principle
+ * `FeaturedShop` follows), so there is no placeholder/fallback variant.
  */
 export interface FeaturedProductView {
   key: string;
   name: string;
   shop: string;
   priceCents: number;
+  /** Real compare-at price, when a verified source for one exists. No such
+   * source exists in the schema today, so this is always null. */
   originalPriceCents: number | null;
   imageUrl: string;
   category: string;
   isNew: boolean;
   isSale: boolean;
   href: string;
-  // Fields needed to build a real cart item; null for placeholders.
-  productId: string | null;
-  slug: string | null;
+  // Fields needed to build a real cart item — always set, every view is real.
+  productId: string;
+  slug: string;
   currency: string;
   maxQuantity: number;
-  sellerId: string | null;
+  sellerId: string;
 }

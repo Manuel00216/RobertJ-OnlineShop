@@ -59,31 +59,6 @@ export const CATEGORY_PLACEHOLDERS = [
   { name: "Essentials", countLabel: "610+ items", imageUrl: "/landing/category-essentials.jpg" },
 ] as const;
 
-/** Category filter chips for the Featured Products grid. */
-export const PRODUCT_FILTERS = [
-  "All",
-  "Women's",
-  "Men's",
-  "Essentials",
-  "Sale",
-] as const;
-
-/**
- * Shown only when no products are flagged `featured` in the database yet.
- * Prices are in centavos to match the domain model. `productId: null` marks
- * these as non-purchasable placeholders (quick-add routes to the catalog).
- */
-export const FEATURED_PRODUCTS_PLACEHOLDER = [
-  { name: "Oversized Linen Blazer", shop: "Maison Atelier", priceCents: 420000, originalPriceCents: 580000, imageUrl: "/landing/product-linen-blazer.jpg", category: "Women's", isSale: true, isNew: false },
-  { name: "Heritage Wool Coat", shop: "CleanLine Studio", priceCents: 780000, originalPriceCents: null, imageUrl: "/landing/product-wool-coat.jpg", category: "Men's", isSale: false, isNew: true },
-  { name: "Classic Knit Pullover", shop: "The Minimal Edit", priceCents: 195000, originalPriceCents: null, imageUrl: "/landing/product-knit-pullover.jpg", category: "Essentials", isSale: false, isNew: false },
-  { name: "Varsity Bomber Jacket", shop: "UrbanThread Co.", priceCents: 340000, originalPriceCents: 420000, imageUrl: "/landing/product-bomber-jacket.jpg", category: "Streetwear", isSale: true, isNew: false },
-  { name: "Silk Wrap Dress", shop: "Drift & Drape", priceCents: 310000, originalPriceCents: null, imageUrl: "/landing/product-silk-dress.jpg", category: "Women's", isSale: false, isNew: true },
-  { name: "Tailored Chino Trousers", shop: "Studio Loom", priceCents: 220000, originalPriceCents: null, imageUrl: "/landing/product-chino-trousers.jpg", category: "Men's", isSale: false, isNew: false },
-  { name: "Merino Turtleneck", shop: "The Minimal Edit", priceCents: 168000, originalPriceCents: null, imageUrl: "/landing/product-merino-turtleneck.jpg", category: "Essentials", isSale: false, isNew: true },
-  { name: "Relaxed Denim Set", shop: "UrbanThread Co.", priceCents: 360000, originalPriceCents: 450000, imageUrl: "/landing/product-denim-set.jpg", category: "Denim", isSale: true, isNew: false },
-] as const;
-
 /** Bullet points beside the Smart Assistant chat preview. */
 export const ASSISTANT_BENEFITS = [
   "Understands natural language queries",

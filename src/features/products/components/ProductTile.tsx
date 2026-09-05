@@ -25,7 +25,13 @@ export interface ProductTileItem {
   name: string;
   shopName: string;
   priceCents: number;
-  /** Fabricated compare-at price for marketing placeholders only — real catalog items never set this. */
+  /**
+   * Real compare-at price, when a verified source for one exists. No such
+   * source exists in the schema today (no compare-at-price column), so
+   * every current caller passes null — see `discount` below, which never
+   * renders a percentage/strikethrough without a value here that is also
+   * strictly greater than `priceCents`.
+   */
   originalPriceCents?: number | null;
   currency: string;
   imageUrl: string | null;
@@ -72,10 +78,17 @@ export function ProductTile({ item, style }: ProductTileProps) {
     item.maxQuantity !== null &&
     !isOutOfStock &&
     item.maxQuantity <= LOW_STOCK_THRESHOLD;
-  const discount =
-    item.isSale && item.originalPriceCents
-      ? Math.round((1 - item.priceCents / item.originalPriceCents) * 100)
-      : null;
+  // Only a genuine price drop is ever shown as a discount: requires the
+  // "sale" tag AND a real original price that is strictly greater than the
+  // current price. Guards against ever rendering a fabricated, zero, or
+  // negative "discount" if a bad value reaches this component.
+  const hasVerifiedDiscount =
+    item.isSale &&
+    typeof item.originalPriceCents === "number" &&
+    item.originalPriceCents > item.priceCents;
+  const discount = hasVerifiedDiscount
+    ? Math.round((1 - item.priceCents / (item.originalPriceCents as number)) * 100)
+    : null;
 
   function handleQuickAdd(event: React.MouseEvent) {
     // The whole tile is one <Link> (see below) — this button must never
@@ -207,9 +220,9 @@ export function ProductTile({ item, style }: ProductTileProps) {
           <span className="text-[14px] font-bold text-rj-black">
             {formatCurrency(item.priceCents, item.currency)}
           </span>
-          {item.originalPriceCents ? (
+          {hasVerifiedDiscount ? (
             <span className="text-[11px] text-rj-gray-400 line-through">
-              {formatCurrency(item.originalPriceCents, item.currency)}
+              {formatCurrency(item.originalPriceCents as number, item.currency)}
             </span>
           ) : null}
           {isLowStock ? (
