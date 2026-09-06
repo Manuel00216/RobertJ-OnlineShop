@@ -11,7 +11,6 @@ import {
   getLowStockReport,
   getSalesSummary,
   listDashboardProducts,
-  listPendingPayments,
 } from "@/lib/supabase/queries";
 
 function StatCard({
@@ -60,21 +59,18 @@ export async function AdminKpiRow({ from, to }: AdminKpiRowProps) {
   let pendingOrders: number;
   let totalProducts: number;
   let lowStockCount: number;
-  let pendingPayments: number;
 
   try {
-    const [salesSummary, orderSummary, products, lowStock, payments] = await Promise.all([
+    const [salesSummary, orderSummary, products, lowStock] = await Promise.all([
       getSalesSummary(from, to, null),
       getDashboardOrderSummary(),
       listDashboardProducts(null),
       getLowStockReport(),
-      listPendingPayments(),
     ]);
     summary = salesSummary;
     pendingOrders = orderSummary.statusCounts.pending;
     totalProducts = products.length;
     lowStockCount = lowStock.length;
-    pendingPayments = payments.length;
   } catch {
     return <ErrorState message="We couldn't load the platform overview right now." />;
   }
@@ -123,8 +119,8 @@ export async function AdminKpiRow({ from, to }: AdminKpiRowProps) {
       />
       <StatCard
         href={ROUTES.adminPayments}
-        label="Pending Payments"
-        value={pendingPayments}
+        label="Online Payments"
+        value={summary.xenditPaidOrders}
         icon={CreditCard}
         iconBg="bg-primary/10"
         iconColor="text-primary"

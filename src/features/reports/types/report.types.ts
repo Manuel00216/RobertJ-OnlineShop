@@ -26,6 +26,7 @@ export interface SalesSummary {
   avgOrderValueCents: number;
   codPaidOrders: number;
   qrPaidOrders: number;
+  xenditPaidOrders: number;
   pendingPaymentOrders: number;
 }
 

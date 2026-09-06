@@ -54,7 +54,7 @@ import type {
 import type { UpdateProfileInput } from "@/features/account/schemas/account.schema";
 import type { OAuthProvider } from "@/features/auth/schemas/auth.schema";
 import type { Profile } from "@/features/account/types/account.types";
-import type { Payment, PaymentDecision } from "@/features/payments/types/payment.types";
+import type { Payment, PaymentAttempt } from "@/features/payments/types/payment.types";
 import type { Shop, ShopWithMember } from "@/features/shops/types/shop.types";
 import type { AdminUser } from "@/features/users/types/user.types";
 import type { AdjustStockInput } from "@/features/inventory/schemas/inventory.schema";
@@ -636,7 +636,7 @@ export async function productBelongsToOwner(
 
 /**
  * Uploads one product photo to the public `product-images` bucket and
- * returns its public URL — mirrors `uploadPaymentReceipt`'s path convention
+ * returns its public URL — mirrors `uploadReturnEvidence`'s path convention
  * (`{parent_id}/{uuid}.{ext}`), except this bucket is public (product photos
  * must be visible to guests) so the URL, not a private path, is what
  * `product_images.url` stores (see the `product_images_url_scheme` check
@@ -1214,7 +1214,7 @@ const ORDER_COLUMNS = `
   total_cents, currency, payment_status, order_status, shipping_address, notes,
   placed_at, paid_at, shipped_at, delivered_at, cancelled_at,
   buyer:profiles!orders_buyer_id_fkey ( full_name, username ),
-  seller:profiles!orders_seller_id_fkey ( full_name, username, payment_qr_url, role ),
+  seller:profiles!orders_seller_id_fkey ( full_name, username, role ),
   order_items (
     id, product_id, product_title, quantity, unit_price_cents, subtotal_cents,
     product:products!order_items_product_id_fkey ( slug, product_images ( url ) )
@@ -1224,7 +1224,7 @@ const ORDER_COLUMNS = `
 type OrderRowWithItems = Omit<OrderRow, "shipping_address"> & {
   shipping_address: Json;
   buyer: Pick<ProfileRow, "full_name" | "username"> | null;
-  seller: Pick<ProfileRow, "full_name" | "username" | "payment_qr_url" | "role"> | null;
+  seller: Pick<ProfileRow, "full_name" | "username" | "role"> | null;
   order_items: Array<
     OrderItemRow & {
       product: { slug: string; product_images: { url: string }[] } | null;
@@ -1270,7 +1270,6 @@ function toOrder(row: OrderRowWithItems): Order {
     sellerId: row.seller_id,
     sellerName: row.seller?.full_name ?? row.seller?.username ?? null,
     sellerRole: (row.seller?.role as UserRole | undefined) ?? null,
-    sellerPaymentQrUrl: row.seller?.payment_qr_url ?? null,
     items: (row.order_items ?? []).map((item) => ({
       id: item.id,
       productId: item.product_id,
@@ -1713,7 +1712,6 @@ export async function updateMyProfile(
       avatar_url: input.avatarUrl || null,
       phone: input.phone || null,
       bio: input.bio || null,
-      payment_qr_url: input.paymentQrUrl || null,
     })
     .eq("id", userId);
 
@@ -1735,19 +1733,20 @@ export async function updateMyProfile(
 }
 
 // ============================================================================
-// Payments (QR receipt upload + manual verification — ADR-008)
+// Payments (COD collection + Xendit Online Payment)
 // ============================================================================
 
 type PaymentRow = Database["public"]["Tables"]["payments"]["Row"];
 
 /**
- * Payment columns plus the parent order's number and buyer name, for the
- * seller/admin verification queue. Literal for the same reason as
+ * Payment columns plus the parent order's number and buyer name, for
+ * payment-history views. Literal for the same reason as
  * `PRODUCT_COLUMNS`/`ORDER_COLUMNS` — parsed at the type level, must not be
  * interpolated.
  */
 const PAYMENT_COLUMNS = `
-  id, order_id, receipt_path, failure_reason, payment_method_type, amount_cents,
+  id, order_id, receipt_path, failure_reason, payment_method_type,
+  payment_channel, checkout_url, expires_at, amount_cents,
   currency, status, verified_by, verified_at, created_at,
   order:orders!payments_order_id_fkey (
     order_number,
@@ -1771,6 +1770,10 @@ function toPayment(row: PaymentRowWithOrder): Payment {
     amountCents: row.amount_cents,
     currency: row.currency,
     status: row.status,
+    paymentMethodType: row.payment_method_type,
+    paymentChannel: row.payment_channel,
+    checkoutUrl: row.checkout_url,
+    expiresAt: row.expires_at,
     receiptPath: row.receipt_path,
     failureReason: row.failure_reason,
     verifiedBy: row.verified_by,
@@ -1779,80 +1782,94 @@ function toPayment(row: PaymentRowWithOrder): Payment {
   };
 }
 
-/**
- * Uploads a QR payment receipt image to the private `payment-receipts`
- * bucket. Path is `{orderId}/{uuid}.{ext}` — RLS on `storage.objects` (see
- * the storage migration) authorizes via the order, not the path alone.
- * Returns the storage path (not a URL — the bucket is private).
- */
-export async function uploadPaymentReceipt(
-  orderId: string,
-  file: File,
-): Promise<string> {
-  const supabase = await createSupabaseServerClient();
-  const ext = file.name.split(".").pop() ?? "jpg";
-  const path = `${orderId}/${crypto.randomUUID()}.${ext}`;
-
-  const { error } = await supabase.storage
-    .from("payment-receipts")
-    .upload(path, file, { contentType: file.type });
-
-  if (error) {
-    throw queryError("Failed to upload receipt", error);
-  }
-  return path;
+function toPaymentAttempt(row: PaymentRow): PaymentAttempt {
+  return {
+    id: row.id,
+    orderId: row.order_id,
+    status: row.status,
+    paymentMethodType: row.payment_method_type,
+    paymentChannel: row.payment_channel,
+    amountCents: row.amount_cents,
+    currency: row.currency,
+    checkoutUrl: row.checkout_url,
+    expiresAt: row.expires_at,
+    xenditPaymentRequestId: row.xendit_payment_request_id,
+    failureReason: row.failure_reason,
+  };
 }
 
 /**
- * Records a buyer's QR payment submission via the `submit_qr_payment` RPC —
- * the sole write path into `payments` for buyers (no direct INSERT grant
- * exists). Re-prices from the order's own total; ownership and
- * already-pending checks happen inside the RPC.
+ * Idempotently reserves (or reuses) a Xendit payment attempt for an order via
+ * the `begin_xendit_payment_attempt` RPC — the sole INSERT path into
+ * `payments` for buyers. Re-prices from the order's own total; ownership and
+ * pending-status checks happen inside the RPC.
  */
-export async function submitQrPayment(
+export async function beginXenditPaymentAttempt(
   orderId: string,
-  receiptPath: string,
-): Promise<void> {
+  channelCode: "GCASH" | "PAYMAYA" | "CARD",
+): Promise<PaymentAttempt> {
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.rpc("submit_qr_payment", {
+  const { data, error } = await supabase.rpc("begin_xendit_payment_attempt", {
     p_order_id: orderId,
-    p_receipt_path: receiptPath,
+    p_channel_code: channelCode,
   });
 
-  if (error) {
-    throw new Error(
-      mapPostgresError(error, "Could not submit your payment receipt."),
-    );
+  if (error || !data) {
+    throw rpcError("Could not start this payment. Please try again.", error);
   }
+  return toPaymentAttempt(data as PaymentRow);
 }
 
 /**
- * Seller (of the order) or admin marks a pending payment paid/failed via the
- * `verify_payment` RPC — the sole write path for verification (no direct
- * UPDATE grant exists). Also flips the parent order's `payment_status` in the
- * same RPC transaction. `reason` is required by the RPC itself (and stored
- * on `payments.failure_reason`) when `decision === 'failed'`; ignored for `'paid'`.
+ * Records Xendit's synchronous response against the exact payment attempt
+ * `beginXenditPaymentAttempt` just reserved, via `finalize_xendit_payment_request`
+ * — narrowly scoped to that one row (no direct UPDATE grant exists).
  */
-export async function verifyPayment(
-  paymentId: string,
-  decision: PaymentDecision,
-  reason: string | null = null,
-): Promise<void> {
+export async function finalizeXenditPaymentRequest(input: {
+  paymentId: string;
+  xenditPaymentRequestId: string;
+  checkoutUrl: string;
+  expiresAt: string | null;
+  status?: "pending" | "failed";
+}): Promise<PaymentAttempt> {
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.rpc("verify_payment", {
-    p_payment_id: paymentId,
-    p_decision: decision,
-    p_reason: reason ?? undefined,
+  const { data, error } = await supabase.rpc("finalize_xendit_payment_request", {
+    p_payment_id: input.paymentId,
+    p_xendit_payment_request_id: input.xenditPaymentRequestId,
+    p_checkout_url: input.checkoutUrl,
+    p_expires_at: input.expiresAt ?? undefined,
+    p_status: input.status ?? "pending",
   });
 
-  if (error) {
-    throw new Error(mapPostgresError(error, "Could not verify this payment."));
+  if (error || !data) {
+    throw rpcError("Could not confirm this payment request.", error);
   }
+  return toPaymentAttempt(data as PaymentRow);
 }
 
 /**
- * Short-lived signed URL for a receipt image — the bucket is private, so
- * there is no public URL to store or render directly.
+ * Seller (of the order) or admin marks a COD order's cash as collected via
+ * the `mark_cod_payment_collected` RPC — the sole path by which a COD
+ * `orders.payment_status` ever becomes `paid` (never at order creation).
+ * Writes a real `payments` row so COD collections appear in the same ledger
+ * as Xendit payments.
+ */
+export async function markCodPaymentCollected(orderId: string): Promise<PaymentAttempt> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("mark_cod_payment_collected", {
+    p_order_id: orderId,
+  });
+
+  if (error || !data) {
+    throw rpcError("Could not mark this payment as collected.", error);
+  }
+  return toPaymentAttempt(data as PaymentRow);
+}
+
+/**
+ * Short-lived signed URL for a legacy QR receipt image — the bucket is
+ * private, so there is no public URL to store or render directly. Read-only:
+ * no new receipts are ever created; this only serves historical orders.
  */
 export async function getPaymentReceiptSignedUrl(path: string): Promise<string> {
   const supabase = await createSupabaseServerClient();
@@ -1867,21 +1884,23 @@ export async function getPaymentReceiptSignedUrl(path: string): Promise<string> 
 }
 
 /**
- * Pending payments for the verification queue. No manual `seller_id`
- * filtering here — RLS alone restricts visible rows to the caller's own
- * orders-as-seller, or all rows for an admin (same "RLS is the primary
- * boundary" pattern as everywhere else in this file).
+ * Recent payments for the read-only payment history view. No manual
+ * `seller_id` filtering here — RLS alone restricts visible rows to the
+ * caller's own orders-as-seller, or all rows for an admin (same "RLS is the
+ * primary boundary" pattern as everywhere else in this file). Xendit
+ * payments settle themselves via webhook — nothing here requires manual
+ * action, unlike the retired QR verification queue.
  */
-export async function listPendingPayments(): Promise<Payment[]> {
+export async function listPaymentHistory(limit = 50): Promise<Payment[]> {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from(DATABASE_TABLES.PAYMENTS)
     .select(PAYMENT_COLUMNS)
-    .eq("status", PAYMENT_STATUS.pending)
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: false })
+    .limit(limit);
 
   if (error) {
-    throw queryError("Failed to load pending payments", error);
+    throw queryError("Failed to load payment history", error);
   }
 
   return (data ?? []).map((row) => toPayment(row as PaymentRowWithOrder));
@@ -2080,7 +2099,7 @@ export async function getReturnRequestForOrder(
  * filtered by status — powers the admin Returns & Refunds queue. No manual
  * `seller_id`/`buyer_id` filtering: RLS alone scopes visible rows (buyer's
  * own, seller's own-shop's, or all for admin), the same "RLS is the primary
- * boundary" pattern as `listPendingPayments`/`listDashboardOrders`.
+ * boundary" pattern as `listPaymentHistory`/`listDashboardOrders`.
  */
 export async function listReturnRequests(status?: ReturnStatus): Promise<ReturnRequest[]> {
   const supabase = await createSupabaseServerClient();
@@ -2185,7 +2204,7 @@ function toShop(row: ShopRow): Shop {
  * Shops visible to the caller. No manual membership filtering here — RLS
  * alone restricts visible rows to the caller's own shop(s) via
  * `is_shop_member()`, or every shop for an admin (same "RLS is the primary
- * boundary" pattern as `listPendingPayments`).
+ * boundary" pattern as `listPaymentHistory`).
  */
 export async function listShops(): Promise<Shop[]> {
   const supabase = await createSupabaseServerClient();
@@ -2723,9 +2742,9 @@ export async function assignProductShop(
 
 /**
  * The most recent non-refunded payment attempt for one of the buyer's own
- * orders, or null if none has been submitted yet. Used by the order detail
- * page to decide whether to show the receipt-upload prompt, a "submitted"
- * status, or — for `failed` — the seller/admin's rejection reason.
+ * orders, or null if none exists yet. Used by the order detail page to
+ * decide whether to show Xendit payment options, a "confirming your
+ * payment" state, or — for `failed` — the failure reason.
  */
 export async function getActivePaymentForOrder(
   orderId: string,
@@ -2927,6 +2946,7 @@ const EMPTY_SALES_SUMMARY: SalesSummary = {
   avgOrderValueCents: 0,
   codPaidOrders: 0,
   qrPaidOrders: 0,
+  xenditPaidOrders: 0,
   pendingPaymentOrders: 0,
 };
 
@@ -2958,6 +2978,7 @@ export const getSalesSummary = cache(async function getSalesSummary(
     avgOrderValueCents: row.avg_order_value_cents,
     codPaidOrders: row.cod_paid_orders,
     qrPaidOrders: row.qr_paid_orders,
+    xenditPaidOrders: row.xendit_paid_orders,
     pendingPaymentOrders: row.pending_payment_orders,
   };
 });

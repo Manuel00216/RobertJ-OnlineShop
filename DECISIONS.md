@@ -212,7 +212,7 @@ Every decision is a numbered ADR with a fixed shape: **Context → Problem → O
 
 ## ADR-008: Manual payment verification (COD + QR receipt), no gateway
 
-**Status:** ✅ Accepted
+**Status:** ⛔ Superseded by **ADR-019** (Xendit Online Payment). QR/manual-verification is removed from the active checkout flow; every historical `qr_upload` payment row and receipt is preserved for audit — see ADR-019.
 
 **Context:** The SAD explicitly scopes payments to **Cash on Delivery** and **QR receipt upload**, verified manually — no payment gateway or courier API.
 
@@ -485,3 +485,42 @@ Original decision: Option 2. The Stripe code stayed in the repo (real, working c
 - [README.md → Future Enhancements](./README.md#future-enhancements) is updated accordingly — "Product reviews and ratings" and "wishlists" are removed from the deferred list; "Realtime notifications" remains deferred, since what's built here is explicitly not that.
 
 **Future Revisit:** If review volume or spam becomes a problem, revisit rate-limiting `submit_review` via the existing `check_rate_limit` RPC/`rate_limit_hits` table (already used elsewhere), or a lightweight moderation flag — deliberately not built now. If buyers need an unread badge or push delivery for the activity feed, revisit the optional `profiles.activity_last_seen_at` column path raised during the improvement-phase audit — deliberately deferred to keep v1 a zero-schema-change feature. If `products.shop_id` is later fully backfilled (closing TD-1), the shop-identity joins added here should switch from the `shop_users` bridge to `products.shop_id` directly.
+
+---
+
+## ADR-019: Xendit Online Payment (GCash, Maya, Card), superseding ADR-008's "no gateway" stance
+
+**Status:** ✅ Accepted (sandbox/test-mode implementation)
+
+**Context:** ADR-008 committed to COD + manual QR-receipt verification, explicitly ruling out a payment gateway for the capstone. That decision is being revisited: the platform now needs real-time online payment (GCash, Maya, Card) alongside COD, with payment confirmation that isn't dependent on a human checking a receipt image.
+
+**Problem:** How to add a payment gateway without violating this codebase's existing non-negotiables — `orders.payment_status` must never be settable by the client or the frontend redirect alone; historical payment data must not be destroyed; the existing `payments`-table chokepoint pattern (`create_order`, `submit_qr_payment`/`verify_payment` before it) must be preserved; and the change must not introduce seller payouts, platform commission, or real-money settlement, since this is a sandbox/test-mode implementation.
+
+**Options Considered:**
+1. Xendit's hosted Invoices page (one redirect covering all channels) — simplest, but a full-page redirect to Xendit's own domain for every method, including Card.
+2. **Direct Xendit APIs**: `v3/payment_requests` for GCash/Maya (redirect-based, channel-specific), and a Xendit Payment Session (`mode=COMPONENTS`) + the `xendit-components-web` client package for Card (embedded, PCI-safe — raw card data never reaches this server).
+3. Full PCI-DSS Level 1 "raw PAN" integration (card details posted directly to our server) — rejected outright; disproportionate compliance burden for a sandbox capstone.
+
+**Decision:** Option 2. Confirmed against Xendit's own documentation across multiple verification passes (not assumed from training data) — see the implementation's own audit trail for the specific corrections made along the way (e.g., Card genuinely needs the Components/Session flow, not a plain tokenized `payment_requests` call).
+
+**Non-negotiables, enforced structurally, not just by convention:**
+- **The Xendit webhook (`POST /api/webhooks/xendit`) is the only path by which a payment can become `paid`.** It verifies `x-callback-token` before any DB write, then delegates to `process_xendit_webhook` — a `SECURITY DEFINER` RPC whose `EXECUTE` grant is `service_role`-only (confirmed absent from the `anon`/`authenticated`-executable advisor list after implementation). No Server Action, redirect handler, or return page ever writes `paid`.
+- **Idempotent by construction, not by convention**: `begin_xendit_payment_attempt` reuses an in-flight/still-valid attempt instead of creating a duplicate (double-click/retry safe at the DB layer, independent of Xendit's own `Idempotency-Key` header, also sent). `process_xendit_webhook` is a no-op once a payment is already `paid`/`failed` — this also correctly handles out-of-order webhook delivery. Every webhook delivery is logged to a new, RLS-locked-down `payment_webhook_events` audit table regardless of outcome.
+- **Every webhook is validated against our own database**, never trusted blindly: the resolved `payments` row's stored `xendit_payment_request_id` must match what the webhook claims to confirm; amount and currency must match what was recorded when the attempt was created (a mismatch marks the attempt `failed`, never `paid`).
+- **COD is unaffected by Xendit and still never auto-marks paid.** A new `mark_cod_payment_collected` RPC (seller of the order, or admin) is the only way a COD order's `payment_status` becomes `paid` — gated by the same transaction-local-flag pattern already used for refunds (`app.refund_in_progress` → new `app.cod_collection_in_progress`), closing the exact self-declare loophole that removing `verify_payment`'s seller carve-out would otherwise have reopened.
+- **No commission, no payouts, no xenPlatform.** `create_order` was not touched — there was never commission logic to add or remove. Shop attribution (`orders.seller_id` → `shop_users` → `shops`, one seller per shop) was already sufficient for the three-sibling-shop model (ADR-001) and needed no schema change.
+
+**Removed (Bank Transfer / QR manual verification), historical data preserved:**
+- `submit_qr_payment`/`verify_payment` RPCs dropped (guarded by a pre-flight check confirming zero `pending`+`qr_upload` payments existed before dropping). The buyer-facing checkout option and the seller/admin "verification queue" UI are gone — replaced by a read-only `PaymentsList` (no manual actions; Xendit settles itself, COD is settled via the RPC above).
+- The `payment-receipts` Storage bucket's buyer-INSERT policy is dropped (no new receipts); its SELECT policy, the bucket, and every existing object are untouched — historical receipts remain viewable.
+- Every historical `payments` row (`payment_method_type IN ('qr_upload', 'card')`) and `profiles.payment_qr_url` value is untouched. `qr_upload`/`card` join `payment_method_type`'s permanent-but-unused values (Postgres enum values cannot be cheaply dropped) — same accepted limitation ADR-014 already established for `card`.
+- `report_sales_summary`'s COD/QR revenue split was previously binary ("not QR = COD") — fixed to a proper three-way split (`cod_paid_orders`/`qr_paid_orders`/`xendit_paid_orders`) as part of this change, since the binary logic would have silently miscounted Xendit revenue as COD otherwise.
+
+**Consequences:**
+- New client-side dependency: `xendit-components-web` (Card only) — unavoidable for PCI-safe card collection without becoming a PCI-DSS Level 1 merchant.
+- New server-only env vars: `XENDIT_SECRET_KEY`, `XENDIT_WEBHOOK_TOKEN`.
+- New Route Handler: `/api/webhooks/xendit` (the second Route Handler in this codebase, after the PKCE `auth/callback` — anticipated by ADR-004's "introduce versioned Route Handlers alongside Server Actions" note). `src/proxy.ts` skips the Supabase session-cookie refresh for `/api/webhooks/*`, since it's an unauthenticated-by-cookie, server-to-server path.
+- Xendit-dashboard-initiated refunds are **not** automatically reflected back into this app (no `/refunds` webhook handler built) — existing order refunds still go through the pre-existing `decide_return` admin flow, which is payment-method-agnostic and required no changes.
+- This is a **sandbox/test-mode implementation only**. Going live would additionally require: real Xendit business verification, a publicly reachable webhook URL, and a security review of the webhook endpoint's exposure (rate limiting) before production traffic — none of that is in scope here.
+
+**Future Revisit:** If this goes into production, revisit: automatic refund-webhook handling, seller payout/settlement (explicitly out of scope for this sandbox change), and confirming the exact amount-unit convention (`request_amount`'s decimal-vs-minor-unit format) and the Card session's webhook event family against a real sandbox account, both of which were resolved by best-evidence reasoning rather than a live API call during this implementation.

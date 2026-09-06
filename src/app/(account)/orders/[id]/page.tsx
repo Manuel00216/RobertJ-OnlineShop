@@ -11,7 +11,7 @@ import { OrderSummary } from "@/features/orders/components/OrderSummary";
 import { OrderTimeline } from "@/features/orders/components/OrderTimeline";
 import { PaymentStatusBadge } from "@/features/orders/components/PaymentStatusBadge";
 import { ShippingAddressCard } from "@/features/orders/components/ShippingAddressCard";
-import { ReceiptUpload } from "@/features/payments/components/ReceiptUpload";
+import { XenditPaymentOptions } from "@/features/payments/components/XenditPaymentOptions";
 import { RequestReturnPanel } from "@/features/returns/components/RequestReturnPanel";
 import { ReturnRequestStatusCard } from "@/features/returns/components/ReturnRequestStatusCard";
 import {
@@ -59,12 +59,21 @@ export default async function OrderDetailPage({
     shopNames.get(order.sellerId) ??
     (order.sellerRole === USER_ROLES.seller ? order.sellerName : null);
 
-  // Pending: shows the "submitted, awaiting verification" state. Failed:
-  // carries the seller/admin's rejection reason, shown in the Payment card
-  // below. Paid needs neither — PaymentStatusBadge already reflects it.
+  // Pending: shows Xendit payment options (or a "continue to payment" link
+  // if an attempt is already in flight). Failed: carries the failure reason,
+  // shown in the Payment card below. Paid needs neither — PaymentStatusBadge
+  // already reflects it.
   const activePayment =
     order.paymentStatus === "pending" || order.paymentStatus === "failed"
       ? await getActivePaymentForOrder(order.id)
+      : null;
+
+  const resumableCheckoutUrl =
+    activePayment?.paymentMethodType === "xendit" &&
+    activePayment.status === "pending" &&
+    activePayment.checkoutUrl &&
+    (!activePayment.expiresAt || new Date(activePayment.expiresAt) > new Date())
+      ? activePayment.checkoutUrl
       : null;
 
   // "Write a Review" only applies to a delivered order, and only for items
@@ -107,25 +116,21 @@ export default async function OrderDetailPage({
       </div>
 
       {order.paymentStatus === "pending" ? (
-        activePayment ? (
-          <section
-            aria-label="Payment"
-            className="rounded-2xl border border-rj-gray-100 bg-rj-gray-50 p-5"
-          >
-            <p className="text-sm font-semibold text-rj-black">
-              Receipt submitted — awaiting verification.
-            </p>
-            <p className="mt-1 text-xs text-rj-gray-600">
-              {shopName ?? "The seller"} will confirm your payment shortly.
-            </p>
-          </section>
-        ) : (
-          <ReceiptUpload
-            orderId={order.id}
-            sellerName={shopName}
-            sellerPaymentQrUrl={order.sellerPaymentQrUrl}
-          />
-        )
+        <section
+          aria-label="Payment"
+          className="rounded-2xl border border-rj-gray-100 bg-rj-gray-50 p-5"
+        >
+          <h2 className="text-[10px] font-bold uppercase tracking-[0.3em] text-rj-gray-400">
+            Online Payment
+          </h2>
+          <p className="mt-1 text-xs text-rj-gray-600">
+            Paying by Cash on Delivery? No action needed — {shopName ?? "the seller"} will
+            mark it collected once received. Prefer to pay now instead?
+          </p>
+          <div className="mt-3">
+            <XenditPaymentOptions orderId={order.id} existingCheckoutUrl={resumableCheckoutUrl} />
+          </div>
+        </section>
       ) : null}
 
       {order.status === ORDER_STATUS.delivered ? (

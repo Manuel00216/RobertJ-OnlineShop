@@ -30,7 +30,7 @@ export interface DashboardProductRowProps {
 /**
  * One product in the dashboard management list. Edit swaps the row for an
  * inline `ProductForm`; archive uses the same inline-confirm shape as
- * `VerificationCard`. The "Unassigned" assign control is admin-only and only
+ * `MarkCodCollectedButton`. The "Unassigned" assign control is admin-only and only
  * shown for a legacy product with `shopId === null` (see the Phase 3 plan's
  * orphaned-product handling).
  */

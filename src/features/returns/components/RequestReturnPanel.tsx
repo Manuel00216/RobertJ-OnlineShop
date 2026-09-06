@@ -15,7 +15,7 @@ export interface RequestReturnPanelProps {
 
 /**
  * Shown on a buyer's delivered-order detail page when no return request is
- * already open for it — mirrors `ReceiptUpload`'s form shape. A successful
+ * already open for it. A successful
  * submission revalidates the order page, which then renders
  * `ReturnRequestStatusCard` instead (server-driven by `getReturnRequestForOrder`,
  * not local state here).

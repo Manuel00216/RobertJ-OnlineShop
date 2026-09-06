@@ -16,7 +16,7 @@
 
 RoberJ Online Shop is a **centralized, web-based marketplace and management system** that unifies **three sibling shops** — today operating separately — into a single storefront with one cart, one checkout, and one order pipeline. It gives shoppers a modern retail experience for **finished garments**, gives each shop owner a single place to manage products, inventory, and orders, and gives the administrator full oversight of the platform.
 
-The long-term vision is a dependable, maintainable capstone-grade system that a small family business can actually run: **one marketplace, unified inventory, guided (rule-based) product selection, and manual-but-verifiable payments** — with no dependence on third-party payment gateways or courier APIs.
+The long-term vision is a dependable, maintainable capstone-grade system that a small family business can actually run: **one marketplace, unified inventory, guided (rule-based) product selection, and payments via Cash on Delivery or Xendit Online Payment (GCash, Maya, Card)** — with no dependence on courier APIs, and no seller payout/commission infrastructure (this is a sandbox/test-mode payment implementation; see [ADR-019](./DECISIONS.md#adr-019-xendit-online-payment-gcash-maya-card-superseding-adr-008s-no-gateway-stance)).
 
 ---
 
@@ -48,7 +48,7 @@ RoberJ addresses each problem with a focused, centralized capability:
 | **Guided Product Selection (rule-based)** | #6, #7 |
 | **Centralized order management** | #5 |
 | **Reports and analytics** | #5 |
-| **Manual payment verification** (COD + QR receipt upload) | #5, #7 |
+| **Payments** (COD + Xendit Online Payment: GCash, Maya, Card) | #5, #7 |
 
 > [!NOTE]
 > Guided Product Selection is a **rule-based** assistant. It is **not** artificial intelligence, machine learning, or an LLM. Recommendations come from explicit, human-authored rules.
@@ -63,7 +63,7 @@ RoberJ addresses each problem with a focused, centralized capability:
 4. Offer **rule-based Guided Product Selection** to reduce manual recommendation requests.
 5. **Centralize orders and sales** for the owners and administrator.
 6. Deliver **reports and analytics** for business decisions.
-7. Support **manual payment verification** (COD and QR receipt upload) without a payment gateway.
+7. Support **Cash on Delivery and Xendit Online Payment** (GCash, Maya, Card) — sandbox/test-mode, no seller payouts or commission.
 8. Enforce **role-based access control** so each user sees only what they should.
 9. Ship a **responsive, accessible, maintainable** application built on a clean, service-oriented architecture.
 
@@ -78,7 +78,7 @@ RoberJ is a **curated, three-shop marketplace** — **not** a general, open mult
 1. A **Guest** browses the unified catalog, searches, and uses Guided Product Selection — no account required.
 2. To buy, the guest registers and becomes a **Customer**.
 3. The Customer adds products **from any of the three shops** to a **single cart**.
-4. At **checkout**, the cart is grouped by shop, and the Customer chooses a manual payment method: **Cash on Delivery** or **QR receipt upload**.
+4. At **checkout**, the cart is grouped by shop, and the Customer chooses **Cash on Delivery** or **Online Payment** (GCash, Maya, or Card via Xendit) — Xendit payments are confirmed automatically by webhook; COD is marked collected by the shop owner once cash is received.
 5. Each shop receives its portion of the order; the **Shop Owner** confirms, fulfils, and updates status.
 6. The **Administrator** oversees users, shops, products, inventory, payments, and reports across the whole platform.
 
@@ -127,8 +127,8 @@ Explicit **system limitations** from the SAD. These are intentional exclusions, 
 - ❌ Guided Product Selection is **rule-based**, not AI.
 - ❌ **Manual inventory updates** (no automated stock syncing from external systems).
 - ❌ **No raw-material or production tracking.**
-- ❌ **COD and QR receipt upload only** for payments.
-- ❌ **No payment gateway** and **no courier/shipping API** integration.
+- ❌ **COD and Xendit Online Payment (GCash, Maya, Card) only** for payments — sandbox/test-mode; no seller payouts, commission, or real-money settlement (see [ADR-019](./DECISIONS.md#adr-019-xendit-online-payment-gcash-maya-card-superseding-adr-008s-no-gateway-stance)).
+- ❌ **No courier/shipping API** integration.
 - ❌ **Internet connection required** (no offline mode).
 
 ---
@@ -157,9 +157,9 @@ Explicit **system limitations** from the SAD. These are intentional exclusions, 
 | **Products** | Product listings, detail pages, search, filtering, categories. |
 | **Inventory** | Per-shop stock levels, maintained manually by shop owners and admin. |
 | **Cart** | A single cart holding products from any of the three shops. |
-| **Checkout** | Cart-to-order conversion, grouped by shop, with a manual payment method. |
+| **Checkout** | Cart-to-order conversion, grouped by shop; COD or Xendit Online Payment. |
 | **Orders** | Centralized order lifecycle, tracking, and status management. |
-| **Payments** | Manual verification of **COD** and **QR receipt upload** payments. |
+| **Payments** | **COD** (marked collected by the shop owner) and **Xendit Online Payment** (GCash, Maya, Card — confirmed automatically by webhook). |
 | **Reports** | Sales and operational analytics for shop owners and admin. |
 | **Guided Product Selection** | Rule-based assistant that recommends products from explicit rules. |
 
@@ -183,10 +183,10 @@ Detailed purpose, boundaries, and interactions for each module are in [`ARCHITEC
 | Cart | ✅ Completed | `src/features/cart`, `src/app/(shop)/cart` |
 | Customer Account | ✅ Completed | `src/features/account`, `src/app/(account)` |
 | Orders | ✅ Completed — buyer history/detail *and* Shop Owner/Admin fulfilment management | `src/features/orders`, `src/app/(account)/orders`, `src/app/admin/orders`, `src/app/seller/orders` |
-| Checkout | ✅ Completed (COD only — QR payment method is Phase 7/Payments scope) | `src/features/checkout`, `src/app/(shop)/checkout` |
+| Checkout | ✅ Completed (COD + Xendit Online Payment) | `src/features/checkout`, `src/app/(shop)/checkout` |
 | Shops (multi-shop model) | 🚧 In Progress (`shops`/`shop_users` exist and are backfilled; `products.shop_id` exists — `20260814000000_products_shop_scoping.sql`; admin can now create/manage shops and onboard sellers with no direct SQL — `20260816000000_admin_user_shop_management.sql`; `orders` still keys off `seller_id` only, no `shop_id` bridge yet) | `supabase/migrations/{20260813000000,20260814000000,20260816000000}_*.sql`, `src/features/shops`, `src/features/users`, `src/app/admin/{shops,users}` |
 | Inventory (dedicated module) | ✅ Completed | `supabase/migrations/20260815000000_inventory_and_stock_history.sql`, `src/features/inventory`, `src/app/admin/inventory`, `src/app/seller/inventory` |
-| Payments (COD + QR verification) | ✅ Completed | `src/features/payments`; receipt upload on the order detail page; verification queue at `/admin/payments` and `/seller/payments` |
+| Payments (COD + Xendit Online Payment) | ✅ Completed (sandbox/test-mode — see [ADR-019](./DECISIONS.md#adr-019-xendit-online-payment-gcash-maya-card-superseding-adr-008s-no-gateway-stance)) | `src/features/payments`; Xendit payment options + COD collection on the order detail page; read-only payment history at `/admin/payments` and `/seller/payments` |
 | Reports | ✅ Completed | `src/features/reports`, `src/app/admin/reports`, `src/app/seller/reports`, `src/components/charts` |
 | Guided Product Selection | ⏳ Upcoming | `src/features/assistant` *(stub; landing preview only)* |
 
@@ -407,9 +407,11 @@ Defined and validated in [`src/config/env.ts`](./src/config/env.ts):
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | ✅ | Supabase anon/public key |
 | `NEXT_PUBLIC_SITE_URL` | ➖ | Defaults to `http://localhost:3000` |
 | `SUPABASE_SERVICE_ROLE_KEY` | ➖ | Optional; trusted server-side jobs only |
+| `XENDIT_SECRET_KEY` | ➖ | Optional; required only to create Xendit payment requests (test-mode key) |
+| `XENDIT_WEBHOOK_TOKEN` | ➖ | Optional; required only to verify Xendit webhook callbacks |
 
 > [!NOTE]
-> The app boots on **Supabase credentials alone**. The former Stripe spike (ADR-014) has been **retired and removed** — Checkout offers **COD only** until the target QR-receipt-upload path (ADR-008) ships. See [Implementation Status](#implementation-status-target-vs-current).
+> The app boots on **Supabase credentials alone** — `XENDIT_SECRET_KEY`/`XENDIT_WEBHOOK_TOKEN` are only required to actually process Online Payments (see [ADR-019](./DECISIONS.md#adr-019-xendit-online-payment-gcash-maya-card-superseding-adr-008s-no-gateway-stance)). The former Stripe spike (ADR-014) has been **retired and removed**. See [Implementation Status](#implementation-status-target-vs-current).
 
 > [!TIP]
 > This is a **modified Next.js 16**. Its APIs and file conventions differ from older Next.js knowledge (e.g. middleware is `src/proxy.ts`, not `middleware.ts`). Before writing framework code, read the in-repo guides at `node_modules/next/dist/docs/`, as required by [`AGENTS.md`](./AGENTS.md).
@@ -447,7 +449,7 @@ The interface follows modern marketplace best practices, inspired by **Lazada, S
 | `recommendation_rules` table | ❌ Not implemented | Guided Product Selection is a landing **preview** only; `features/assistant` is a stub. |
 | `reports` table | ✅ **Implemented as computed RPCs** (no physical table) | Reports are aggregated DB-side by four read-only `SECURITY DEFINER` RPCs (`report_sales_summary`/`_timeseries`/`_order_status_breakdown`/`_top_products`) over the existing `orders`/`order_items`/`payments`, scoped per shop/admin. A stored `reports` table was deliberately not modelled — see [ARCHITECTURE.md → Reporting RPCs](./ARCHITECTURE.md#reporting-rpcs-analytics-over-existing-orders). |
 | Unified **cart** | Client-side cart (localStorage + `useReducer`) | Guest cart is client-only by design; committed at checkout. |
-| **Payments:** COD + QR receipt upload, manual verification | ✅ **Implemented** — COD (no action needed) + QR (buyer uploads a receipt, seller verifies at `/seller/payments`, admin at `/admin/payments`) | Matches target. Stripe/card spike removed (ADR-014); its columns were dropped from `payments` when this landed. |
+| **Payments:** COD + Xendit Online Payment (GCash, Maya, Card) | ✅ **Implemented** (sandbox/test-mode) — COD (seller/admin marks collected) + Xendit (webhook-confirmed only, never the frontend redirect) | Supersedes the former COD + QR-receipt-upload target (ADR-008 → [ADR-019](./DECISIONS.md#adr-019-xendit-online-payment-gcash-maya-card-superseding-adr-008s-no-gateway-stance)). Stripe/card spike removed (ADR-014). |
 
 ---
 
@@ -483,14 +485,14 @@ When sources disagree, resolve conflicts **top-down**. Business decisions always
 Beyond the current capstone scope (kept clearly separate from committed scope):
 
 - Automated inventory syncing across shops.
-- Payment gateway integration (would supersede the current manual COD/QR model).
+- Seller payouts, platform commission, and real-money settlement (Xendit Online Payment itself has shipped — see [ADR-019](./DECISIONS.md#adr-019-xendit-online-payment-gcash-maya-card-superseding-adr-008s-no-gateway-stance) — but payouts/commission remain explicitly out of scope for this sandbox implementation).
 - Courier / shipping API integration and live tracking.
 - Realtime notifications (Supabase Realtime) and push/email/SMS notification infrastructure. *(A lightweight, derived, read-only buyer activity feed — not realtime, no new infrastructure — was approved separately; see [ADR-018](./DECISIONS.md#adr-018-wishlist-reviews-and-a-derived-buyer-activity-feed).)*
 - Saved shipping addresses.
 - Richer analytics and exportable reports.
 
 > [!NOTE]
-> These are **not** in scope for the capstone and must not be implemented without explicit approval. A Stripe spike toward a possible future gateway previously lived in the repo (ADR-014) and has since been removed — it was never committed scope. Product reviews/ratings and wishlists — previously listed here — were approved for the Buyer UX Improvement Phase; see [ADR-018](./DECISIONS.md#adr-018-wishlist-reviews-and-a-derived-buyer-activity-feed).
+> These are **not** in scope for the capstone and must not be implemented without explicit approval. A Stripe spike toward a possible future gateway previously lived in the repo (ADR-014) and has since been removed — it was never committed scope. Online payment itself was later approved and shipped via Xendit ([ADR-019](./DECISIONS.md#adr-019-xendit-online-payment-gcash-maya-card-superseding-adr-008s-no-gateway-stance)), but seller payouts/commission/settlement remain out of scope. Product reviews/ratings and wishlists — previously listed here — were approved for the Buyer UX Improvement Phase; see [ADR-018](./DECISIONS.md#adr-018-wishlist-reviews-and-a-derived-buyer-activity-feed).
 
 ---
 

@@ -4,9 +4,9 @@ import { z } from "zod";
  * Single source of truth for environment variables.
  * Fails fast at module load so misconfiguration never reaches runtime code.
  *
- * The official payment path is COD + QR receipt upload with manual
- * verification (see DECISIONS.md -> ADR-008). The Stripe spike (ADR-014) has
- * been retired — its keys/config are intentionally not present here.
+ * The official payment path is COD + Xendit Online Payment (GCash, Maya,
+ * Card) — see DECISIONS.md. The Stripe spike (ADR-014) and the QR/manual
+ * verification flow (formerly ADR-008) have both been retired.
  */
 const publicEnvSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.url(),
@@ -17,6 +17,10 @@ const publicEnvSchema = z.object({
 
 const serverEnvSchema = publicEnvSchema.extend({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
+  /** Xendit secret API key (test-mode key for this sandbox implementation). Basic-auth username against api.xendit.co. */
+  XENDIT_SECRET_KEY: z.string().min(1).optional(),
+  /** Compared against the incoming `x-callback-token` webhook header. */
+  XENDIT_WEBHOOK_TOKEN: z.string().min(1).optional(),
 });
 
 /**

@@ -2,16 +2,16 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { VerificationQueue } from "@/features/payments/components/VerificationQueue";
+import { PaymentsList } from "@/features/payments/components/PaymentsList";
 
 export const metadata: Metadata = { title: "Payments — Admin Portal" };
 
-function VerificationQueueSkeleton() {
+function PaymentsListSkeleton() {
   return (
     <div className="flex flex-col gap-3" role="status" aria-live="polite">
-      <span className="sr-only">Loading pending payments</span>
+      <span className="sr-only">Loading payment history</span>
       {Array.from({ length: 3 }).map((_, index) => (
-        <Skeleton key={index} className="h-32 w-full rounded-2xl" />
+        <Skeleton key={index} className="h-20 w-full rounded-2xl" />
       ))}
     </div>
   );
@@ -20,8 +20,8 @@ function VerificationQueueSkeleton() {
 export default function AdminPaymentsPage() {
   return (
     <div className="flex flex-col gap-6 p-5 lg:p-7">
-      <Suspense fallback={<VerificationQueueSkeleton />}>
-        <VerificationQueue />
+      <Suspense fallback={<PaymentsListSkeleton />}>
+        <PaymentsList />
       </Suspense>
     </div>
   );

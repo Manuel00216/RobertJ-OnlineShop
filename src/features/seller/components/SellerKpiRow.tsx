@@ -12,7 +12,6 @@ import {
   getOwnShopId,
   getSalesSummary,
   listDashboardProducts,
-  listPendingPayments,
   requireSessionUser,
 } from "@/lib/supabase/queries";
 
@@ -55,32 +54,29 @@ export interface SellerKpiRowProps {
  * Shop-scoped KPI tiles for the Seller Portal dashboard — same data sources
  * as `AdminKpiRow`, but `listDashboardProducts` is scoped to the caller's own
  * shop instead of `null`. `getSalesSummary`/`getDashboardOrderSummary`/
- * `getLowStockReport`/`listPendingPayments` take no owner argument at all —
- * they resolve to "my shop" vs. "every shop" via RLS on the caller's role,
- * so the same calls as Admin already correctly scope to this seller.
+ * `getLowStockReport` take no owner argument at all — they resolve to "my
+ * shop" vs. "every shop" via RLS on the caller's role, so the same calls as
+ * Admin already correctly scope to this seller.
  */
 export async function SellerKpiRow({ from, to }: SellerKpiRowProps) {
   let summary: Awaited<ReturnType<typeof getSalesSummary>>;
   let pendingOrders: number;
   let totalProducts: number;
   let lowStockCount: number;
-  let pendingPayments: number;
 
   try {
     const user = await requireSessionUser();
     const owner = { sellerId: user.id, shopId: await getOwnShopId(user.id) };
-    const [salesSummary, orderSummary, products, lowStock, payments] = await Promise.all([
+    const [salesSummary, orderSummary, products, lowStock] = await Promise.all([
       getSalesSummary(from, to, null),
       getDashboardOrderSummary(),
       listDashboardProducts(owner),
       getLowStockReport(),
-      listPendingPayments(),
     ]);
     summary = salesSummary;
     pendingOrders = orderSummary.statusCounts.pending;
     totalProducts = products.length;
     lowStockCount = lowStock.length;
-    pendingPayments = payments.length;
   } catch {
     return <ErrorState message="We couldn't load your shop's overview right now." />;
   }
@@ -129,8 +125,8 @@ export async function SellerKpiRow({ from, to }: SellerKpiRowProps) {
       />
       <StatCard
         href={ROUTES.sellerPayments}
-        label="Pending Payments"
-        value={pendingPayments}
+        label="Online Payments"
+        value={summary.xenditPaidOrders}
         icon={CreditCard}
         iconBg="bg-primary/10"
         iconColor="text-primary"

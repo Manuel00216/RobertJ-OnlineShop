@@ -15,6 +15,30 @@ Full current-vs-target status: [README.md → Implementation Status](./README.md
 
 ---
 
+## 2026-09-06 — Xendit Online Payment (GCash, Maya, Card); QR manual verification retired
+
+See [DECISIONS.md → ADR-019](./DECISIONS.md#adr-019-xendit-online-payment-gcash-maya-card-superseding-adr-008s-no-gateway-stance) for full rationale. Sandbox/test-mode implementation — no seller payouts, commission, or real-money settlement.
+
+### Added
+- Payment methods are now **COD** and **Xendit Online Payment** (GCash, Maya, Card) only.
+- New RPCs: `begin_xendit_payment_attempt`, `finalize_xendit_payment_request` (buyer-authenticated, idempotent attempt reservation), `process_xendit_webhook` (`service_role`-only — the sole path to `paid`), `mark_cod_payment_collected` (seller/admin, replaces auto-paid-at-creation for COD).
+- New `payment_webhook_events` audit table — every webhook delivery logged regardless of outcome, making duplicate/out-of-order handling forensically auditable.
+- New `payments` columns: `xendit_payment_request_id`, `xendit_payment_id`, `payment_channel`, `checkout_url`, `expires_at`, `provider_response`. New `payment_method_type` value: `xendit`.
+- New webhook receiver: `POST /api/webhooks/xendit` (token-verified, `proxy.ts` skips session refresh for it).
+- New env vars: `XENDIT_SECRET_KEY`, `XENDIT_WEBHOOK_TOKEN`.
+- New UI: `XenditPaymentOptions` (GCash/Maya redirect + embedded Card via `xendit-components-web`), `MarkCodCollectedButton`, read-only `PaymentsList` (replaces the verification queue).
+- `report_sales_summary` gains a third `xendit_paid_orders` bucket (fixes a latent bug where the old binary COD/QR split would have silently miscounted Xendit revenue as COD).
+
+### Removed
+- `submit_qr_payment`/`verify_payment` RPCs and the seller-self-verification trigger carve-out (closed in favor of a `mark_cod_payment_collected`-specific, flag-gated one — a bare "seller can flip payment_status" condition would have reopened a self-declare gap).
+- Buyer-facing QR checkout option, `ReceiptUpload`, `VerificationQueue`/`VerificationCard`, and the four dashboard "Pending Payments" surfaces (Xendit settles via webhook; nothing left to queue).
+- Seller-editable "Payment QR code URL" profile field (`ProfileForm`) — no new Bank Transfer/QR setup is possible.
+
+### Preserved (not touched)
+- Every historical `payments` row (`qr_upload`/`card` `payment_method_type`), every uploaded receipt, and every `profiles.payment_qr_url` value — read-only, for audit. `create_order`, `placeOrderAction`, order-status transitions, COD-order-placement flow, and the `decide_return` refund flow are all unchanged.
+
+---
+
 ## 2026-08-13 — Reports & analytics (Phase 8)
 
 ### Added

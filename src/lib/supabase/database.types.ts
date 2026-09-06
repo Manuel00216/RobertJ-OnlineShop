@@ -1,13 +1,3 @@
-/**
- * Database types for the Roberj Marketplace schema.
- *
- * Generated from the live project (hjxtbnmnwlbqgptgncoh). Regenerate after
- * any migration:
- *
- *   npx supabase login
- *   npx supabase link --project-ref hjxtbnmnwlbqgptgncoh
- *   npx supabase gen types typescript --linked > src/lib/supabase/database.types.ts
- */
 export type Json =
   | string
   | number
@@ -300,48 +290,113 @@ export type Database = {
           },
         ]
       }
+      payment_webhook_events: {
+        Row: {
+          event_type: string | null
+          id: string
+          payment_row_id: string | null
+          processing_result: string
+          raw_payload: Json
+          received_at: string
+          reference_id: string | null
+          status: string | null
+          xendit_payment_id: string | null
+          xendit_payment_request_id: string | null
+        }
+        Insert: {
+          event_type?: string | null
+          id?: string
+          payment_row_id?: string | null
+          processing_result: string
+          raw_payload: Json
+          received_at?: string
+          reference_id?: string | null
+          status?: string | null
+          xendit_payment_id?: string | null
+          xendit_payment_request_id?: string | null
+        }
+        Update: {
+          event_type?: string | null
+          id?: string
+          payment_row_id?: string | null
+          processing_result?: string
+          raw_payload?: Json
+          received_at?: string
+          reference_id?: string | null
+          status?: string | null
+          xendit_payment_id?: string | null
+          xendit_payment_request_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_webhook_events_payment_row_id_fkey"
+            columns: ["payment_row_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payments: {
         Row: {
           amount_cents: number
+          checkout_url: string | null
           created_at: string
           currency: string
+          expires_at: string | null
           failure_reason: string | null
           id: string
           order_id: string
+          payment_channel: string | null
           payment_method_type: Database["public"]["Enums"]["payment_method_type"]
+          provider_response: Json | null
           receipt_path: string | null
           status: Database["public"]["Enums"]["payment_status"]
           updated_at: string
           verified_at: string | null
           verified_by: string | null
+          xendit_payment_id: string | null
+          xendit_payment_request_id: string | null
         }
         Insert: {
           amount_cents: number
+          checkout_url?: string | null
           created_at?: string
           currency?: string
+          expires_at?: string | null
           failure_reason?: string | null
           id?: string
           order_id: string
+          payment_channel?: string | null
           payment_method_type?: Database["public"]["Enums"]["payment_method_type"]
+          provider_response?: Json | null
           receipt_path?: string | null
           status?: Database["public"]["Enums"]["payment_status"]
           updated_at?: string
           verified_at?: string | null
           verified_by?: string | null
+          xendit_payment_id?: string | null
+          xendit_payment_request_id?: string | null
         }
         Update: {
           amount_cents?: number
+          checkout_url?: string | null
           created_at?: string
           currency?: string
+          expires_at?: string | null
           failure_reason?: string | null
           id?: string
           order_id?: string
+          payment_channel?: string | null
           payment_method_type?: Database["public"]["Enums"]["payment_method_type"]
+          provider_response?: Json | null
           receipt_path?: string | null
           status?: Database["public"]["Enums"]["payment_status"]
           updated_at?: string
           verified_at?: string | null
           verified_by?: string | null
+          xendit_payment_id?: string | null
+          xendit_payment_request_id?: string | null
         }
         Relationships: [
           {
@@ -970,6 +1025,35 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      begin_xendit_payment_attempt: {
+        Args: { p_channel_code: string; p_order_id: string }
+        Returns: {
+          amount_cents: number
+          checkout_url: string | null
+          created_at: string
+          currency: string
+          expires_at: string | null
+          failure_reason: string | null
+          id: string
+          order_id: string
+          payment_channel: string | null
+          payment_method_type: Database["public"]["Enums"]["payment_method_type"]
+          provider_response: Json | null
+          receipt_path: string | null
+          status: Database["public"]["Enums"]["payment_status"]
+          updated_at: string
+          verified_at: string | null
+          verified_by: string | null
+          xendit_payment_id: string | null
+          xendit_payment_request_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "payments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       check_rate_limit: {
         Args: { p_key: string; p_max_hits: number; p_window_seconds: number }
         Returns: boolean
@@ -1042,6 +1126,41 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      finalize_xendit_payment_request: {
+        Args: {
+          p_checkout_url: string
+          p_expires_at?: string
+          p_payment_id: string
+          p_status?: string
+          p_xendit_payment_request_id: string
+        }
+        Returns: {
+          amount_cents: number
+          checkout_url: string | null
+          created_at: string
+          currency: string
+          expires_at: string | null
+          failure_reason: string | null
+          id: string
+          order_id: string
+          payment_channel: string | null
+          payment_method_type: Database["public"]["Enums"]["payment_method_type"]
+          provider_response: Json | null
+          receipt_path: string | null
+          status: Database["public"]["Enums"]["payment_status"]
+          updated_at: string
+          verified_at: string | null
+          verified_by: string | null
+          xendit_payment_id: string | null
+          xendit_payment_request_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "payments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       get_buyer_activity_feed: {
         Args: { p_limit?: number }
         Returns: {
@@ -1075,6 +1194,73 @@ export type Database = {
       }
       is_admin: { Args: never; Returns: boolean }
       is_shop_member: { Args: { p_shop_id: string }; Returns: boolean }
+      mark_cod_payment_collected: {
+        Args: { p_order_id: string }
+        Returns: {
+          amount_cents: number
+          checkout_url: string | null
+          created_at: string
+          currency: string
+          expires_at: string | null
+          failure_reason: string | null
+          id: string
+          order_id: string
+          payment_channel: string | null
+          payment_method_type: Database["public"]["Enums"]["payment_method_type"]
+          provider_response: Json | null
+          receipt_path: string | null
+          status: Database["public"]["Enums"]["payment_status"]
+          updated_at: string
+          verified_at: string | null
+          verified_by: string | null
+          xendit_payment_id: string | null
+          xendit_payment_request_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "payments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      process_xendit_webhook: {
+        Args: {
+          p_amount_cents: number
+          p_channel_code?: string
+          p_currency: string
+          p_raw_payload: Json
+          p_reference_id: string
+          p_status: string
+          p_xendit_payment_id: string
+          p_xendit_payment_request_id: string
+        }
+        Returns: {
+          amount_cents: number
+          checkout_url: string | null
+          created_at: string
+          currency: string
+          expires_at: string | null
+          failure_reason: string | null
+          id: string
+          order_id: string
+          payment_channel: string | null
+          payment_method_type: Database["public"]["Enums"]["payment_method_type"]
+          provider_response: Json | null
+          receipt_path: string | null
+          status: Database["public"]["Enums"]["payment_status"]
+          updated_at: string
+          verified_at: string | null
+          verified_by: string | null
+          xendit_payment_id: string | null
+          xendit_payment_request_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "payments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       report_order_status_breakdown: {
         Args: { p_from: string; p_shop_id?: string; p_to: string }
         Returns: {
@@ -1094,6 +1280,7 @@ export type Database = {
           revenue_cents: number
           total_orders: number
           units_sold: number
+          xendit_paid_orders: number
         }[]
       }
       report_sales_timeseries: {
@@ -1193,29 +1380,6 @@ export type Database = {
         }
       }
       slugify: { Args: { value: string }; Returns: string }
-      submit_qr_payment: {
-        Args: { p_order_id: string; p_receipt_path: string }
-        Returns: {
-          amount_cents: number
-          created_at: string
-          currency: string
-          failure_reason: string | null
-          id: string
-          order_id: string
-          payment_method_type: Database["public"]["Enums"]["payment_method_type"]
-          receipt_path: string | null
-          status: Database["public"]["Enums"]["payment_status"]
-          updated_at: string
-          verified_at: string | null
-          verified_by: string | null
-        }
-        SetofOptions: {
-          from: "*"
-          to: "payments"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
       submit_review: {
         Args: { p_comment: string; p_order_item_id: string; p_rating: number }
         Returns: {
@@ -1236,33 +1400,6 @@ export type Database = {
         }
       }
       unaccent_fallback: { Args: { value: string }; Returns: string }
-      verify_payment: {
-        Args: {
-          p_decision: Database["public"]["Enums"]["payment_status"]
-          p_payment_id: string
-          p_reason?: string
-        }
-        Returns: {
-          amount_cents: number
-          created_at: string
-          currency: string
-          failure_reason: string | null
-          id: string
-          order_id: string
-          payment_method_type: Database["public"]["Enums"]["payment_method_type"]
-          receipt_path: string | null
-          status: Database["public"]["Enums"]["payment_status"]
-          updated_at: string
-          verified_at: string | null
-          verified_by: string | null
-        }
-        SetofOptions: {
-          from: "*"
-          to: "payments"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
     }
     Enums: {
       order_status:
@@ -1273,7 +1410,7 @@ export type Database = {
         | "delivered"
         | "cancelled"
         | "refunded"
-      payment_method_type: "cod" | "card" | "qr_upload"
+      payment_method_type: "cod" | "card" | "qr_upload" | "xendit"
       payment_status:
         | "pending"
         | "paid"
@@ -1433,7 +1570,7 @@ export const Constants = {
         "cancelled",
         "refunded",
       ],
-      payment_method_type: ["cod", "card", "qr_upload"],
+      payment_method_type: ["cod", "card", "qr_upload", "xendit"],
       payment_status: [
         "pending",
         "paid",
@@ -1449,6 +1586,15 @@ export const Constants = {
         "seller_rejected",
         "admin_rejected",
         "refunded",
+      ],
+      stock_adjustment_reason: [
+        "initial_stock",
+        "restock",
+        "correction",
+        "sale",
+        "cancellation_restock",
+        "shrinkage",
+        "other",
       ],
       user_role: ["buyer", "seller", "admin"],
     },

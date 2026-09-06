@@ -3,22 +3,22 @@ import { CHECKOUT_COPY } from "@/features/checkout/constants/checkout.constants"
 import type { PaymentMethod } from "@/features/checkout/types/checkout.types";
 import { cn } from "@/lib/utils/cn";
 
-// The Stripe/card spike (ADR-014) has been retired — COD and QR (ADR-008's
-// target methods) are the only two options.
+// The Stripe/card spike (ADR-014) and the QR/manual-verification flow have
+// both been retired — COD and Xendit Online Payment are the only two options.
 const METHODS: Array<{
   value: PaymentMethod;
   label: string;
   description: string;
 }> = [
   { value: "cod", label: CHECKOUT_COPY.codLabel, description: CHECKOUT_COPY.codDescription },
-  { value: "qr_upload", label: CHECKOUT_COPY.qrLabel, description: CHECKOUT_COPY.qrDescription },
+  { value: "xendit", label: CHECKOUT_COPY.onlineLabel, description: CHECKOUT_COPY.onlineDescription },
 ];
 
 /**
- * Payment-method selector (COD | QR Transfer). Selecting QR is informational
- * only here — nothing is persisted at order-placement time; the buyer
- * actually submits a receipt afterward from the order detail page (see
- * `features/payments`).
+ * Payment-method selector (COD | Online Payment). Selecting Online Payment is
+ * informational only here — nothing is persisted at order-placement time;
+ * the buyer actually starts the Xendit payment afterward from the order
+ * detail page (see `features/payments`).
  */
 export function PaymentMethodCard({
   method,

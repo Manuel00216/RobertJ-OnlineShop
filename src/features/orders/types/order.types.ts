@@ -59,8 +59,6 @@ export interface Order {
    * admin's personal name).
    */
   sellerRole: UserRole | null;
-  /** Seller's receiving QR code image, shown to the buyer for a QR payment. */
-  sellerPaymentQrUrl: string | null;
   items: OrderItem[];
   placedAt: string;
   paidAt: string | null;

@@ -53,10 +53,16 @@ export async function SalesSummaryPanel({ filters }: { filters: ReportFilters })
       tone: "success",
     },
     {
-      label: "QR transfer",
+      label: "Online Payment (Xendit)",
+      value: summary.xenditPaidOrders,
+      valueLabel: `${summary.xenditPaidOrders}`,
+      tone: "info",
+    },
+    {
+      label: "QR transfer (legacy)",
       value: summary.qrPaidOrders,
       valueLabel: `${summary.qrPaidOrders}`,
-      tone: "info",
+      tone: "neutral",
     },
     {
       label: "Awaiting payment",
@@ -67,7 +73,11 @@ export async function SalesSummaryPanel({ filters }: { filters: ReportFilters })
   ];
 
   const hasPaymentData =
-    summary.codPaidOrders + summary.qrPaidOrders + summary.pendingPaymentOrders > 0;
+    summary.codPaidOrders +
+      summary.xenditPaidOrders +
+      summary.qrPaidOrders +
+      summary.pendingPaymentOrders >
+    0;
 
   return (
     <div className="flex flex-col gap-6">

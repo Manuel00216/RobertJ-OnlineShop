@@ -204,7 +204,8 @@ export function buildReportCsv(
     ["Units sold", summary.unitsSold],
     ["Average order value (PHP)", fromCents(summary.avgOrderValueCents)],
     ["COD paid orders", summary.codPaidOrders],
-    ["QR paid orders", summary.qrPaidOrders],
+    ["QR paid orders (legacy)", summary.qrPaidOrders],
+    ["Online payment (Xendit) paid orders", summary.xenditPaidOrders],
     ["Pending payment orders", summary.pendingPaymentOrders],
   ];
   for (const [label, value] of summaryRows) {

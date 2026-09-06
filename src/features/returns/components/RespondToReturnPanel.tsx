@@ -14,8 +14,9 @@ export interface RespondToReturnPanelProps {
 
 /**
  * The order's own seller (or admin) accepts/rejects a pending return
- * request — mirrors `VerificationCard`'s two-button-then-shared-`ConfirmPanel`
- * shape. Only ever rendered by the caller when `request.status === 'pending'`.
+ * request — a two-button-then-shared-`ConfirmPanel` shape (see
+ * `MarkCodCollectedButton` for the same pattern). Only ever rendered by the
+ * caller when `request.status === 'pending'`.
  */
 export function RespondToReturnPanel({ returnId }: RespondToReturnPanelProps) {
   const [pendingDecision, setPendingDecision] = useState<SellerReturnDecision | null>(null);

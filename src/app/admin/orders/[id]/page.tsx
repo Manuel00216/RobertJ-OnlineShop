@@ -10,6 +10,7 @@ import { OrderSummary } from "@/features/orders/components/OrderSummary";
 import { OrderTimeline } from "@/features/orders/components/OrderTimeline";
 import { PaymentStatusBadge } from "@/features/orders/components/PaymentStatusBadge";
 import { ShippingAddressCard } from "@/features/orders/components/ShippingAddressCard";
+import { MarkCodCollectedButton } from "@/features/payments/components/MarkCodCollectedButton";
 import { ReturnRequestStatusCard } from "@/features/returns/components/ReturnRequestStatusCard";
 import { RespondToReturnPanel } from "@/features/returns/components/RespondToReturnPanel";
 import {
@@ -79,6 +80,11 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
               <div className="mt-2">
                 <PaymentStatusBadge status={order.paymentStatus} />
               </div>
+              {order.paymentStatus === "pending" ? (
+                <div className="mt-3">
+                  <MarkCodCollectedButton orderId={order.id} />
+                </div>
+              ) : null}
             </div>
           </section>
         </div>

@@ -12,7 +12,7 @@ import { getReturnEvidenceSignedUrl, listReturnRequests } from "@/lib/supabase/q
  * Server Component: every return request visible to the caller (RLS scopes
  * to admin = all, seller = own-shop's — this page is admin-only per its
  * route guard, but the query/component are role-agnostic, matching
- * `VerificationQueue`'s shape), each with its evidence photo's signed URL
+ * `PaymentsList`'s shape), each with its evidence photo's signed URL
  * resolved up front since the bucket is private.
  */
 export async function ReturnQueue() {

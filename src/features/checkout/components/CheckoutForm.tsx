@@ -192,8 +192,8 @@ export function CheckoutForm() {
           />
 
           <PaymentMethodCard method={method} onChange={setMethod} />
-          {method === "qr_upload" ? (
-            <p className="text-xs text-rj-gray-600">{CHECKOUT_COPY.qrNote}</p>
+          {method === "xendit" ? (
+            <p className="text-xs text-rj-gray-600">{CHECKOUT_COPY.onlineNote}</p>
           ) : null}
         </div>
 

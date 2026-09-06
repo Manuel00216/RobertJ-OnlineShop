@@ -7,17 +7,15 @@ import { AdminLayout, type AdminNotification } from "@/features/admin";
 import {
   getDashboardOrderSummary,
   getLowStockReport,
-  listPendingPayments,
   listReturnRequests,
   requireRole,
 } from "@/lib/supabase/queries";
 
 /** Real pending-work signals surfaced as notifications — no mock data, no separate notifications table. */
 async function getAdminNotifications(): Promise<AdminNotification[]> {
-  const [orderSummary, lowStock, pendingPayments, pendingReturns] = await Promise.all([
+  const [orderSummary, lowStock, pendingReturns] = await Promise.all([
     getDashboardOrderSummary(),
     getLowStockReport(),
-    listPendingPayments(),
     listReturnRequests(RETURN_STATUS.sellerAccepted),
   ]);
 
@@ -39,15 +37,6 @@ async function getAdminNotifications(): Promise<AdminNotification[]> {
       description: `${lowStock.length} product${lowStock.length === 1 ? "" : "s"} running low or out of stock`,
       href: ROUTES.adminInventory,
       tone: "danger",
-    });
-  }
-  if (pendingPayments.length > 0) {
-    notifications.push({
-      id: "pending-payments",
-      title: "Pending payments",
-      description: `${pendingPayments.length} payment${pendingPayments.length === 1 ? "" : "s"} awaiting verification`,
-      href: ROUTES.adminPayments,
-      tone: "info",
     });
   }
   if (pendingReturns.length > 0) {

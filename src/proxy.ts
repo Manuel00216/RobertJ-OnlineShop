@@ -18,8 +18,17 @@ function withSessionCookies(redirect: NextResponse, source: NextResponse) {
 }
 
 export default async function proxy(request: NextRequest) {
-  const { response, user } = await updateSupabaseSession(request);
   const { pathname } = request.nextUrl;
+
+  // Webhook receivers are server-to-server, unauthenticated-by-cookie
+  // requests (Xendit's callback token is verified inside the route itself)
+  // — skip the Supabase session-cookie refresh entirely rather than paying
+  // for a no-op auth.getUser() call on every incoming webhook.
+  if (pathname.startsWith("/api/webhooks/")) {
+    return NextResponse.next();
+  }
+
+  const { response, user } = await updateSupabaseSession(request);
 
   // Exact-segment matching: "/account" must not match "/accounting".
   const isProtected = PROTECTED_ROUTE_PREFIXES.some(
