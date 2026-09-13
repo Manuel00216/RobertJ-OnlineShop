@@ -111,3 +111,22 @@ export const changePasswordSchema = z
   });
 
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+
+/**
+ * Privacy & Settings' preference toggles + default payment method. Every
+ * field is optional so a single-toggle save (the UI's actual usage — one
+ * checkbox/radio change at a time) only sends the one field that changed;
+ * `updateMyBuyerPreferences`'s partial upsert leaves every other column
+ * untouched. `defaultPaymentMethod` mirrors `checkout.types.ts`'s
+ * `PaymentMethod` union exactly — never a value checkout can't offer.
+ */
+export const updateBuyerPreferencesSchema = z.object({
+  orderUpdates: z.boolean().optional(),
+  promotions: z.boolean().optional(),
+  pushEnabled: z.boolean().optional(),
+  emailEnabled: z.boolean().optional(),
+  smsEnabled: z.boolean().optional(),
+  defaultPaymentMethod: z.enum(["cod", "xendit"]).nullable().optional(),
+});
+
+export type UpdateBuyerPreferencesInput = z.infer<typeof updateBuyerPreferencesSchema>;

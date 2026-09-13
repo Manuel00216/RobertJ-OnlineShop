@@ -20,3 +20,19 @@ export interface Profile {
   paymentQrUrl: string | null;
   role: string;
 }
+
+/**
+ * Privacy & Settings' notification toggles + default checkout payment
+ * method — one row per buyer in `buyer_preferences`. A buyer with no row yet
+ * gets these exact defaults (see `getMyBuyerPreferences`), never an
+ * "unset"/`null` state in the UI.
+ */
+export interface BuyerPreferences {
+  orderUpdates: boolean;
+  promotions: boolean;
+  pushEnabled: boolean;
+  emailEnabled: boolean;
+  smsEnabled: boolean;
+  /** Mirrors `checkout.types.ts`'s `PaymentMethod` union — never a value the checkout UI can't offer. */
+  defaultPaymentMethod: "cod" | "xendit" | null;
+}

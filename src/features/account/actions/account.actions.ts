@@ -11,10 +11,11 @@ import {
   changePasswordSchema,
   linkProviderSchema,
   unlinkProviderSchema,
+  updateBuyerPreferencesSchema,
   updateProfileSchema,
   uploadAvatarSchema,
 } from "@/features/account/schemas/account.schema";
-import type { Profile } from "@/features/account/types/account.types";
+import type { BuyerPreferences, Profile } from "@/features/account/types/account.types";
 
 /** Updates the signed-in user's own profile row. RLS restricts the write to own row. */
 export async function updateProfileAction(
@@ -172,4 +173,55 @@ export async function changePasswordAction(
   }
 
   return ok(null);
+}
+
+/**
+ * Saves one or more Privacy & Settings preferences. Called once per toggle/
+ * radio change (not one big form submit) — `input` only carries the field
+ * that changed, and `queries.updateMyBuyerPreferences`'s partial upsert
+ * leaves everything else untouched. Revalidates `/notifications` too since
+ * `orderUpdates` gates whether that page's activity feed renders.
+ */
+export async function updateBuyerPreferencesAction(
+  input: unknown,
+): Promise<ActionResult<BuyerPreferences>> {
+  const parsed = updateBuyerPreferencesSchema.safeParse(input);
+  if (!parsed.success) return fromZodError(parsed.error);
+
+  try {
+    const user = await queries.requireSessionUser();
+    await queries.requireRateLimit(`updatePreferences:${user.id}`, 30, 60);
+    const preferences = await queries.updateMyBuyerPreferences(user.id, parsed.data);
+    revalidatePath(ROUTES.privacy, "layout");
+    revalidatePath(ROUTES.notifications, "layout");
+    return ok(preferences);
+  } catch (error) {
+    return fail(
+      error instanceof Error ? error.message : "Could not save your preferences.",
+    );
+  }
+}
+
+/**
+ * Deactivates the signed-in buyer's own account (`self_deactivate_account`
+ * RPC), then signs them out and redirects to sign-in — mirroring
+ * `signOutAction`'s exact sign-out/redirect shape. On failure (e.g. a
+ * seller/admin somehow reaching this, or an already-inactive account)
+ * returns a friendly error instead of redirecting, so the confirmation
+ * panel that called this can display it inline.
+ */
+export async function deactivateAccountAction(): Promise<ActionResult<null>> {
+  try {
+    const user = await queries.requireSessionUser();
+    await queries.requireRateLimit(`deactivateAccount:${user.id}`, 3, 300);
+    await queries.selfDeactivateAccount();
+  } catch (error) {
+    return fail(
+      error instanceof Error ? error.message : "Could not deactivate your account.",
+    );
+  }
+
+  await queries.signOut();
+  revalidatePath("/", "layout");
+  redirect(ROUTES.signIn);
 }

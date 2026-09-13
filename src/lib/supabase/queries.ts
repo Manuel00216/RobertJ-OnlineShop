@@ -59,7 +59,7 @@ import type {
 } from "@/features/orders/types/order.types";
 import type { UpdateProfileInput } from "@/features/account/schemas/account.schema";
 import type { OAuthProvider } from "@/features/auth/schemas/auth.schema";
-import type { Profile } from "@/features/account/types/account.types";
+import type { BuyerPreferences, Profile } from "@/features/account/types/account.types";
 import type { Payment, PaymentAttempt } from "@/features/payments/types/payment.types";
 import type { Shop, ShopWithMember } from "@/features/shops/types/shop.types";
 import type { AdminUser } from "@/features/users/types/user.types";
@@ -2252,6 +2252,109 @@ export async function setDefaultAddress(
     throw queryError("Failed to set default address", error);
   }
   return toAddress(data as AddressRow);
+}
+
+// ============================================================================
+// Buyer Preferences (Privacy & Settings: notifications + default payment method)
+// ============================================================================
+
+type BuyerPreferencesRow = Database["public"]["Tables"]["buyer_preferences"]["Row"];
+
+const BUYER_PREFERENCES_COLUMNS =
+  "order_updates, promotions, push_enabled, email_enabled, sms_enabled, default_payment_method";
+
+function defaultBuyerPreferences(): BuyerPreferences {
+  return {
+    orderUpdates: true,
+    promotions: true,
+    pushEnabled: false,
+    emailEnabled: true,
+    smsEnabled: false,
+    defaultPaymentMethod: null,
+  };
+}
+
+function toBuyerPreferences(row: BuyerPreferencesRow): BuyerPreferences {
+  return {
+    orderUpdates: row.order_updates,
+    promotions: row.promotions,
+    pushEnabled: row.push_enabled,
+    emailEnabled: row.email_enabled,
+    smsEnabled: row.sms_enabled,
+    defaultPaymentMethod: (row.default_payment_method as "cod" | "xendit" | null) ?? null,
+  };
+}
+
+/**
+ * The signed-in buyer's notification/payment-method preferences. A buyer who
+ * has never saved a preference has no row yet — that's "use defaults", not
+ * an error, so a missing row resolves to `defaultBuyerPreferences()` rather
+ * than throwing or auto-creating a row on read.
+ */
+export async function getMyBuyerPreferences(userId: string): Promise<BuyerPreferences> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.BUYER_PREFERENCES)
+    .select(BUYER_PREFERENCES_COLUMNS)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    throw queryError("Failed to load your preferences", error);
+  }
+  return data ? toBuyerPreferences(data as BuyerPreferencesRow) : defaultBuyerPreferences();
+}
+
+/**
+ * Saves one or more of the signed-in buyer's preferences. `upsert` with a
+ * partial payload is safe on both branches: the INSERT branch (first save)
+ * fills any omitted column from the table's own DEFAULT, and the UPDATE
+ * branch (`on conflict (user_id)`) only overwrites the columns present in
+ * `input` — an omitted field is never reset to its default on an existing row.
+ */
+export async function updateMyBuyerPreferences(
+  userId: string,
+  input: Partial<BuyerPreferences>,
+): Promise<BuyerPreferences> {
+  const supabase = await createSupabaseServerClient();
+  const payload: Database["public"]["Tables"]["buyer_preferences"]["Insert"] = {
+    user_id: userId,
+  };
+  if (input.orderUpdates !== undefined) payload.order_updates = input.orderUpdates;
+  if (input.promotions !== undefined) payload.promotions = input.promotions;
+  if (input.pushEnabled !== undefined) payload.push_enabled = input.pushEnabled;
+  if (input.emailEnabled !== undefined) payload.email_enabled = input.emailEnabled;
+  if (input.smsEnabled !== undefined) payload.sms_enabled = input.smsEnabled;
+  if (input.defaultPaymentMethod !== undefined) {
+    payload.default_payment_method = input.defaultPaymentMethod;
+  }
+
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.BUYER_PREFERENCES)
+    .upsert(payload, { onConflict: "user_id" })
+    .select(BUYER_PREFERENCES_COLUMNS)
+    .single();
+
+  if (error) {
+    throw queryError("Failed to save your preferences", error);
+  }
+  return toBuyerPreferences(data as BuyerPreferencesRow);
+}
+
+/**
+ * Deactivates the signed-in buyer's own account via the
+ * `self_deactivate_account` RPC (the sole write path; see that function's
+ * comment for why a plain client update can't do this). The RPC itself
+ * rejects non-buyer callers and an already-inactive account, so those cases
+ * surface as a friendly error here rather than needing a duplicate check.
+ */
+export async function selfDeactivateAccount(): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("self_deactivate_account");
+
+  if (error) {
+    throw rpcError("Could not deactivate your account.", error);
+  }
 }
 
 // ============================================================================

@@ -57,6 +57,8 @@ export interface CheckoutFormProps {
   initialAddressSource?: AddressSource;
   /** The saved address `initialAddress` came from, when the source is "saved" — pre-selects it in the picker. */
   initialSelectedAddressId?: string | null;
+  /** The buyer's saved default payment method (Privacy & Settings), if any — seeds the initial radio selection. Purely a starting value; the buyer can still change it here, same as address. */
+  initialMethod?: PaymentMethod;
 }
 
 /**
@@ -74,6 +76,7 @@ export function CheckoutForm({
   initialAddress,
   initialAddressSource = "empty",
   initialSelectedAddressId = null,
+  initialMethod,
 }: CheckoutFormProps) {
   const router = useRouter();
   const { items, removeMany, selectedIds } = useCart();
@@ -100,7 +103,7 @@ export function CheckoutForm({
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [result, setResult] = useState<PlaceOrderResult | null>(null);
-  const [method, setMethod] = useState<PaymentMethod>("cod");
+  const [method, setMethod] = useState<PaymentMethod>(initialMethod ?? "cod");
   const [notes, setNotes] = useState("");
   const [isPending, startTransition] = useTransition();
 

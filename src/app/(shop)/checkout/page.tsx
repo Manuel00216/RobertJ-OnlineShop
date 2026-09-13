@@ -15,10 +15,11 @@ export default async function CheckoutPage() {
   // Prefill priority: default saved address -> last order's address ->
   // profile name/phone -> empty form. Each fetch degrades independently
   // (`.catch(() => ...)`) so one failing never blocks checkout.
-  const [savedAddresses, lastOrders, profile] = await Promise.all([
+  const [savedAddresses, lastOrders, profile, preferences] = await Promise.all([
     queries.listMyAddresses(user.id).catch(() => []),
     queries.listBuyerOrders(user.id, { page: 1, pageSize: 1 }).catch(() => null),
     queries.getMyProfile().catch(() => null),
+    queries.getMyBuyerPreferences(user.id).catch(() => null),
   ]);
 
   const defaultAddress = savedAddresses.find((address) => address.isDefault) ?? null;
@@ -76,6 +77,7 @@ export default async function CheckoutPage() {
         initialAddress={initialAddress}
         initialAddressSource={initialAddressSource}
         initialSelectedAddressId={initialSelectedAddressId}
+        initialMethod={preferences?.defaultPaymentMethod ?? undefined}
       />
     </div>
   );

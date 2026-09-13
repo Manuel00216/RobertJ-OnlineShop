@@ -128,6 +128,50 @@ export type Database = {
           },
         ]
       }
+      buyer_preferences: {
+        Row: {
+          created_at: string
+          default_payment_method: string | null
+          email_enabled: boolean
+          order_updates: boolean
+          promotions: boolean
+          push_enabled: boolean
+          sms_enabled: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          default_payment_method?: string | null
+          email_enabled?: boolean
+          order_updates?: boolean
+          promotions?: boolean
+          push_enabled?: boolean
+          sms_enabled?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          default_payment_method?: string | null
+          email_enabled?: boolean
+          order_updates?: boolean
+          promotions?: boolean
+          push_enabled?: boolean
+          sms_enabled?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "buyer_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cart_items: {
         Row: {
           cart_id: string
@@ -1708,6 +1752,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      self_deactivate_account: { Args: never; Returns: undefined }
       slugify: { Args: { value: string }; Returns: string }
       submit_review: {
         Args: { p_comment: string; p_order_item_id: string; p_rating: number }
