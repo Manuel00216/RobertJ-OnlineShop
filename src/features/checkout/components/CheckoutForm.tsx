@@ -19,6 +19,7 @@ import { CheckoutGroupCard } from "@/features/checkout/components/CheckoutGroupC
 import { CheckoutTotals } from "@/features/checkout/components/CheckoutTotals";
 import { OrderNotesField } from "@/features/checkout/components/OrderNotesField";
 import { PaymentMethodCard } from "@/features/checkout/components/PaymentMethodCard";
+import { SelectedAddressCard } from "@/features/checkout/components/SelectedAddressCard";
 import { ShippingAddressForm } from "@/features/checkout/components/ShippingAddressForm";
 import { ShippingMethodCard } from "@/features/checkout/components/ShippingMethodCard";
 import { CHECKOUT_CONSTANTS, CHECKOUT_COPY } from "@/features/checkout/constants/checkout.constants";
@@ -278,57 +279,76 @@ export function CheckoutForm({
 
       <div className="grid gap-8 lg:grid-cols-3">
         <div className="flex flex-col gap-8 lg:col-span-2">
-          <section aria-label="Your order" className="flex flex-col gap-6">
-            {groups.map((group) => (
-              <CheckoutGroupCard key={group.sellerId} group={group} />
-            ))}
+          <section aria-label={CHECKOUT_COPY.orderSectionTitle} className="flex flex-col gap-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-rj-gray-600">
+              {CHECKOUT_COPY.orderSectionTitle}
+            </p>
+            <div className="flex flex-col gap-6">
+              {groups.map((group) => (
+                <CheckoutGroupCard
+                  key={group.sellerId}
+                  group={group}
+                  showTotals={groups.length > 1}
+                />
+              ))}
+            </div>
           </section>
 
-          {savedAddresses.length > 0 ? (
-            <div className="flex items-center justify-between px-1">
-              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-rj-gray-600">
-                Delivery address
-              </p>
-              <button
-                type="button"
-                onClick={() => setShowPicker((v) => !v)}
-                aria-expanded={showPicker}
-                className="text-xs font-semibold text-rj-red-dark hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30"
-              >
-                {showPicker ? "Hide" : CHECKOUT_COPY.changeAddressLabel}
-              </button>
-            </div>
-          ) : null}
+          <div className="flex flex-col gap-3">
+            {savedAddresses.length > 0 ? (
+              <div className="flex items-center justify-between px-1">
+                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-rj-gray-600">
+                  {CHECKOUT_COPY.deliveryAddressSectionTitle}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowPicker((v) => !v)}
+                  aria-expanded={showPicker}
+                  className="text-xs font-semibold text-rj-red-dark hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30"
+                >
+                  {showPicker ? "Hide" : CHECKOUT_COPY.changeAddressLabel}
+                </button>
+              </div>
+            ) : null}
 
-          {showPicker ? (
-            <AddressPicker
-              addresses={savedAddresses}
-              selectedAddressId={selectedAddressId}
-              onSelectAddress={handleSelectAddress}
-              onSelectNew={handleSelectNewAddress}
-            />
-          ) : null}
-
-          {addressHint ? (
-            <p className="text-xs text-rj-gray-600">{addressHint}</p>
-          ) : null}
-          <ShippingAddressForm
-            values={address}
-            errors={fieldErrors}
-            onChange={handleChange}
-          />
-
-          {showSaveAddressOption ? (
-            <label className="flex items-center gap-2 px-1 text-xs font-medium text-rj-gray-600">
-              <input
-                type="checkbox"
-                checked={saveNewAddress}
-                onChange={(event) => setSaveNewAddress(event.target.checked)}
-                className="h-4 w-4 shrink-0 accent-rj-red"
+            {showPicker ? (
+              <AddressPicker
+                addresses={savedAddresses}
+                selectedAddressId={selectedAddressId}
+                onSelectAddress={handleSelectAddress}
+                onSelectNew={handleSelectNewAddress}
               />
-              {CHECKOUT_COPY.saveAddressLabel}
-            </label>
-          ) : null}
+            ) : null}
+
+            {!showPicker && selectedAddressId !== null ? (
+              <SelectedAddressCard value={address} />
+            ) : null}
+
+            {selectedAddressId === null ? (
+              <>
+                {addressHint ? (
+                  <p className="text-xs text-rj-gray-600">{addressHint}</p>
+                ) : null}
+                <ShippingAddressForm
+                  values={address}
+                  errors={fieldErrors}
+                  onChange={handleChange}
+                />
+              </>
+            ) : null}
+
+            {showSaveAddressOption ? (
+              <label className="flex items-center gap-2 px-1 text-xs font-medium text-rj-gray-600">
+                <input
+                  type="checkbox"
+                  checked={saveNewAddress}
+                  onChange={(event) => setSaveNewAddress(event.target.checked)}
+                  className="h-4 w-4 shrink-0 accent-rj-red"
+                />
+                {CHECKOUT_COPY.saveAddressLabel}
+              </label>
+            ) : null}
+          </div>
 
           <ShippingMethodCard />
 

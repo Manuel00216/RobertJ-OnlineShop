@@ -4,8 +4,20 @@ import { CheckoutItemsList } from "@/features/checkout/components/CheckoutItemsL
 import { CheckoutTotals } from "@/features/checkout/components/CheckoutTotals";
 import type { CheckoutGroup } from "@/features/checkout/types/checkout.types";
 
-/** One seller's order preview: seller label, items, and totals. */
-export function CheckoutGroupCard({ group }: { group: CheckoutGroup }) {
+export interface CheckoutGroupCardProps {
+  group: CheckoutGroup;
+  /**
+   * With a single seller group, this card's subtotal/shipping/total are
+   * identical to the grand Order Total already shown on the right — showing
+   * both is pure duplication. Defaults to `true` (useful, non-duplicate
+   * per-seller breakdown) and is only turned off by the caller when there's
+   * exactly one group.
+   */
+  showTotals?: boolean;
+}
+
+/** One seller's order preview: seller label, items, and (optionally) totals. */
+export function CheckoutGroupCard({ group, showTotals = true }: CheckoutGroupCardProps) {
   return (
     <section
       aria-label={`Order from ${group.sellerName ?? "this seller"}`}
@@ -15,12 +27,14 @@ export function CheckoutGroupCard({ group }: { group: CheckoutGroup }) {
         {group.sellerName ?? "Seller"}
       </p>
       <CheckoutItemsList items={group.items} currency={group.currency} />
-      <CheckoutTotals
-        subtotalCents={group.subtotalCents}
-        shippingFeeCents={group.shippingFeeCents}
-        totalCents={group.totalCents}
-        currency={group.currency}
-      />
+      {showTotals ? (
+        <CheckoutTotals
+          subtotalCents={group.subtotalCents}
+          shippingFeeCents={group.shippingFeeCents}
+          totalCents={group.totalCents}
+          currency={group.currency}
+        />
+      ) : null}
     </section>
   );
 }

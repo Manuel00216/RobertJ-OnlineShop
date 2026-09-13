@@ -1,10 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
-import { RJ_CARD } from "@/components/ui/card";
 import { ConfirmPanel } from "@/components/ui/confirm-panel";
 import { cn } from "@/lib/utils/cn";
 import {
@@ -12,12 +10,9 @@ import {
   setDefaultAddressAction,
   updateAddressAction,
 } from "@/features/addresses/actions/address.actions";
-import { AddressForm } from "@/features/addresses/components/AddressForm";
-import { AddressSummary } from "@/features/addresses/components/AddressSummary";
-import { addressSchema, type AddressInput } from "@/features/addresses/schemas/address.schema";
+import { AddressModal } from "@/features/addresses/components/AddressModal";
+import type { AddressInput } from "@/features/addresses/schemas/address.schema";
 import type { Address } from "@/features/addresses/types/address.types";
-
-type FieldErrors = Record<string, string[] | undefined>;
 
 function toInput(address: Address): AddressInput {
   return {
@@ -33,49 +28,32 @@ function toInput(address: Address): AddressInput {
   };
 }
 
-/** One saved address on `/addresses`: view, edit-in-place, delete-confirm, set-default. */
-export function AddressCard({ address }: { address: Address }) {
-  const [mode, setMode] = useState<"view" | "edit" | "delete">("view");
-  const [values, setValues] = useState<AddressInput>(() => toInput(address));
-  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
-  const [formError, setFormError] = useState<string | null>(null);
-  const [isSaving, startSaving] = useTransition();
-  const [isDeleting, startDeleting] = useTransition();
+export interface AddressCardProps {
+  address: Address;
+  /** Last row in the list gets no bottom divider. */
+  isLast?: boolean;
+}
+
+/**
+ * One saved address on `/addresses`: view, edit (via the shared
+ * `AddressModal` — same one `AddressList`'s "+ Add Address" uses),
+ * delete-confirm, set-default. Renders as a compact divided row (name +
+ * phone, address underneath, Default badge, Edit/Delete + Set-as-default
+ * aligned right) — not a bordered card — matching the Shopee-style address
+ * list this page was reorganized around. `AddressSummary` (used by
+ * checkout's `AddressPicker`) is deliberately not reused here so this stays
+ * isolated to this page and never touches checkout's picker rows.
+ */
+export function AddressCard({ address, isLast = false }: AddressCardProps) {
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [isSettingDefault, startSettingDefault] = useTransition();
-
-  function handleChange(field: keyof AddressInput, value: string) {
-    setValues((prev) => ({ ...prev, [field]: value }));
-    setFieldErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev));
-  }
-
-  function handleSaveEdit() {
-    setFormError(null);
-    const parsed = addressSchema.safeParse(values);
-    if (!parsed.success) {
-      setFieldErrors(z.flattenError(parsed.error).fieldErrors as FieldErrors);
-      return;
-    }
-    startSaving(async () => {
-      const result = await updateAddressAction(address.id, parsed.data);
-      if (!result.success) {
-        setFormError(result.error);
-        return;
-      }
-      setMode("view");
-    });
-  }
-
-  function handleCancelEdit() {
-    setValues(toInput(address));
-    setFieldErrors({});
-    setFormError(null);
-    setMode("view");
-  }
+  const [isDeleting, startDeleting] = useTransition();
 
   function handleDelete() {
     startDeleting(async () => {
       await deleteAddressAction(address.id);
-      // On success `revalidatePath` re-renders the list without this card;
+      // On success `revalidatePath` re-renders the list without this row;
       // on failure it simply stays in delete-confirm mode with nothing lost.
     });
   }
@@ -86,62 +64,81 @@ export function AddressCard({ address }: { address: Address }) {
     });
   }
 
-  if (mode === "edit") {
+  const rowBorder = !isLast && "border-b border-rj-gray-100";
+
+  if (confirmingDelete) {
     return (
-      <div className={cn(RJ_CARD, "flex flex-col gap-4 p-5")}>
-        <AddressForm values={values} errors={fieldErrors} onChange={handleChange} />
-        {formError ? (
-          <p className="text-xs font-semibold text-danger">{formError}</p>
-        ) : null}
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="rj"
-            size="rjSm"
-            isLoading={isSaving}
-            onClick={handleSaveEdit}
-          >
-            Save changes
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="rjSm"
-            disabled={isSaving}
-            onClick={handleCancelEdit}
-          >
-            Cancel
-          </Button>
-        </div>
+      <div className={cn("py-5", rowBorder)}>
+        <ConfirmPanel
+          label={`Delete ${address.label} address`}
+          title="Delete this address?"
+          description="This can't be undone."
+          tone="danger"
+          confirmLabel="Delete"
+          pendingLabel="Deleting…"
+          isPending={isDeleting}
+          onConfirm={handleDelete}
+          onCancel={() => setConfirmingDelete(false)}
+        />
       </div>
     );
   }
 
-  if (mode === "delete") {
-    return (
-      <ConfirmPanel
-        label={`Delete ${address.label} address`}
-        title="Delete this address?"
-        description="This can't be undone."
-        tone="danger"
-        confirmLabel="Delete"
-        pendingLabel="Deleting…"
-        isPending={isDeleting}
-        onConfirm={handleDelete}
-        onCancel={() => setMode("view")}
-      />
-    );
-  }
+  // Same combined-field convention as AddressSummary, split across two lines
+  // for scanability instead of one long run-on line.
+  const addressLine2 = [address.barangay, address.city, address.province, address.region]
+    .filter(Boolean)
+    .join(", ");
 
   return (
-    <div
-      className={cn(
-        RJ_CARD,
-        "flex flex-col gap-4 p-5 sm:flex-row sm:items-start sm:justify-between",
-      )}
-    >
-      <AddressSummary address={address} />
-      <div className="flex flex-wrap gap-2">
+    <div className={cn("flex flex-col gap-3 py-5 sm:flex-row sm:items-start sm:justify-between sm:gap-4", rowBorder)}>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full bg-rj-gray-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rj-gray-600">
+            {address.label}
+          </span>
+        </div>
+        <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2">
+          <span className="text-sm font-semibold text-rj-black">{address.recipientName}</span>
+          <span className="text-rj-gray-300" aria-hidden="true">
+            |
+          </span>
+          <span className="text-sm text-rj-gray-600">{address.phone}</span>
+        </div>
+        <p className="mt-1 text-xs text-rj-gray-600">{address.streetDetails}</p>
+        {addressLine2 ? (
+          <p className="text-xs text-rj-gray-600">
+            {addressLine2}, {address.postalCode}, {address.country}
+          </p>
+        ) : (
+          <p className="text-xs text-rj-gray-600">
+            {address.postalCode}, {address.country}
+          </p>
+        )}
+        {address.isDefault ? (
+          <span className="mt-2 inline-flex w-fit items-center rounded border border-rj-red-dark px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rj-red-dark">
+            Default
+          </span>
+        ) : null}
+      </div>
+
+      <div className="flex shrink-0 flex-row items-center gap-4 sm:flex-col sm:items-end sm:gap-2">
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={() => setIsEditOpen(true)}
+            className="text-xs font-semibold text-rj-red-dark hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30"
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirmingDelete(true)}
+            className="text-xs font-semibold text-rj-red-dark hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30"
+          >
+            Delete
+          </button>
+        </div>
         {!address.isDefault ? (
           <Button
             type="button"
@@ -153,19 +150,21 @@ export function AddressCard({ address }: { address: Address }) {
             Set as default
           </Button>
         ) : null}
-        <Button type="button" variant="ghost" size="rjSm" onClick={() => setMode("edit")}>
-          Edit
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="rjSm"
-          className="text-rj-red-dark"
-          onClick={() => setMode("delete")}
-        >
-          Delete
-        </Button>
       </div>
+
+      {isEditOpen ? (
+        <AddressModal
+          title="Edit Address"
+          initialValues={toInput(address)}
+          isAlreadyDefault={address.isDefault}
+          onCancel={() => setIsEditOpen(false)}
+          onSubmit={async (input) => {
+            const result = await updateAddressAction(address.id, input);
+            if (result.success) setIsEditOpen(false);
+            return result;
+          }}
+        />
+      ) : null}
     </div>
   );
 }

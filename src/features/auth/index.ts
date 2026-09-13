@@ -36,6 +36,7 @@ export {
   resetPasswordSchema,
   oauthSignInSchema,
   OAUTH_PROVIDERS,
+  NEW_PASSWORD_MIN,
 } from "./schemas/auth.schema";
 export type {
   SignInInput,

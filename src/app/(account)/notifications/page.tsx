@@ -14,7 +14,7 @@ export default async function NotificationsPage() {
   return (
     <div className="flex flex-col gap-8">
       <CatalogHeader
-        eyebrow="Activity"
+        eyebrow="My Account"
         title="Notifications"
         description="Updates on your orders and payments."
       />

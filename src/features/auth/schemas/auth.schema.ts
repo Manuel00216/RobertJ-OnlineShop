@@ -1,9 +1,11 @@
 import { z } from "zod";
 
-// Minimum length for a *new* password (sign-up, reset). Kept separate from
-// signInSchema's rule below so raising this can't lock out accounts created
-// under a previously-lower minimum.
-const NEW_PASSWORD_MIN = 10;
+// Minimum length for a *new* password (sign-up, reset, in-account change).
+// Kept separate from signInSchema's rule below so raising this can't lock
+// out accounts created under a previously-lower minimum. Exported so
+// `account.schema.ts`'s changePasswordSchema reuses the exact same rule
+// instead of duplicating the literal.
+export const NEW_PASSWORD_MIN = 10;
 
 /** The only providers enabled in the Supabase dashboard for this app. */
 export const OAUTH_PROVIDERS = ["google", "facebook"] as const;

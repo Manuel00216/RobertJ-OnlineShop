@@ -14,10 +14,10 @@ export default async function AddressesPage() {
     <div className="flex flex-col gap-8">
       <CatalogHeader
         eyebrow="My Account"
-        title="Addresses"
+        title="My Addresses"
         description="Manage the delivery addresses saved to your account."
       />
-      <div className="max-w-xl">
+      <div className="max-w-2xl rounded-2xl border border-rj-gray-100 bg-rj-white p-6 sm:p-8">
         <AddressList addresses={addresses} />
       </div>
     </div>

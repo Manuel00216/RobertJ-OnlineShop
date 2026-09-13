@@ -14,6 +14,8 @@ export const ROUTES = {
   profile: "/profile",
   addresses: "/addresses",
   wishlist: "/wishlist",
+  changePassword: "/change-password",
+  privacy: "/privacy",
   /** Legacy Shop Owner/Admin routes — every page under here is now a redirect
    * stub to its `/admin/*` or `/seller/*` equivalent (see `redirectToPortal`),
    * kept so old bookmarks/links keep working. Never build new features here. */
@@ -77,6 +79,8 @@ export const PROTECTED_ROUTE_PREFIXES = [
   "/profile",
   "/addresses",
   "/wishlist",
+  "/change-password",
+  "/privacy",
 ] as const;
 
 /** Routes an authenticated user should be redirected away from. */

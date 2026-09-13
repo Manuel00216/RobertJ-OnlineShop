@@ -33,6 +33,8 @@ export const CHECKOUT_COPY = {
   onlineLabel: "Online Payment",
   onlineDescription:
     "Pay securely via GCash, Maya, or Card — completed from your order page after checkout.",
+  orderSectionTitle: "Your Order",
+  deliveryAddressSectionTitle: "Delivery Address",
   paymentSectionTitle: "Payment",
   shippingSectionTitle: "Shipping",
   shippingFreeLabel: "Free",

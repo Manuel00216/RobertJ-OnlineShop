@@ -1925,8 +1925,11 @@ function toProfile(
     | "id"
     | "full_name"
     | "username"
+    | "username_changed_at"
     | "avatar_url"
     | "phone"
+    | "gender"
+    | "date_of_birth"
     | "bio"
     | "payment_qr_url"
     | "role"
@@ -1936,8 +1939,11 @@ function toProfile(
     id: row.id,
     fullName: row.full_name,
     username: row.username,
+    usernameChangedAt: row.username_changed_at,
     avatarUrl: row.avatar_url,
     phone: row.phone,
+    gender: row.gender,
+    dateOfBirth: row.date_of_birth,
     bio: row.bio,
     paymentQrUrl: row.payment_qr_url,
     role: row.role,
@@ -1975,8 +1981,9 @@ export async function updateMyProfile(
     .update({
       full_name: input.fullName || null,
       username: input.username || null,
-      avatar_url: input.avatarUrl || null,
       phone: input.phone || null,
+      gender: input.gender || null,
+      date_of_birth: input.dateOfBirth || null,
       bio: input.bio || null,
     })
     .eq("id", userId);
@@ -1996,6 +2003,85 @@ export async function updateMyProfile(
     throw new Error("Failed to load your profile after saving.");
   }
   return profile;
+}
+
+function avatarPathFromUrl(url: string): string | undefined {
+  return new URL(url).pathname.split("/avatars/")[1];
+}
+
+/**
+ * Uploads a new avatar to the `avatars` bucket and makes it the caller's
+ * `profiles.avatar_url`, then removes the previous file — same
+ * upload-first-then-persist-then-cleanup ordering as `replaceShopImage`, so
+ * a failure at any step never leaves the profile pointing at a file that
+ * was never persisted, or an orphaned file nothing points to.
+ */
+export async function uploadAvatar(userId: string, file: File): Promise<string> {
+  const supabase = await createSupabaseServerClient();
+
+  const { data: current } = await supabase
+    .from(DATABASE_TABLES.PROFILES)
+    .select("avatar_url")
+    .eq("id", userId)
+    .maybeSingle();
+  const previousUrl = current?.avatar_url ?? null;
+
+  const ext = file.name.split(".").pop() ?? "jpg";
+  const path = `${userId}/${crypto.randomUUID()}.${ext}`;
+  const { error: uploadError } = await supabase.storage
+    .from("avatars")
+    .upload(path, file, { contentType: file.type });
+  if (uploadError) {
+    throw queryError("Failed to upload image", uploadError);
+  }
+
+  const { data: publicUrlData } = supabase.storage.from("avatars").getPublicUrl(path);
+  const newUrl = publicUrlData.publicUrl;
+
+  const { error: updateError } = await supabase
+    .from(DATABASE_TABLES.PROFILES)
+    .update({ avatar_url: newUrl })
+    .eq("id", userId);
+  if (updateError) {
+    await supabase.storage.from("avatars").remove([path]).catch(() => undefined);
+    throw queryError("Failed to update your profile", updateError);
+  }
+
+  if (previousUrl) {
+    const oldPath = avatarPathFromUrl(previousUrl);
+    if (oldPath) {
+      await supabase.storage.from("avatars").remove([oldPath]).catch(() => undefined);
+    }
+  }
+
+  return newUrl;
+}
+
+/** Clears the caller's avatar and removes the file from Storage. */
+export async function removeAvatar(userId: string): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+
+  const { data: current } = await supabase
+    .from(DATABASE_TABLES.PROFILES)
+    .select("avatar_url")
+    .eq("id", userId)
+    .maybeSingle();
+  const previousUrl = current?.avatar_url ?? null;
+
+  const { error } = await supabase
+    .from(DATABASE_TABLES.PROFILES)
+    .update({ avatar_url: null })
+    .eq("id", userId);
+  if (error) {
+    throw queryError("Failed to update your profile", error);
+  }
+
+  if (previousUrl) {
+    const oldPath = avatarPathFromUrl(previousUrl);
+    if (oldPath) {
+      await supabase.storage.from("avatars").remove([oldPath]).catch(() => undefined);
+    }
+  }
 }
 
 // ============================================================================
@@ -3931,6 +4017,25 @@ export async function signInWithPassword(
     password,
     options: { captchaToken },
   });
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Verifies a password for the *already-authenticated* caller (Change
+ * Password's "confirm your current password" step) — there is no separate
+ * "verify password" API, so this re-runs the same sign-in grant Supabase
+ * uses to prove identity. No captcha token, unlike the public
+ * `signInWithPassword` above: the caller here is already a rate-limited,
+ * signed-in session (see `changePasswordAction`), not the anonymous public
+ * sign-in surface captcha protects — same proportionate, rate-limit-only
+ * posture already used by `updatePasswordAction`'s recovery-session path.
+ */
+export async function reauthenticateWithPassword(
+  email: string,
+  password: string,
+): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw new Error(error.message);
 }
 

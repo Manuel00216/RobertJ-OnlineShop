@@ -10,25 +10,18 @@ export interface AddressFormProps {
 }
 
 /**
- * The add/edit address fields — shared verbatim between the `/addresses`
- * management page and checkout's "+ Add New Address" flow, so address
- * field logic lives in exactly one place. Purely presentational, same
- * pattern as `ShippingAddressForm`/`OrderNotesField`.
+ * The add/edit address fields, used only within this feature (`AddressModal`
+ * — shared by both the "+ Add Address" and "Edit" flows on `/addresses`).
+ * `label` is no longer editable here (no Home/Work picker) — a new address
+ * defaults to "Home" (see `AddressList`'s `EMPTY_INPUT`), and editing an
+ * existing address keeps whatever label it already had, unchanged.
  */
 export function AddressForm({ values, errors, onChange }: AddressFormProps) {
   return (
     <div className="flex flex-col gap-4">
-      <FormField
-        label="Label"
-        tone="brand"
-        value={values.label}
-        onChange={(event) => onChange("label", event.target.value)}
-        placeholder="Home, Work, Other"
-        errors={errors?.label}
-      />
       <div className="grid gap-4 sm:grid-cols-2">
         <FormField
-          label="Recipient name"
+          label="Full Name"
           tone="brand"
           value={values.recipientName}
           onChange={(event) => onChange("recipientName", event.target.value)}
@@ -36,7 +29,7 @@ export function AddressForm({ values, errors, onChange }: AddressFormProps) {
           errors={errors?.recipientName}
         />
         <FormField
-          label="Phone"
+          label="Phone Number"
           type="tel"
           tone="brand"
           value={values.phone}
@@ -46,33 +39,14 @@ export function AddressForm({ values, errors, onChange }: AddressFormProps) {
           errors={errors?.phone}
         />
       </div>
-      <FormField
-        label="Street / House / Unit"
-        tone="brand"
-        value={values.streetDetails}
-        onChange={(event) => onChange("streetDetails", event.target.value)}
-        placeholder="House number, street, landmark"
-        autoComplete="address-line1"
-        errors={errors?.streetDetails}
-      />
       <div className="grid gap-4 sm:grid-cols-2">
         <FormField
-          label="Barangay (optional)"
+          label="Region (optional)"
           tone="brand"
-          value={values.barangay}
-          onChange={(event) => onChange("barangay", event.target.value)}
-          errors={errors?.barangay}
+          value={values.region}
+          onChange={(event) => onChange("region", event.target.value)}
+          errors={errors?.region}
         />
-        <FormField
-          label="City / Municipality"
-          tone="brand"
-          value={values.city}
-          onChange={(event) => onChange("city", event.target.value)}
-          autoComplete="address-level2"
-          errors={errors?.city}
-        />
-      </div>
-      <div className="grid gap-4 sm:grid-cols-2">
         <FormField
           label="Province (optional)"
           tone="brand"
@@ -81,21 +55,40 @@ export function AddressForm({ values, errors, onChange }: AddressFormProps) {
           autoComplete="address-level1"
           errors={errors?.province}
         />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
         <FormField
-          label="Region (optional)"
+          label="City / Municipality"
           tone="brand"
-          value={values.region}
-          onChange={(event) => onChange("region", event.target.value)}
-          errors={errors?.region}
+          value={values.city}
+          onChange={(event) => onChange("city", event.target.value)}
+          autoComplete="address-level2"
+          errors={errors?.city}
+        />
+        <FormField
+          label="Barangay (optional)"
+          tone="brand"
+          value={values.barangay}
+          onChange={(event) => onChange("barangay", event.target.value)}
+          errors={errors?.barangay}
         />
       </div>
       <FormField
-        label="Postal code"
+        label="Postal Code"
         tone="brand"
         value={values.postalCode}
         onChange={(event) => onChange("postalCode", event.target.value)}
         autoComplete="postal-code"
         errors={errors?.postalCode}
+      />
+      <FormField
+        label="Street Name / Building / House No."
+        tone="brand"
+        value={values.streetDetails}
+        onChange={(event) => onChange("streetDetails", event.target.value)}
+        placeholder="House number, street, landmark"
+        autoComplete="address-line1"
+        errors={errors?.streetDetails}
       />
     </div>
   );

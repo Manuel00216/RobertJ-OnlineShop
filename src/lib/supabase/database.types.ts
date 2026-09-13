@@ -776,7 +776,9 @@ export type Database = {
           avatar_url: string | null
           bio: string | null
           created_at: string
+          date_of_birth: string | null
           full_name: string | null
+          gender: Database["public"]["Enums"]["gender_type"] | null
           id: string
           is_active: boolean
           payment_qr_url: string | null
@@ -784,12 +786,15 @@ export type Database = {
           role: Database["public"]["Enums"]["user_role"]
           updated_at: string
           username: string | null
+          username_changed_at: string | null
         }
         Insert: {
           avatar_url?: string | null
           bio?: string | null
           created_at?: string
+          date_of_birth?: string | null
           full_name?: string | null
+          gender?: Database["public"]["Enums"]["gender_type"] | null
           id: string
           is_active?: boolean
           payment_qr_url?: string | null
@@ -797,12 +802,15 @@ export type Database = {
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
           username?: string | null
+          username_changed_at?: string | null
         }
         Update: {
           avatar_url?: string | null
           bio?: string | null
           created_at?: string
+          date_of_birth?: string | null
           full_name?: string | null
+          gender?: Database["public"]["Enums"]["gender_type"] | null
           id?: string
           is_active?: boolean
           payment_qr_url?: string | null
@@ -810,6 +818,7 @@ export type Database = {
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
           username?: string | null
+          username_changed_at?: string | null
         }
         Relationships: []
       }
@@ -1486,7 +1495,9 @@ export type Database = {
           avatar_url: string | null
           bio: string | null
           created_at: string
+          date_of_birth: string | null
           full_name: string | null
+          gender: Database["public"]["Enums"]["gender_type"] | null
           id: string
           is_active: boolean
           payment_qr_url: string | null
@@ -1494,6 +1505,7 @@ export type Database = {
           role: Database["public"]["Enums"]["user_role"]
           updated_at: string
           username: string | null
+          username_changed_at: string | null
         }
         SetofOptions: {
           from: "*"
@@ -1719,6 +1731,7 @@ export type Database = {
       unaccent_fallback: { Args: { value: string }; Returns: string }
     }
     Enums: {
+      gender_type: "male" | "female" | "other"
       order_status:
         | "pending"
         | "confirmed"
@@ -1886,6 +1899,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      gender_type: ["male", "female", "other"],
       order_status: [
         "pending",
         "confirmed",
