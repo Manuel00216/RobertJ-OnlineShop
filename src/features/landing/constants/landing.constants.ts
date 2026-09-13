@@ -1,7 +1,4 @@
-import type {
-  AssistantMessage,
-  LandingStat,
-} from "@/features/landing/types/landing.types";
+import type { LandingStat } from "@/features/landing/types/landing.types";
 
 /** Rotating top-bar promos. Pure marketing copy — not modelled in the DB. */
 export const ANNOUNCEMENTS = [
@@ -59,29 +56,14 @@ export const CATEGORY_PLACEHOLDERS = [
   { name: "Essentials", countLabel: "610+ items", imageUrl: "/landing/category-essentials.jpg" },
 ] as const;
 
-/** Bullet points beside the Smart Assistant chat preview. */
+/**
+ * Bullet points beside the Guided Selection preview. Describes the real
+ * mechanism (DECISIONS.md ADR-009 — explicit, human-authored rules, never
+ * AI/ML) — no natural-language or "learns over time" claims.
+ */
 export const ASSISTANT_BENEFITS = [
-  "Understands natural language queries",
-  "Searches all 120+ shops simultaneously",
-  "Filters by size, price, and shop rating",
-  "Gets smarter with every search",
+  "Matches by occasion, size, and budget — no guesswork",
+  "Searches every shop's rules at once",
+  "Budget is always checked against the live price",
+  "Every match traces back to a rule a seller explicitly set — no black box",
 ] as const;
-
-/** Seeded demo transcript for the Smart Assistant preview. */
-export const ASSISTANT_TRANSCRIPT: AssistantMessage[] = [
-  {
-    role: "assistant",
-    text: "Hi! I'm your RobertJ shopping assistant. Tell me what you're looking for — style, budget, occasion, size — and I'll find the best picks across all 120+ shops.",
-  },
-  {
-    role: "user",
-    text: "I'm looking for a casual outfit for a beach trip, budget around ₱3,000.",
-  },
-  {
-    role: "assistant",
-    text: "Perfect for the beach! I found 3 shops with linen sets and resort wear under ₱3,000 — Drift & Drape has a linen co-ord at ₱2,400, and Studio Loom has relaxed wide-leg trousers at ₱1,950. Want me to filter by size?",
-  },
-];
-
-export const ASSISTANT_REPLY =
-  "Great question! I found several matching options across our verified shops. Filtering now by your preferences — price range, available sizes, and top-rated sellers. Here are the top 4 picks for you.";

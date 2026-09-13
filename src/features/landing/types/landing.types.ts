@@ -43,12 +43,6 @@ export interface LandingStat {
   metric?: "sellerCount" | "productCount";
 }
 
-/** One turn in the Smart Assistant demo transcript. */
-export interface AssistantMessage {
-  role: "user" | "assistant";
-  text: string;
-}
-
 /**
  * Flattened product model consumed by the Featured Products grid. Built only
  * from real, active, `featured` DB products (see `FeaturedProducts.tsx`) —

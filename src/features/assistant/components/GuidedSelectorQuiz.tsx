@@ -1,0 +1,317 @@
+"use client";
+
+import Image from "next/image";
+import Link from "next/link";
+import { X } from "lucide-react";
+import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
+import { z } from "zod";
+
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/feedback/EmptyState";
+import { ErrorState } from "@/components/feedback/ErrorState";
+import { FormField } from "@/components/forms/FormField";
+import { ROUTES } from "@/constants/routes";
+import { formatCurrency } from "@/lib/utils/currency";
+import { getGuidedSelectionMatchesAction } from "@/features/assistant/actions/quiz.actions";
+import { OCCASION_LABELS } from "@/features/assistant/constants/assistant.constants";
+import { guidedSelectionQuerySchema } from "@/features/assistant/schemas/quiz.schema";
+import { OCCASIONS } from "@/features/assistant/schemas/rule.schema";
+import type { GuidedSelectionMatch } from "@/features/assistant/types/assistant.types";
+import { getCoverImage } from "@/features/products/types/product.types";
+
+type View = "form" | "results";
+type FieldErrors = Record<string, string[] | undefined>;
+
+export interface GuidedSelectorQuizProps {
+  /** Renders the trigger — the quiz owns its own open/close state internally,
+   * so any caller can drop this in without lifting modal state up. */
+  trigger: (props: { onClick: () => void }) => ReactNode;
+}
+
+const CHIP_ACTIVE =
+  "rounded-full border-[1.5px] border-rj-black bg-rj-black px-4 py-2 text-xs font-bold text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30";
+const CHIP_IDLE =
+  "rounded-full border-[1.5px] border-rj-gray-200 bg-transparent px-4 py-2 text-xs font-bold text-rj-gray-600 transition-colors hover:border-rj-black hover:text-rj-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30";
+
+function emptyFieldErrors(): FieldErrors {
+  return {};
+}
+
+/**
+ * Buyer-facing Guided Product Selection (DECISIONS.md ADR-009 — rule-based,
+ * never AI/ML): occasion/size/budget answers, matched against explicit
+ * `recommendation_rules` rows via `getGuidedSelectionMatchesAction`. Every
+ * criterion is optional — skipping one just means it isn't filtered on.
+ * Owns its own open/close state (render-prop trigger) so it can be dropped
+ * into any page without lifting modal state. Focus/Escape handling mirrors
+ * `ProductLightbox`'s established full-screen dialog pattern.
+ */
+export function GuidedSelectorQuiz({ trigger }: GuidedSelectorQuizProps) {
+  const [open, setOpen] = useState(false);
+  const [view, setView] = useState<View>("form");
+  const [occasion, setOccasion] = useState<string | undefined>(undefined);
+  const [size, setSize] = useState("");
+  const [minPrice, setMinPrice] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>(emptyFieldErrors());
+  const [formError, setFormError] = useState<string | null>(null);
+  const [matches, setMatches] = useState<GuidedSelectionMatch[] | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  const panelRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  function handleOpen() {
+    setOpen(true);
+  }
+
+  function resetQuiz() {
+    setView("form");
+    setOccasion(undefined);
+    setSize("");
+    setMinPrice("");
+    setMaxPrice("");
+    setMatches(null);
+    setFormError(null);
+    setFieldErrors(emptyFieldErrors());
+  }
+
+  function handleClose() {
+    setOpen(false);
+    previousFocusRef.current?.focus();
+    resetQuiz();
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    previousFocusRef.current = document.activeElement as HTMLElement | null;
+    closeButtonRef.current?.focus();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        handleClose();
+        return;
+      }
+      if (event.key === "Tab") {
+        const focusable = panelRef.current?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input, [tabindex]:not([tabindex="-1"])',
+        );
+        if (!focusable || focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+    // Re-bind per view so Tab wrapping always sees the current panel content.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, view]);
+
+  function handleSearch() {
+    setFormError(null);
+    const parsed = guidedSelectionQuerySchema.safeParse({
+      occasion: occasion || undefined,
+      size: size.trim() || undefined,
+      minPrice: minPrice === "" ? undefined : Number(minPrice),
+      maxPrice: maxPrice === "" ? undefined : Number(maxPrice),
+    });
+    if (!parsed.success) {
+      setFieldErrors(z.flattenError(parsed.error).fieldErrors as FieldErrors);
+      return;
+    }
+    setFieldErrors(emptyFieldErrors());
+    startTransition(async () => {
+      const result = await getGuidedSelectionMatchesAction(parsed.data);
+      if (!result.success) {
+        setFormError(result.error);
+        return;
+      }
+      setMatches(result.data);
+      setView("results");
+    });
+  }
+
+  return (
+    <>
+      {trigger({ onClick: handleOpen })}
+      {open ? (
+        <div
+          ref={panelRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Guided Selection"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-rj-black/60 p-4"
+        >
+          <div className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-rj-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-rj-gray-100 px-6 py-4">
+              <div>
+                <p className="text-sm font-bold text-rj-black">Guided Selection</p>
+                <p className="text-xs text-rj-gray-600">
+                  Deterministic, rule-based matches — human-authored, never AI.
+                </p>
+              </div>
+              <button
+                type="button"
+                ref={closeButtonRef}
+                onClick={handleClose}
+                aria-label="Close Guided Selection"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-rj-gray-500 transition-colors hover:bg-rj-gray-100 hover:text-rj-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-5">
+              {view === "form" ? (
+                <div className="flex flex-col gap-5">
+                  <div>
+                    <p className="mb-2 text-sm font-semibold text-rj-black">Occasion</p>
+                    <div className="flex flex-wrap gap-2" role="group" aria-label="Occasion">
+                      <button
+                        type="button"
+                        aria-pressed={!occasion}
+                        className={!occasion ? CHIP_ACTIVE : CHIP_IDLE}
+                        onClick={() => setOccasion(undefined)}
+                      >
+                        Any
+                      </button>
+                      {OCCASIONS.map((value) => (
+                        <button
+                          key={value}
+                          type="button"
+                          aria-pressed={occasion === value}
+                          className={occasion === value ? CHIP_ACTIVE : CHIP_IDLE}
+                          onClick={() => setOccasion(value)}
+                        >
+                          {OCCASION_LABELS[value]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <FormField
+                    label="Size (optional)"
+                    value={size}
+                    onChange={(event) => setSize(event.target.value)}
+                    placeholder="Any size"
+                    errors={fieldErrors.size}
+                  />
+
+                  <div>
+                    <p className="mb-2 text-sm font-semibold text-rj-black">Budget (optional)</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <FormField
+                        label="Min"
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        placeholder="Min ₱"
+                        value={minPrice}
+                        onChange={(event) => setMinPrice(event.target.value)}
+                        errors={fieldErrors.minPrice}
+                      />
+                      <FormField
+                        label="Max"
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        placeholder="Max ₱"
+                        value={maxPrice}
+                        onChange={(event) => setMaxPrice(event.target.value)}
+                        errors={fieldErrors.maxPrice}
+                      />
+                    </div>
+                  </div>
+
+                  {formError ? <ErrorState title="Couldn't load matches" message={formError} /> : null}
+
+                  <Button type="button" variant="rj" isLoading={isPending} onClick={handleSearch}>
+                    Find My Match
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-rj-gray-600" aria-live="polite">
+                      {matches?.length ?? 0} match{matches?.length === 1 ? "" : "es"}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setView("form")}
+                      className="text-xs font-semibold text-rj-red-dark hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30"
+                    >
+                      Refine search
+                    </button>
+                  </div>
+
+                  {!matches || matches.length === 0 ? (
+                    <EmptyState
+                      title="No matches yet"
+                      description="Try a broader occasion, size, or budget — sellers are still adding Guided Selection rules for more products."
+                    />
+                  ) : (
+                    <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                      {matches.map((match) => {
+                        const cover = getCoverImage(match.product);
+                        return (
+                          <li key={`${match.product.id}:${match.variantId ?? ""}`}>
+                            <Link
+                              href={ROUTES.productDetail(match.product.slug)}
+                              onClick={handleClose}
+                              className="group block"
+                            >
+                              <div
+                                className="relative mb-2 overflow-hidden rounded-xl bg-rj-gray-100"
+                                style={{ aspectRatio: "3 / 4" }}
+                              >
+                                {cover ? (
+                                  <Image
+                                    src={cover.url}
+                                    alt={match.product.title}
+                                    fill
+                                    sizes="(min-width: 640px) 33vw, 50vw"
+                                    className="object-cover transition-transform duration-300 group-hover:scale-105"
+                                  />
+                                ) : (
+                                  <span className="flex h-full items-center justify-center text-xs text-rj-gray-400">
+                                    No image
+                                  </span>
+                                )}
+                              </div>
+                              <p className="line-clamp-2 text-xs font-medium text-rj-black">
+                                {match.product.title}
+                              </p>
+                              {match.variantLabel ? (
+                                <p className="text-[11px] text-rj-gray-500">{match.variantLabel}</p>
+                              ) : null}
+                              <p className="text-xs font-bold text-rj-black">
+                                {formatCurrency(match.matchedPriceCents, match.product.currency)}
+                              </p>
+                            </Link>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+}
