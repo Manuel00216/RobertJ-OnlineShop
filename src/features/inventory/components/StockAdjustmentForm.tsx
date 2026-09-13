@@ -43,6 +43,9 @@ export function StockAdjustmentForm({ item, onDone }: StockAdjustmentFormProps) 
       {formError ? <ErrorState title="Couldn't adjust stock" message={formError} /> : null}
 
       <input type="hidden" name="productId" value={item.productId} />
+      {item.variantId ? (
+        <input type="hidden" name="variantId" value={item.variantId} />
+      ) : null}
 
       <div className="grid grid-cols-2 gap-3">
         <FormField

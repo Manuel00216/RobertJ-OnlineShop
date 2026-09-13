@@ -55,8 +55,16 @@ export function ShippingAddressForm({
       />
       <div className="grid gap-4 sm:grid-cols-2">
         <FormField
+          name="barangay"
+          label="Barangay (optional)"
+          tone="brand"
+          value={values.barangay}
+          onChange={(event) => onChange("barangay", event.target.value)}
+          errors={errors?.barangay}
+        />
+        <FormField
           name="city"
-          label="City"
+          label="City / Municipality"
           tone="brand"
           value={values.city}
           onChange={(event) => onChange("city", event.target.value)}
@@ -64,17 +72,36 @@ export function ShippingAddressForm({
           autoComplete="address-level2"
           errors={errors?.city}
         />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
         <FormField
-          name="postalCode"
-          label="Postal code"
+          name="province"
+          label="Province (optional)"
           tone="brand"
-          value={values.postalCode}
-          onChange={(event) => onChange("postalCode", event.target.value)}
-          placeholder="Postal code"
-          autoComplete="postal-code"
-          errors={errors?.postalCode}
+          value={values.province}
+          onChange={(event) => onChange("province", event.target.value)}
+          autoComplete="address-level1"
+          errors={errors?.province}
+        />
+        <FormField
+          name="region"
+          label="Region (optional)"
+          tone="brand"
+          value={values.region}
+          onChange={(event) => onChange("region", event.target.value)}
+          errors={errors?.region}
         />
       </div>
+      <FormField
+        name="postalCode"
+        label="Postal code"
+        tone="brand"
+        value={values.postalCode}
+        onChange={(event) => onChange("postalCode", event.target.value)}
+        placeholder="Postal code"
+        autoComplete="postal-code"
+        errors={errors?.postalCode}
+      />
       {/* Locked, not free text: this marketplace is domestic-only (no
           courier/shipping API — see SAD Out of Scope), enforced server-side
           too via `z.literal(CHECKOUT_CONSTANTS.shippingCountry)`. */}

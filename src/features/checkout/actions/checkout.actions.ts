@@ -37,12 +37,19 @@ export async function placeOrderAction(
     const failed: FailedGroup[] = [];
 
     for (const group of parsed.data.groups) {
-      // camelCase domain → snake_case jsonb keys the DB CHECK requires.
+      // camelCase domain → snake_case jsonb keys. full_name/line1/city/
+      // postal_code/country are the CHECK-required keys; barangay/province/
+      // region are extra keys the constraint permits but doesn't require —
+      // see `orders_shipping_address_required_keys` and this migration's
+      // header comment (20260912000000_addresses.sql).
       const shippingAddress = {
         full_name: parsed.data.address.fullName,
         line1: parsed.data.address.line1,
         line2: parsed.data.address.line2 || null,
+        barangay: parsed.data.address.barangay || null,
         city: parsed.data.address.city,
+        province: parsed.data.address.province || null,
+        region: parsed.data.address.region || null,
         postal_code: parsed.data.address.postalCode,
         country: parsed.data.address.country,
         phone: parsed.data.address.phone || null,
@@ -54,13 +61,17 @@ export async function placeOrderAction(
           items: group.items,
           shippingAddress,
           shippingFeeCents: CHECKOUT_CONSTANTS.shippingFeeCentsPerSeller,
+          notes: parsed.data.notes || null,
         });
         created.push({
           orderId: order.orderId,
           orderNumber: order.orderNumber,
           sellerId: order.sellerId,
           sellerName: group.sellerName ?? null,
-          productIds: group.items.map((item) => item.productId),
+          lines: group.items.map((item) => ({
+            productId: item.productId,
+            variantId: item.variantId,
+          })),
         });
       } catch (error) {
         failed.push({

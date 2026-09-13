@@ -36,9 +36,15 @@ import type {
   Product,
   ProductImage,
   ProductListParams,
+  ProductVariant,
 } from "@/features/products/types/product.types";
 import type { Category } from "@/features/categories/types/category.types";
 import type { LandingStat } from "@/features/landing/types/landing.types";
+import type {
+  GuidedSelectionMatch,
+  RecommendationOccasion,
+  RecommendationRule,
+} from "@/features/assistant/types/assistant.types";
 import {
   CANCELLABLE_ORDER_STATUSES,
   ORDER_STATUS_FLOW,
@@ -58,6 +64,8 @@ import type { Payment, PaymentAttempt } from "@/features/payments/types/payment.
 import type { Shop, ShopWithMember } from "@/features/shops/types/shop.types";
 import type { AdminUser } from "@/features/users/types/user.types";
 import type { AdjustStockInput } from "@/features/inventory/schemas/inventory.schema";
+import type { AddressInput } from "@/features/addresses/schemas/address.schema";
+import type { Address } from "@/features/addresses/types/address.types";
 import {
   getStockStatus,
   type InventoryItem,
@@ -348,6 +356,66 @@ export async function listRelatedProducts(
   return (data ?? []).map((row) => toProduct(row as ProductRowWithImages));
 }
 
+/**
+ * Same-category, active, newest-first products for `anchorProductId`,
+ * excluding every id in `excludeIds` — the shared rule behind both
+ * `listCartRecommendations` and `listSimilarProducts` (same rule
+ * `listRelatedProducts` uses on the PDP; not a personalized engine).
+ * Returns `[]` when the anchor has no category or no longer exists (e.g. it
+ * sold out/was archived after being added to the cart).
+ */
+async function listSameCategoryProducts(
+  anchorProductId: string,
+  excludeIds: string[],
+  limit: number,
+): Promise<Product[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data: anchor, error: anchorError } = await supabase
+    .from(DATABASE_TABLES.PRODUCTS)
+    .select("category_id")
+    .eq("id", anchorProductId)
+    .maybeSingle();
+
+  if (anchorError) {
+    throw queryError("Failed to load similar products", anchorError);
+  }
+  if (!anchor?.category_id) return [];
+
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PRODUCTS)
+    .select(PRODUCT_COLUMNS)
+    .eq("status", PRODUCT_STATUS.active)
+    .eq("category_id", anchor.category_id)
+    .not("id", "in", `(${excludeIds.join(",")})`)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    throw queryError("Failed to load similar products", error);
+  }
+
+  return (data ?? []).map((row) => toProduct(row as ProductRowWithImages));
+}
+
+/** Cart-page "You may also like" — anchored on the first item in the cart,
+ * excluding every product already in it, not just the anchor. */
+export async function listCartRecommendations(
+  cartProductIds: string[],
+  limit = 4,
+): Promise<Product[]> {
+  if (cartProductIds.length === 0) return [];
+  return listSameCategoryProducts(cartProductIds[0], cartProductIds, limit);
+}
+
+/** Cart-row "Find Similar" — same-category matches for one specific line,
+ * excluding only that product itself. */
+export async function listSimilarProducts(
+  productId: string,
+  limit = 6,
+): Promise<Product[]> {
+  return listSameCategoryProducts(productId, [productId], limit);
+}
+
 export interface ProductSuggestion {
   id: string;
   title: string;
@@ -424,6 +492,163 @@ export async function getProductsPriceAndStock(
     quantity: row.quantity,
     status: row.status as ProductStatus,
   }));
+}
+
+/** Live price/stock snapshot for one variant, resolved against its parent product. */
+export interface VariantPriceAndStock {
+  id: string;
+  productId: string;
+  /** The variant's own price override, or the parent product's price when it has none. */
+  priceCents: number;
+  quantity: number;
+  status: ProductStatus;
+}
+
+/**
+ * Batch stock lookup for variants — the counterpart to `products.quantity`
+ * for a variant-level line, since `inventory` itself is not publicly
+ * readable (see `get_variant_stock`'s migration comment). Returns 0 for any
+ * id the RPC didn't return a row for (not found, inactive, or its parent
+ * product inactive) rather than throwing — mirrors `getProductsPriceAndStock`'s
+ * "missing = unavailable" convention.
+ */
+export async function getVariantStock(
+  variantIds: string[],
+): Promise<Map<string, number>> {
+  if (variantIds.length === 0) return new Map();
+
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("get_variant_stock", {
+    p_variant_ids: variantIds,
+  });
+
+  if (error) {
+    throw queryError("Failed to check variant stock", error);
+  }
+
+  return new Map((data ?? []).map((row) => [row.variant_id, row.quantity]));
+}
+
+/**
+ * Batch re-check of current price/stock/status for a set of variant ids — the
+ * variant-level counterpart to `getProductsPriceAndStock`. Public (no auth):
+ * same guest-cart reasoning as the product version. A variant missing from
+ * the result (inactive, deleted, or its parent product no longer active) must
+ * be treated as "no longer available" by the caller, same convention as the
+ * product version.
+ */
+export async function getVariantsPriceAndStock(
+  variantIds: string[],
+): Promise<VariantPriceAndStock[]> {
+  if (variantIds.length === 0) return [];
+
+  const supabase = await createSupabaseServerClient();
+  const { data: variants, error } = await supabase
+    .from(DATABASE_TABLES.PRODUCT_VARIANTS)
+    .select("id, product_id, price_cents")
+    .in("id", variantIds);
+
+  if (error) {
+    throw queryError("Failed to check variant availability", error);
+  }
+  if (!variants || variants.length === 0) return [];
+
+  const productIds = [...new Set(variants.map((row) => row.product_id))];
+  const [products, stock] = await Promise.all([
+    getProductsPriceAndStock(productIds),
+    getVariantStock(variantIds),
+  ]);
+  const productById = new Map(products.map((product) => [product.id, product]));
+
+  return variants.flatMap((row) => {
+    const product = productById.get(row.product_id);
+    // The parent product isn't in the (active-only) result — treat the
+    // variant as unavailable too, rather than fabricating a price.
+    if (!product) return [];
+    return [
+      {
+        id: row.id,
+        productId: row.product_id,
+        priceCents: row.price_cents ?? product.priceCents,
+        quantity: stock.get(row.id) ?? 0,
+        status: product.status,
+      },
+    ];
+  });
+}
+
+/** One cart line to revalidate: a plain product, or a specific variant of one. */
+export interface CartAvailabilityQuery {
+  productId: string;
+  variantId?: string;
+}
+
+/** Live price/stock snapshot for one cart line — product- or variant-level. */
+export interface CartAvailabilityEntry {
+  productId: string;
+  variantId: string | null;
+  priceCents: number;
+  quantity: number;
+  status: ProductStatus;
+}
+
+/**
+ * Revalidates a client-side cart against the live database — the merged,
+ * variant-aware counterpart to calling `getProductsPriceAndStock` alone.
+ * Non-variant lines are checked against `products`; variant lines are
+ * checked against `product_variants` + variant-level `inventory` (via
+ * `getVariantsPriceAndStock`). A line missing from the result means "no
+ * longer available" — same convention both underlying functions already use.
+ */
+export async function checkCartAvailability(
+  lines: CartAvailabilityQuery[],
+): Promise<CartAvailabilityEntry[]> {
+  const productIds = [
+    ...new Set(lines.filter((line) => !line.variantId).map((line) => line.productId)),
+  ];
+  const variantIds = [
+    ...new Set(
+      lines
+        .filter((line): line is CartAvailabilityQuery & { variantId: string } =>
+          Boolean(line.variantId),
+        )
+        .map((line) => line.variantId),
+    ),
+  ];
+
+  const [products, variants] = await Promise.all([
+    getProductsPriceAndStock(productIds),
+    getVariantsPriceAndStock(variantIds),
+  ]);
+  const productById = new Map(products.map((product) => [product.id, product]));
+  const variantById = new Map(variants.map((variant) => [variant.id, variant]));
+
+  return lines.flatMap((line): CartAvailabilityEntry[] => {
+    if (line.variantId) {
+      const variant = variantById.get(line.variantId);
+      if (!variant) return [];
+      return [
+        {
+          productId: line.productId,
+          variantId: line.variantId,
+          priceCents: variant.priceCents,
+          quantity: variant.quantity,
+          status: variant.status,
+        },
+      ];
+    }
+    const product = productById.get(line.productId);
+    if (!product) return [];
+    return [
+      {
+        productId: line.productId,
+        variantId: null,
+        priceCents: product.priceCents,
+        quantity: product.quantity,
+        status: product.status,
+      },
+    ];
+  });
 }
 
 /**
@@ -632,6 +857,40 @@ export async function productBelongsToOwner(
     throw queryError("Failed to verify product ownership", error);
   }
   return Boolean(data);
+}
+
+/**
+ * Resolves a product's own `seller_id`/`shop_id` — used when creating a
+ * variant, so the variant is attributed to the product's *actual* owner
+ * (never the acting admin's own id) while still verifying the caller
+ * (owner = null for admin) is authorized to touch this product at all.
+ */
+export async function getProductOwnerInfo(
+  productId: string,
+  owner: { sellerId: string; shopId: string | null } | null,
+): Promise<{ sellerId: string; shopId: string | null }> {
+  const supabase = await createSupabaseServerClient();
+  let query = supabase
+    .from(DATABASE_TABLES.PRODUCTS)
+    .select("seller_id, shop_id")
+    .eq("id", productId);
+
+  if (owner) {
+    const ownerFilter = owner.shopId
+      ? `seller_id.eq.${owner.sellerId},shop_id.eq.${owner.shopId}`
+      : `seller_id.eq.${owner.sellerId}`;
+    query = query.or(ownerFilter);
+  }
+
+  const { data, error } = await query.maybeSingle();
+
+  if (error) {
+    throw queryError("Failed to load product", error);
+  }
+  if (!data) {
+    throw new Error("Product not found.");
+  }
+  return { sellerId: data.seller_id, shopId: data.shop_id };
 }
 
 /**
@@ -1217,6 +1476,7 @@ const ORDER_COLUMNS = `
   seller:profiles!orders_seller_id_fkey ( full_name, username, role ),
   order_items (
     id, product_id, product_title, quantity, unit_price_cents, subtotal_cents,
+    variant_id, variant_label,
     product:products!order_items_product_id_fkey ( slug, product_images ( url ) )
   )
 `;
@@ -1245,7 +1505,10 @@ function toShippingAddress(value: Json): ShippingAddress | null {
     fullName: record.full_name,
     line1: str("line1") ?? "",
     line2: str("line2"),
+    barangay: str("barangay"),
     city: str("city") ?? "",
+    province: str("province"),
+    region: str("region"),
     postalCode: str("postal_code") ?? "",
     country: str("country") ?? "",
     phone: str("phone"),
@@ -1279,6 +1542,8 @@ function toOrder(row: OrderRowWithItems): Order {
       subtotalCents: item.subtotal_cents,
       productSlug: item.product?.slug ?? null,
       imageUrl: item.product?.product_images?.[0]?.url ?? null,
+      variantId: item.variant_id,
+      variantLabel: item.variant_label,
     })),
     placedAt: row.placed_at,
     paidAt: row.paid_at,
@@ -1603,7 +1868,7 @@ export async function advanceOrderStatus(
 /** One seller-order to create. `shippingAddress` uses the DB's snake_case keys. */
 export interface CreateOrderInput {
   sellerId: string;
-  items: { productId: string; quantity: number }[];
+  items: { productId: string; quantity: number; variantId?: string }[];
   shippingAddress: Json;
   shippingFeeCents: number;
   notes?: string | null;
@@ -1626,6 +1891,7 @@ export async function createOrder(
     p_items: input.items.map((item) => ({
       product_id: item.productId,
       quantity: item.quantity,
+      variant_id: item.variantId ?? undefined,
     })),
     p_shipping_address: input.shippingAddress,
     p_shipping_fee_cents: input.shippingFeeCents,
@@ -1730,6 +1996,176 @@ export async function updateMyProfile(
     throw new Error("Failed to load your profile after saving.");
   }
   return profile;
+}
+
+// ============================================================================
+// Addresses (buyer saved shipping addresses — Phase 2 checkout improvement)
+// ============================================================================
+
+type AddressRow = Database["public"]["Tables"]["addresses"]["Row"];
+
+function toAddress(row: AddressRow): Address {
+  return {
+    id: row.id,
+    label: row.label,
+    recipientName: row.recipient_name,
+    phone: row.phone,
+    region: row.region,
+    province: row.province,
+    city: row.city,
+    barangay: row.barangay,
+    streetDetails: row.street_details,
+    postalCode: row.postal_code,
+    country: row.country,
+    isDefault: row.is_default,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+const ADDRESS_COLUMNS =
+  "id, label, recipient_name, phone, region, province, city, barangay, street_details, postal_code, country, is_default, created_at, updated_at";
+
+/**
+ * The signed-in buyer's saved addresses, default first then newest. `userId`
+ * is passed explicitly by the caller (already resolved via
+ * `requireSessionUser()`), matching the rest of this file's buyer-scoped
+ * reads (e.g. `listBuyerOrders`) — RLS (`user_id = auth.uid()`) is still the
+ * actual enforcement, this is defense in depth, not the boundary itself.
+ */
+export async function listMyAddresses(userId: string): Promise<Address[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.ADDRESSES)
+    .select(ADDRESS_COLUMNS)
+    .eq("user_id", userId)
+    .order("is_default", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw queryError("Failed to load your addresses", error);
+  }
+  return (data ?? []).map((row) => toAddress(row as AddressRow));
+}
+
+/**
+ * Creates a new saved address for the signed-in buyer. A buyer's very first
+ * address becomes their default automatically (nothing else to default to);
+ * every address after that starts non-default — the buyer must explicitly
+ * use `setDefaultAddress` to change it, never an implicit side effect of
+ * adding a new one.
+ */
+export async function createAddress(
+  userId: string,
+  input: AddressInput,
+): Promise<Address> {
+  const supabase = await createSupabaseServerClient();
+
+  const { count, error: countError } = await supabase
+    .from(DATABASE_TABLES.ADDRESSES)
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId);
+
+  if (countError) {
+    throw queryError("Failed to save address", countError);
+  }
+
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.ADDRESSES)
+    .insert({
+      user_id: userId,
+      label: input.label,
+      recipient_name: input.recipientName,
+      phone: input.phone,
+      region: input.region || null,
+      province: input.province || null,
+      city: input.city,
+      barangay: input.barangay || null,
+      street_details: input.streetDetails,
+      postal_code: input.postalCode,
+      is_default: (count ?? 0) === 0,
+    })
+    .select(ADDRESS_COLUMNS)
+    .single();
+
+  if (error) {
+    throw queryError("Failed to save address", error);
+  }
+  return toAddress(data as AddressRow);
+}
+
+/**
+ * Updates one of the signed-in buyer's own addresses. Never touches
+ * `is_default` — editing an address must never silently change which one is
+ * the default; `setDefaultAddress` is the only path for that. RLS scopes the
+ * row to `auth.uid()`; the explicit `user_id` filter is defense in depth.
+ */
+export async function updateAddress(
+  userId: string,
+  addressId: string,
+  input: AddressInput,
+): Promise<Address> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.ADDRESSES)
+    .update({
+      label: input.label,
+      recipient_name: input.recipientName,
+      phone: input.phone,
+      region: input.region || null,
+      province: input.province || null,
+      city: input.city,
+      barangay: input.barangay || null,
+      street_details: input.streetDetails,
+      postal_code: input.postalCode,
+    })
+    .eq("id", addressId)
+    .eq("user_id", userId)
+    .select(ADDRESS_COLUMNS)
+    .single();
+
+  if (error) {
+    throw queryError("Failed to update address", error);
+  }
+  return toAddress(data as AddressRow);
+}
+
+/** Deletes one of the signed-in buyer's own addresses. */
+export async function deleteAddress(userId: string, addressId: string): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from(DATABASE_TABLES.ADDRESSES)
+    .delete()
+    .eq("id", addressId)
+    .eq("user_id", userId);
+
+  if (error) {
+    throw queryError("Failed to delete address", error);
+  }
+}
+
+/**
+ * Marks one address as the buyer's default. The `addresses_single_default`
+ * trigger atomically unsets any other default for this user in the same
+ * statement — no client-side "unset old, then set new" race.
+ */
+export async function setDefaultAddress(
+  userId: string,
+  addressId: string,
+): Promise<Address> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.ADDRESSES)
+    .update({ is_default: true })
+    .eq("id", addressId)
+    .eq("user_id", userId)
+    .select(ADDRESS_COLUMNS)
+    .single();
+
+  if (error) {
+    throw queryError("Failed to set default address", error);
+  }
+  return toAddress(data as AddressRow);
 }
 
 // ============================================================================
@@ -2771,21 +3207,26 @@ export async function getActivePaymentForOrder(
 
 type InventoryRow = Database["public"]["Tables"]["inventory"]["Row"];
 type StockAdjustmentRow = Database["public"]["Tables"]["stock_adjustments"]["Row"];
+type ProductVariantRow = Database["public"]["Tables"]["product_variants"]["Row"];
 
 /**
- * Inventory columns plus the parent product's title/slug/status and the
- * owning shop's name — everything the dashboard list needs in one round
- * trip. Literal for the same reason as `PRODUCT_COLUMNS`/`PAYMENT_COLUMNS`.
+ * Inventory columns plus the parent product's title/slug/status, the owning
+ * shop's name, and — when this row is variant-level — the variant's own
+ * sku/color/size, so the dashboard list can label it distinctly from the
+ * product's own row. Literal for the same reason as
+ * `PRODUCT_COLUMNS`/`PAYMENT_COLUMNS`.
  */
 const INVENTORY_COLUMNS = `
-  id, product_id, shop_id, quantity, low_stock_threshold, created_at, updated_at,
+  id, product_id, variant_id, shop_id, quantity, low_stock_threshold, created_at, updated_at,
   product:products!inventory_product_id_fkey ( title, slug, status ),
-  shop:shops!inventory_shop_id_fkey ( name )
+  shop:shops!inventory_shop_id_fkey ( name ),
+  variant:product_variants!inventory_variant_id_fkey ( sku, color, size )
 `;
 
 type InventoryRowWithJoins = InventoryRow & {
   product: Pick<ProductRow, "title" | "slug" | "status"> | null;
   shop: { name: string } | null;
+  variant: Pick<ProductVariantRow, "sku" | "color" | "size"> | null;
 };
 
 function toInventoryItem(row: InventoryRowWithJoins): InventoryItem {
@@ -2797,6 +3238,10 @@ function toInventoryItem(row: InventoryRowWithJoins): InventoryItem {
     productStatus: (row.product?.status ?? PRODUCT_STATUS.draft) as ProductStatus,
     shopId: row.shop_id,
     shopName: row.shop?.name ?? null,
+    variantId: row.variant_id,
+    variantLabel: row.variant
+      ? [row.variant.color, row.variant.size].filter(Boolean).join(" / ") || null
+      : null,
     quantity: row.quantity,
     lowStockThreshold: row.low_stock_threshold,
     stockStatus: getStockStatus(row.quantity, row.low_stock_threshold),
@@ -2826,7 +3271,13 @@ export async function listDashboardInventory(): Promise<InventoryItem[]> {
   return (data ?? []).map((row) => toInventoryItem(row as InventoryRowWithJoins));
 }
 
-/** Single inventory row for one product, or null if none exists yet. */
+/**
+ * Single product-level inventory row, or null if none exists yet. Explicitly
+ * scoped to `variant_id is null` — since Phase 3a, a product with variants
+ * has one inventory row *per variant* sharing the same `product_id`, so a
+ * plain `.eq("product_id", ...)` would ambiguously match more than one row
+ * (and `.maybeSingle()` would throw) the moment that product gets a variant.
+ */
 export async function getInventoryForProduct(
   productId: string,
 ): Promise<InventoryItem | null> {
@@ -2835,6 +3286,24 @@ export async function getInventoryForProduct(
     .from(DATABASE_TABLES.INVENTORY)
     .select(INVENTORY_COLUMNS)
     .eq("product_id", productId)
+    .is("variant_id", null)
+    .maybeSingle();
+
+  if (error) {
+    throw queryError("Failed to load inventory", error);
+  }
+  return data ? toInventoryItem(data as InventoryRowWithJoins) : null;
+}
+
+/** Single variant-level inventory row, or null if none exists yet. */
+export async function getVariantInventory(
+  variantId: string,
+): Promise<InventoryItem | null> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.INVENTORY)
+    .select(INVENTORY_COLUMNS)
+    .eq("variant_id", variantId)
     .maybeSingle();
 
   if (error) {
@@ -2858,6 +3327,7 @@ export async function adjustStock(input: AdjustStockInput): Promise<InventoryIte
     p_delta: input.delta,
     p_reason: input.reason,
     p_note: input.note ?? undefined,
+    p_variant_id: input.variantId ?? undefined,
   });
 
   if (error) {
@@ -2866,7 +3336,9 @@ export async function adjustStock(input: AdjustStockInput): Promise<InventoryIte
     throw rpcError("Could not adjust stock.", error);
   }
 
-  const item = await getInventoryForProduct(input.productId);
+  const item = input.variantId
+    ? await getVariantInventory(input.variantId)
+    : await getInventoryForProduct(input.productId);
   if (!item) {
     throw new Error("Could not load the updated inventory record.");
   }
@@ -2905,16 +3377,29 @@ function toStockAdjustment(row: StockAdjustmentRowWithActor): StockAdjustment {
   };
 }
 
-/** Recent stock movement history for one product, newest first. RLS scopes it identically to `inventory`. */
+/**
+ * Recent stock movement history, newest first. RLS scopes it identically to
+ * `inventory`. Scoped to exactly one row's worth of history: pass
+ * `variantId` for a variant's own history, omit it for the product-level
+ * row's history only (`variant_id is null`) — never a mix of both, so a
+ * product with variants doesn't get its own history panel polluted with
+ * every variant's movements. For a product with no variants this filter is
+ * a no-op (no variant rows exist to exclude), preserving today's exact
+ * behavior.
+ */
 export async function listStockAdjustments(
   productId: string,
+  variantId?: string | null,
   limit = 20,
 ): Promise<StockAdjustment[]> {
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from(DATABASE_TABLES.STOCK_ADJUSTMENTS)
     .select(STOCK_ADJUSTMENT_COLUMNS)
-    .eq("product_id", productId)
+    .eq("product_id", productId);
+  query = variantId ? query.eq("variant_id", variantId) : query.is("variant_id", null);
+
+  const { data, error } = await query
     .order("created_at", { ascending: false })
     .limit(limit);
 
@@ -2925,6 +3410,204 @@ export async function listStockAdjustments(
   return (data ?? []).map((row) =>
     toStockAdjustment(row as StockAdjustmentRowWithActor),
   );
+}
+
+// ============================================================================
+// Product Variants (Phase 3b — optional color/size variants of a product)
+// ============================================================================
+
+const PRODUCT_VARIANT_COLUMNS = `
+  id, product_id, seller_id, shop_id, sku, color, size, price_cents, status,
+  created_at, updated_at
+`;
+
+function toProductVariant(row: ProductVariantRow): ProductVariant {
+  return {
+    id: row.id,
+    productId: row.product_id,
+    sellerId: row.seller_id,
+    shopId: row.shop_id,
+    sku: row.sku,
+    color: row.color,
+    size: row.size,
+    priceCents: row.price_cents,
+    status: row.status as ProductStatus,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+/** A product's own variants, oldest first (creation order). */
+export async function listProductVariants(
+  productId: string,
+): Promise<ProductVariant[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PRODUCT_VARIANTS)
+    .select(PRODUCT_VARIANT_COLUMNS)
+    .eq("product_id", productId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw queryError("Failed to load variants", error);
+  }
+  return (data ?? []).map((row) => toProductVariant(row as ProductVariantRow));
+}
+
+/**
+ * Every variant visible to the caller — no manual filter, mirrors
+ * `listDashboardInventory()`/`listDashboardProducts()`'s "RLS alone is the
+ * boundary" pattern. Fetched once by the dashboard page and grouped by
+ * `productId` client-side, avoiding one query per listed product.
+ */
+export async function listDashboardProductVariants(): Promise<ProductVariant[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PRODUCT_VARIANTS)
+    .select(PRODUCT_VARIANT_COLUMNS)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw queryError("Failed to load variants", error);
+  }
+  return (data ?? []).map((row) => toProductVariant(row as ProductVariantRow));
+}
+
+export interface ProductVariantInput {
+  sku?: string;
+  color?: string;
+  size?: string;
+  /** Major-unit pesos; omitted/undefined = inherit the parent product's price. */
+  price?: number;
+}
+
+/** Creates a variant for a product the caller owns. Starts with 0 stock — see `product_variants_seed_inventory`; bring it up via `adjustStock`. */
+export async function createProductVariant(
+  productId: string,
+  sellerId: string,
+  shopId: string | null,
+  input: ProductVariantInput,
+): Promise<ProductVariant> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PRODUCT_VARIANTS)
+    .insert({
+      product_id: productId,
+      seller_id: sellerId,
+      shop_id: shopId,
+      sku: input.sku || null,
+      color: input.color || null,
+      size: input.size || null,
+      price_cents: input.price !== undefined ? toCents(input.price) : null,
+    })
+    .select(PRODUCT_VARIANT_COLUMNS)
+    .single();
+
+  if (error) {
+    if (error.code === "23505") {
+      throw new Error("This color/size combination already exists for this product.");
+    }
+    throw queryError("Failed to create variant", error);
+  }
+  return toProductVariant(data as ProductVariantRow);
+}
+
+/**
+ * Updates a variant's catalog attributes. Never touches stock (see
+ * `adjustStock`) or, when `owner` is set, a variant outside the caller's own
+ * scope — same defense-in-depth pattern as `updateProduct`.
+ */
+export async function updateProductVariant(
+  id: string,
+  owner: { sellerId: string; shopId: string | null } | null,
+  input: ProductVariantInput & { status?: ProductStatus },
+): Promise<ProductVariant> {
+  const supabase = await createSupabaseServerClient();
+
+  if (owner) {
+    const ownerFilter = owner.shopId
+      ? `seller_id.eq.${owner.sellerId},shop_id.eq.${owner.shopId}`
+      : `seller_id.eq.${owner.sellerId}`;
+    const { data: existing, error: readError } = await supabase
+      .from(DATABASE_TABLES.PRODUCT_VARIANTS)
+      .select("id")
+      .eq("id", id)
+      .or(ownerFilter)
+      .maybeSingle();
+    if (readError) {
+      throw new Error(`Failed to load variant: ${readError.message}`);
+    }
+    if (!existing) {
+      throw new Error("Variant not found.");
+    }
+  }
+
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PRODUCT_VARIANTS)
+    .update({
+      sku: input.sku || null,
+      color: input.color || null,
+      size: input.size || null,
+      price_cents: input.price !== undefined ? toCents(input.price) : null,
+      ...(input.status !== undefined ? { status: input.status } : {}),
+    })
+    .eq("id", id)
+    .select(PRODUCT_VARIANT_COLUMNS)
+    .single();
+
+  if (error) {
+    if (error.code === "23505") {
+      throw new Error("This color/size combination already exists for this product.");
+    }
+    throw queryError("Failed to update variant", error);
+  }
+  return toProductVariant(data as ProductVariantRow);
+}
+
+/**
+ * Deletes a variant. `order_items.variant_id` is `ON DELETE RESTRICT`
+ * (20260912010000_product_variants.sql) — a variant that has ever been
+ * ordered cannot be deleted, by design, to protect historical order data.
+ * That Postgres error (23503) is caught here and turned into a clear,
+ * actionable message instead of a raw constraint error.
+ */
+export async function deleteProductVariant(
+  id: string,
+  owner: { sellerId: string; shopId: string | null } | null,
+): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+
+  if (owner) {
+    const ownerFilter = owner.shopId
+      ? `seller_id.eq.${owner.sellerId},shop_id.eq.${owner.shopId}`
+      : `seller_id.eq.${owner.sellerId}`;
+    const { data: existing, error: readError } = await supabase
+      .from(DATABASE_TABLES.PRODUCT_VARIANTS)
+      .select("id")
+      .eq("id", id)
+      .or(ownerFilter)
+      .maybeSingle();
+    if (readError) {
+      throw new Error(`Failed to load variant: ${readError.message}`);
+    }
+    if (!existing) {
+      throw new Error("Variant not found.");
+    }
+  }
+
+  const { error } = await supabase
+    .from(DATABASE_TABLES.PRODUCT_VARIANTS)
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    if (error.code === "23503") {
+      throw new Error(
+        "This variant has already been ordered and can't be deleted — set it to Archived instead.",
+      );
+    }
+    throw queryError("Failed to delete variant", error);
+  }
 }
 
 // ============================================================================
@@ -3398,4 +4081,676 @@ export async function unlinkOAuthIdentity(identity: UserIdentity): Promise<void>
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.auth.unlinkIdentity(identity);
   if (error) throw new Error(error.message);
+}
+
+// ============================================================================
+// Cart (authenticated — Phase 2B). Guest carts stay entirely client-side
+// (CartProvider/localStorage, untouched); this is the server-persisted cart
+// for signed-in users only, so the same account sees the same cart across
+// browsers/devices. No price/stock is ever stored on a cart line or trusted
+// from a caller — `quantity` is the only writable field, and every display
+// field below is resolved live via join (checkCartAvailability, unchanged
+// since Phase 3c, remains the sanctioned re-validation path before checkout).
+//
+// Every function here takes `userId` as an explicit parameter, always
+// resolved by the caller via `requireSessionUser()` — never accept a
+// client-supplied id for authorization. RLS (`carts`/`cart_items`, Phase 2A)
+// is the real boundary; scoping every query through `getOrCreateCart(userId)`
+// is defense-in-depth on top of it, same double-layer pattern as
+// `updateProduct`'s `owner` filter.
+// ============================================================================
+
+type CartItemRow = Database["public"]["Tables"]["cart_items"]["Row"];
+
+const CART_ITEM_COLUMNS = `
+  id, cart_id, product_id, variant_id, quantity, created_at, updated_at,
+  product:products!cart_items_product_id_fkey (
+    title, slug, price_cents, currency, seller_id,
+    product_images ( url ),
+    seller:profiles!products_seller_id_fkey ( full_name, username, role )
+  ),
+  variant:product_variants!cart_items_variant_id_fkey ( color, size, price_cents )
+`;
+
+type CartItemRowWithJoins = CartItemRow & {
+  product: {
+    title: string;
+    slug: string;
+    price_cents: number;
+    currency: string;
+    seller_id: string;
+    product_images: { url: string }[];
+    seller: Pick<ProfileRow, "full_name" | "username" | "role"> | null;
+  } | null;
+  variant: {
+    color: string | null;
+    size: string | null;
+    price_cents: number | null;
+  } | null;
+};
+
+/** One line in an authenticated user's persistent cart, with live-joined display data. */
+export interface CartLineItem {
+  id: string;
+  productId: string;
+  variantId: string | null;
+  quantity: number;
+  productTitle: string;
+  productSlug: string;
+  imageUrl: string | null;
+  /** Variant price override, else the product's own price — always live, never stored. */
+  unitPriceCents: number;
+  currency: string;
+  sellerId: string;
+  sellerName: string | null;
+  sellerRole: UserRole | null;
+  variantLabel: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * `null` when the joined product no longer resolves (sold/archived beyond
+ * RLS's public visibility, or hard-deleted) — mirrors `getBuyerOrder`'s "a
+ * sold/archived product resolves to null" note. Callers should treat a
+ * `null` line the same way `checkCartAvailability` treats a missing id: no
+ * longer available.
+ */
+function toCartLineItem(row: CartItemRowWithJoins): CartLineItem | null {
+  if (!row.product) return null;
+  return {
+    id: row.id,
+    productId: row.product_id,
+    variantId: row.variant_id,
+    quantity: row.quantity,
+    productTitle: row.product.title,
+    productSlug: row.product.slug,
+    imageUrl: row.product.product_images?.[0]?.url ?? null,
+    unitPriceCents: row.variant?.price_cents ?? row.product.price_cents,
+    currency: row.product.currency,
+    sellerId: row.product.seller_id,
+    sellerName: row.product.seller?.full_name ?? row.product.seller?.username ?? null,
+    sellerRole: (row.product.seller?.role as UserRole | undefined) ?? null,
+    variantLabel: row.variant
+      ? [row.variant.color, row.variant.size].filter(Boolean).join(" / ") || null
+      : null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+/**
+ * Returns the signed-in user's cart, creating it on first use (`carts` has
+ * no other write path). `userId` must already be `requireSessionUser()`-
+ * resolved. Races two concurrent first-time callers safely: the loser's
+ * INSERT hits `carts_one_per_user` (23505) and re-reads the winner's row
+ * instead of erroring.
+ */
+export async function getOrCreateCart(userId: string): Promise<{ id: string }> {
+  const supabase = await createSupabaseServerClient();
+
+  const { data: existing, error: readError } = await supabase
+    .from(DATABASE_TABLES.CARTS)
+    .select("id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (readError) {
+    throw queryError("Failed to load cart", readError);
+  }
+  if (existing) return existing;
+
+  const { data: created, error: insertError } = await supabase
+    .from(DATABASE_TABLES.CARTS)
+    .insert({ user_id: userId })
+    .select("id")
+    .single();
+
+  if (!insertError) return created;
+
+  if (insertError.code === "23505") {
+    const { data: raceWinner, error: raceReadError } = await supabase
+      .from(DATABASE_TABLES.CARTS)
+      .select("id")
+      .eq("user_id", userId)
+      .single();
+    if (raceReadError) {
+      throw queryError("Failed to load cart", raceReadError);
+    }
+    return raceWinner;
+  }
+  throw queryError("Failed to create cart", insertError);
+}
+
+/** The signed-in user's cart lines, oldest first, with live display data. */
+export async function listCartItems(userId: string): Promise<CartLineItem[]> {
+  const supabase = await createSupabaseServerClient();
+  const cart = await getOrCreateCart(userId);
+
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.CART_ITEMS)
+    .select(CART_ITEM_COLUMNS)
+    .eq("cart_id", cart.id)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw queryError("Failed to load cart items", error);
+  }
+
+  return (data ?? [])
+    .map((row) => toCartLineItem(row as CartItemRowWithJoins))
+    .filter((item): item is CartLineItem => item !== null);
+}
+
+export interface AddCartItemInput {
+  productId: string;
+  variantId?: string;
+  quantity: number;
+}
+
+/**
+ * Adds a line, or increments an existing one — same product+variant merges,
+ * a different variant stays a separate line; `cart_items`'s partial unique
+ * indexes (Phase 2A) are the real guarantee, not this function's control
+ * flow. PostgREST's upsert can't target a *partial* unique index, so this
+ * does the insert-or-increment dance explicitly: try the insert, and on the
+ * expected unique-violation, increment the existing row instead. The unique
+ * indexes make this race-safe regardless of which caller "wins" the insert —
+ * two concurrent adds can never create a duplicate row, at worst one retries
+ * once as an update.
+ */
+export async function addCartItem(
+  userId: string,
+  input: AddCartItemInput,
+): Promise<CartLineItem> {
+  const supabase = await createSupabaseServerClient();
+  const cart = await getOrCreateCart(userId);
+
+  const { data: inserted, error: insertError } = await supabase
+    .from(DATABASE_TABLES.CART_ITEMS)
+    .insert({
+      cart_id: cart.id,
+      product_id: input.productId,
+      variant_id: input.variantId ?? null,
+      quantity: input.quantity,
+    })
+    .select(CART_ITEM_COLUMNS)
+    .single();
+
+  if (!insertError) {
+    const item = toCartLineItem(inserted as CartItemRowWithJoins);
+    if (!item) throw new Error("This product is no longer available.");
+    return item;
+  }
+
+  if (insertError.code !== "23505") {
+    // Covers 23503 (product/variant FK no longer exists) and the
+    // cart_items_validate_variant trigger's 23514 (variant belongs to a
+    // different product) via mapPostgresError's existing rules, same
+    // pattern as updateMyProfile.
+    throw new Error(mapPostgresError(insertError, "Could not add this item to your cart."));
+  }
+
+  // Line already exists — increment it instead, scoped by the exact same
+  // key the unique index protects, so this can never touch a sibling line.
+  let existingQuery = supabase
+    .from(DATABASE_TABLES.CART_ITEMS)
+    .select("id, quantity")
+    .eq("cart_id", cart.id)
+    .eq("product_id", input.productId);
+  existingQuery = input.variantId
+    ? existingQuery.eq("variant_id", input.variantId)
+    : existingQuery.is("variant_id", null);
+
+  const { data: existing, error: readError } = await existingQuery.single();
+  if (readError) {
+    throw queryError("Failed to add item to cart", readError);
+  }
+
+  const { data: updated, error: updateError } = await supabase
+    .from(DATABASE_TABLES.CART_ITEMS)
+    .update({ quantity: existing.quantity + input.quantity })
+    .eq("id", existing.id)
+    .select(CART_ITEM_COLUMNS)
+    .single();
+
+  if (updateError) {
+    throw queryError("Failed to add item to cart", updateError);
+  }
+  const item = toCartLineItem(updated as CartItemRowWithJoins);
+  if (!item) throw new Error("This product is no longer available.");
+  return item;
+}
+
+/**
+ * Sets one line's quantity outright (not a delta). `cartItemId` is
+ * client-supplied — the `.eq("cart_id", cart.id)` filter is what makes this
+ * safe: `cart.id` is always resolved server-side from `userId`, never from
+ * the caller, so a foreign cart's item id structurally cannot match, on top
+ * of RLS already blocking it.
+ */
+export async function updateCartItemQuantity(
+  userId: string,
+  cartItemId: string,
+  quantity: number,
+): Promise<CartLineItem> {
+  const supabase = await createSupabaseServerClient();
+  const cart = await getOrCreateCart(userId);
+
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.CART_ITEMS)
+    .update({ quantity })
+    .eq("id", cartItemId)
+    .eq("cart_id", cart.id)
+    .select(CART_ITEM_COLUMNS)
+    .maybeSingle();
+
+  if (error) {
+    throw queryError("Failed to update cart item", error);
+  }
+  if (!data) {
+    throw new Error("Cart item not found.");
+  }
+  const item = toCartLineItem(data as CartItemRowWithJoins);
+  if (!item) throw new Error("This product is no longer available.");
+  return item;
+}
+
+/** Removes one line. Same `cart_id` defense-in-depth as `updateCartItemQuantity`. */
+export async function removeCartItem(userId: string, cartItemId: string): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const cart = await getOrCreateCart(userId);
+
+  const { error, count } = await supabase
+    .from(DATABASE_TABLES.CART_ITEMS)
+    .delete({ count: "exact" })
+    .eq("id", cartItemId)
+    .eq("cart_id", cart.id);
+
+  if (error) {
+    throw queryError("Failed to remove cart item", error);
+  }
+  if (!count) {
+    throw new Error("Cart item not found.");
+  }
+}
+
+/**
+ * Removes several lines at once — e.g. clearing exactly the items a
+ * checkout just placed. Silently ignores ids that don't exist or don't
+ * belong to this cart, rather than erroring, matching the client
+ * `removeMany` reducer action's own "best effort" semantics.
+ */
+export async function removeManyCartItems(
+  userId: string,
+  cartItemIds: string[],
+): Promise<void> {
+  if (cartItemIds.length === 0) return;
+  const supabase = await createSupabaseServerClient();
+  const cart = await getOrCreateCart(userId);
+
+  const { error } = await supabase
+    .from(DATABASE_TABLES.CART_ITEMS)
+    .delete()
+    .eq("cart_id", cart.id)
+    .in("id", cartItemIds);
+
+  if (error) {
+    throw queryError("Failed to remove cart items", error);
+  }
+}
+
+/** Empties the signed-in user's cart entirely. */
+export async function clearCart(userId: string): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const cart = await getOrCreateCart(userId);
+
+  const { error } = await supabase
+    .from(DATABASE_TABLES.CART_ITEMS)
+    .delete()
+    .eq("cart_id", cart.id);
+
+  if (error) {
+    throw queryError("Failed to clear cart", error);
+  }
+}
+
+export interface MergeGuestCartResult {
+  mergedCount: number;
+  failedCount: number;
+}
+
+/**
+ * Folds a just-authenticated guest cart into the signed-in user's persistent
+ * cart — one call to the existing `addCartItem` per line, so the same
+ * product+variant merges into an existing line (summed) exactly the way a
+ * normal "add to cart" already does; a new variant becomes a new line the
+ * same way too. Deliberately does **not** re-check stock/availability here:
+ * a line that's gone stale (archived product, insufficient stock) is already
+ * handled, uniformly, by the existing `checkCartAvailability` + `CartSummary`
+ * "no longer available" / "only N left" banners the moment the merged cart
+ * is displayed — duplicating that check here would just be the same logic
+ * twice. A single bad line (e.g. a hard-deleted product, which `addCartItem`
+ * surfaces as a friendly error) is caught and counted, not allowed to abort
+ * the rest of the merge.
+ */
+export async function mergeGuestCart(
+  userId: string,
+  items: AddCartItemInput[],
+): Promise<MergeGuestCartResult> {
+  let mergedCount = 0;
+  let failedCount = 0;
+
+  for (const item of items) {
+    try {
+      await addCartItem(userId, item);
+      mergedCount++;
+    } catch {
+      failedCount++;
+    }
+  }
+
+  return { mergedCount, failedCount };
+}
+
+// ============================================================================
+// Guided Product Selection — recommendation rules (schema + admin/seller
+// authoring only; the buyer-facing matching query is a separate, later
+// phase). Rule-based per DECISIONS.md ADR-009 — never AI/ML. A rule never
+// stores budget — see the migration's header comment; budget is matched
+// against a product's/variant's live price, not duplicated here.
+// ============================================================================
+
+type RecommendationRuleRow = Database["public"]["Tables"]["recommendation_rules"]["Row"];
+
+const RECOMMENDATION_RULE_COLUMNS = `
+  id, product_id, variant_id, seller_id, shop_id, occasion, size, active,
+  created_at, updated_at,
+  product:products!recommendation_rules_product_id_fkey ( title, slug ),
+  variant:product_variants!recommendation_rules_variant_id_fkey ( color, size )
+`;
+
+type RecommendationRuleRowWithJoins = RecommendationRuleRow & {
+  product: { title: string; slug: string } | null;
+  variant: { color: string | null; size: string | null } | null;
+};
+
+function toRecommendationRule(row: RecommendationRuleRowWithJoins): RecommendationRule {
+  return {
+    id: row.id,
+    productId: row.product_id,
+    variantId: row.variant_id,
+    sellerId: row.seller_id,
+    shopId: row.shop_id,
+    occasion: row.occasion as RecommendationOccasion | null,
+    size: row.size,
+    active: row.active,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    productTitle: row.product?.title ?? "",
+    productSlug: row.product?.slug ?? "",
+    variantLabel: row.variant
+      ? [row.variant.color, row.variant.size].filter(Boolean).join(" / ") || null
+      : null,
+  };
+}
+
+/** A product's own Guided Selection rules, oldest first. */
+export async function listProductRecommendationRules(
+  productId: string,
+): Promise<RecommendationRule[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.RECOMMENDATION_RULES)
+    .select(RECOMMENDATION_RULE_COLUMNS)
+    .eq("product_id", productId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw queryError("Failed to load recommendation rules", error);
+  }
+  return (data ?? []).map((row) => toRecommendationRule(row as RecommendationRuleRowWithJoins));
+}
+
+/**
+ * Every rule visible to the caller — no manual filter, mirrors
+ * `listDashboardProductVariants()`'s "RLS alone is the boundary" pattern.
+ * Fetched once by the dashboard page and grouped by `productId` client-side.
+ */
+export async function listDashboardRecommendationRules(): Promise<RecommendationRule[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.RECOMMENDATION_RULES)
+    .select(RECOMMENDATION_RULE_COLUMNS)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw queryError("Failed to load recommendation rules", error);
+  }
+  return (data ?? []).map((row) => toRecommendationRule(row as RecommendationRuleRowWithJoins));
+}
+
+export interface RecommendationRuleInput {
+  variantId?: string;
+  occasion?: RecommendationOccasion;
+  size?: string;
+}
+
+/** Creates a rule for a product the caller owns (or, for admin, any product — moderation, not ownership). */
+export async function createRecommendationRule(
+  productId: string,
+  sellerId: string,
+  shopId: string | null,
+  input: RecommendationRuleInput,
+): Promise<RecommendationRule> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.RECOMMENDATION_RULES)
+    .insert({
+      product_id: productId,
+      seller_id: sellerId,
+      shop_id: shopId,
+      variant_id: input.variantId ?? null,
+      occasion: input.occasion ?? null,
+      size: input.size || null,
+    })
+    .select(RECOMMENDATION_RULE_COLUMNS)
+    .single();
+
+  if (error) {
+    throw new Error(mapPostgresError(error, "Failed to create recommendation rule."));
+  }
+  return toRecommendationRule(data as RecommendationRuleRowWithJoins);
+}
+
+/** Updates a rule's match criteria/active flag. Ownership re-checked beyond RLS, same pattern as `updateProductVariant`. */
+export async function updateRecommendationRule(
+  id: string,
+  owner: { sellerId: string; shopId: string | null } | null,
+  input: RecommendationRuleInput & { active?: boolean },
+): Promise<RecommendationRule> {
+  const supabase = await createSupabaseServerClient();
+
+  if (owner) {
+    const ownerFilter = owner.shopId
+      ? `seller_id.eq.${owner.sellerId},shop_id.eq.${owner.shopId}`
+      : `seller_id.eq.${owner.sellerId}`;
+    const { data: existing, error: readError } = await supabase
+      .from(DATABASE_TABLES.RECOMMENDATION_RULES)
+      .select("id")
+      .eq("id", id)
+      .or(ownerFilter)
+      .maybeSingle();
+    if (readError) {
+      throw new Error(`Failed to load recommendation rule: ${readError.message}`);
+    }
+    if (!existing) {
+      throw new Error("Recommendation rule not found.");
+    }
+  }
+
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.RECOMMENDATION_RULES)
+    .update({
+      variant_id: input.variantId ?? null,
+      occasion: input.occasion ?? null,
+      size: input.size || null,
+      ...(input.active !== undefined ? { active: input.active } : {}),
+    })
+    .eq("id", id)
+    .select(RECOMMENDATION_RULE_COLUMNS)
+    .single();
+
+  if (error) {
+    throw new Error(mapPostgresError(error, "Failed to update recommendation rule."));
+  }
+  return toRecommendationRule(data as RecommendationRuleRowWithJoins);
+}
+
+/** Deletes a rule. No historical/financial dependency (unlike a variant), so this never needs a friendly FK-restrict message. */
+export async function deleteRecommendationRule(
+  id: string,
+  owner: { sellerId: string; shopId: string | null } | null,
+): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+
+  if (owner) {
+    const ownerFilter = owner.shopId
+      ? `seller_id.eq.${owner.sellerId},shop_id.eq.${owner.shopId}`
+      : `seller_id.eq.${owner.sellerId}`;
+    const { data: existing, error: readError } = await supabase
+      .from(DATABASE_TABLES.RECOMMENDATION_RULES)
+      .select("id")
+      .eq("id", id)
+      .or(ownerFilter)
+      .maybeSingle();
+    if (readError) {
+      throw new Error(`Failed to load recommendation rule: ${readError.message}`);
+    }
+    if (!existing) {
+      throw new Error("Recommendation rule not found.");
+    }
+  }
+
+  const { error } = await supabase
+    .from(DATABASE_TABLES.RECOMMENDATION_RULES)
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    throw queryError("Failed to delete recommendation rule", error);
+  }
+}
+
+// ============================================================================
+// Guided Product Selection — buyer-facing matching query. Public (no
+// `requireSessionUser()`) — a guest can use Guided Selection with no
+// account, same as the rest of the catalog/cart reads (ADR-013's precedent).
+// ============================================================================
+
+// Literal for the same reason as `PRODUCT_COLUMNS`/`RECOMMENDATION_RULE_COLUMNS`
+// above: the embedded product select must repeat `PRODUCT_COLUMNS`' column
+// list as its own literal, not `${PRODUCT_COLUMNS}` — interpolating a
+// constant widens the string and Supabase's generated-type parser can no
+// longer infer the joined shape.
+const GUIDED_SELECTION_MATCH_COLUMNS = `
+  id, variant_id, size,
+  variant:product_variants!recommendation_rules_variant_id_fkey ( color, size, price_cents ),
+  product:products!recommendation_rules_product_id_fkey!inner (
+    id, slug, title, description, price_cents, currency, quantity, condition,
+    status, featured, location, tags, category_id, seller_id, shop_id, published_at,
+    created_at, updated_at,
+    product_images ( id, url, alt_text, sort_order ),
+    seller:profiles!products_seller_id_fkey ( full_name, username, role ),
+    category:categories!products_category_id_fkey ( name, slug )
+  )
+`;
+
+type GuidedSelectionMatchRow = {
+  variant_id: string | null;
+  size: string | null;
+  variant: { color: string | null; size: string | null; price_cents: number | null } | null;
+  product: ProductRowWithImages;
+};
+
+export interface GuidedSelectionMatchInput {
+  occasion?: RecommendationOccasion;
+  /** Free text, same convention as `product_variants.size`/`recommendation_rules.size`. */
+  size?: string;
+  /** Major-unit pesos (not cents) — converted to price_cents below. */
+  minPrice?: number;
+  maxPrice?: number;
+}
+
+/**
+ * Matches active rules of active products against the buyer's occasion/size
+ * answers (an unanswered criterion matches anything) and checks each match's
+ * *live* price — the variant's price when the rule targets one, else the
+ * product's own price — against the buyer's budget window. Budget is never
+ * compared to a stored value (see the `recommendation_rules` migration's
+ * header comment).
+ *
+ * Occasion is filtered in SQL (a fixed enum, safe to interpolate). Size and
+ * budget are applied in application code instead: size is free text — unsafe
+ * to interpolate into a PostgREST `.or()` filter string, the same concern
+ * `listProducts`'s `params.search` sanitizes for — and budget needs the
+ * per-row variant-or-product price resolution above, which SQL can't express
+ * as a single column filter here. The admin-authored rule table is small, so
+ * filtering the fetched rows in memory (rather than a second round trip) is
+ * the simplest correct option (KISS).
+ */
+export async function listGuidedSelectionMatches(
+  input: GuidedSelectionMatchInput,
+  limit = 24,
+): Promise<GuidedSelectionMatch[]> {
+  const supabase = await createSupabaseServerClient();
+
+  let query = supabase
+    .from(DATABASE_TABLES.RECOMMENDATION_RULES)
+    .select(GUIDED_SELECTION_MATCH_COLUMNS)
+    .eq("active", true)
+    .eq("product.status", PRODUCT_STATUS.active);
+
+  if (input.occasion) {
+    query = query.or(`occasion.is.null,occasion.eq.${input.occasion}`);
+  }
+
+  const { data, error } = await query.order("created_at", { ascending: false });
+
+  if (error) {
+    throw queryError("Failed to load Guided Selection matches", error);
+  }
+
+  const wantedSize = input.size?.trim().toLowerCase();
+  const minCents = input.minPrice !== undefined ? toCents(input.minPrice) : null;
+  const maxCents = input.maxPrice !== undefined ? toCents(input.maxPrice) : null;
+
+  const seen = new Set<string>();
+  const matches: GuidedSelectionMatch[] = [];
+
+  for (const row of (data ?? []) as unknown as GuidedSelectionMatchRow[]) {
+    if (!row.product) continue;
+    if (row.size && wantedSize && row.size.trim().toLowerCase() !== wantedSize) continue;
+
+    const matchedPriceCents = row.variant?.price_cents ?? row.product.price_cents;
+    if (minCents !== null && matchedPriceCents < minCents) continue;
+    if (maxCents !== null && matchedPriceCents > maxCents) continue;
+
+    const dedupeKey = `${row.product.id}:${row.variant_id ?? ""}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+
+    matches.push({
+      product: toProduct(row.product),
+      variantId: row.variant_id,
+      variantLabel: row.variant
+        ? [row.variant.color, row.variant.size].filter(Boolean).join(" / ") || null
+        : null,
+      matchedPriceCents,
+    });
+
+    if (matches.length >= limit) break;
+  }
+
+  return matches;
 }

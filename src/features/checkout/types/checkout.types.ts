@@ -1,4 +1,4 @@
-import type { CartItem } from "@/features/cart/types/cart.types";
+import type { CartItem, CartLineRef } from "@/features/cart/types/cart.types";
 
 /**
  * Payment method selected at checkout. The Stripe/card spike (ADR-014) and
@@ -21,13 +21,13 @@ export interface CheckoutGroup {
   currency: string;
 }
 
-/** A successfully created order. `productIds` lets the client clear placed items. */
+/** A successfully created order. `lines` lets the client clear exactly the placed cart lines (product + variant). */
 export interface PlacedOrder {
   orderId: string;
   orderNumber: string;
   sellerId: string;
   sellerName: string | null;
-  productIds: string[];
+  lines: CartLineRef[];
 }
 
 /** A seller group the RPC refused (e.g. "Only 2 left of X"). Its items stay in the cart. */

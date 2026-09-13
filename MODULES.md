@@ -52,16 +52,16 @@
 | Field | Detail |
 |---|---|
 | **Purpose** | The product catalog: listing, search, filtering, and detail pages for finished-garment inventory across the three shops. |
-| **Responsibilities** | Catalog browsing UX; search/filter/pagination; product detail presentation; related-product suggestions. |
-| **Features** | Catalog grid with pagination, filters, search input, breadcrumbs, product detail gallery, related products. |
+| **Responsibilities** | Catalog browsing UX; search/filter/pagination; product detail presentation; related-product suggestions; optional per-product color/size variants. |
+| **Features** | Catalog grid with pagination, filters, search input, breadcrumbs, product detail gallery, related products. Optional variants: a product may have zero or more color/size variant rows (SKU, optional price override — inherits the parent product's price when unset); a buyer selects a variant on the PDP before adding to cart; stock is tracked independently per variant through the existing Inventory module (no separate variant-stock system). |
 | **Pages** | `src/app/(shop)/products/page.tsx`; `products/[slug]/{page,loading,not-found}.tsx`. |
-| **Components** | `features/products/components/{Breadcrumbs,CatalogHeader,PaginationControls,ProductCard,ProductFilters,ProductGallery,ProductGrid,ProductGridSkeleton,ProductListSection,ProductSearchInput,RelatedProducts}`. |
-| **Server Actions** | `features/products/actions/product.actions.ts` — create (seller-only) /update/archive (guarded by `requireRole`), consumed by the Shop Owner Portal (`/seller/*`) and Admin Portal (`/admin/*`). |
-| **Services** | `lib/supabase/queries.ts` (products section) — `getProductBySlug` (React `cache()`), listing/search/filter queries, `toProduct` mapper. |
-| **Database Tables** | `products`, `product_images`, `categories` (FK). |
-| **Dependencies** | Marketplace (entry point), Cart (add-to-cart), Inventory (owns stock; `products.quantity` is a synced mirror — see [Inventory](#4-inventory)). |
-| **Current Status** | ✅ Completed for browsing/detail and for Shop Owner/Admin management (see [Admin](#11-admin) and [Shop Owner](#12-shop-owner)). |
-| **Future Work** | None outstanding. |
+| **Components** | `features/products/components/{Breadcrumbs,CatalogHeader,PaginationControls,ProductCard,ProductFilters,ProductGallery,ProductGrid,ProductGridSkeleton,ProductListSection,ProductSearchInput,RelatedProducts,ProductQuantityAndAddToCart,ProductVariantManager,ProductVariantRow}`. |
+| **Server Actions** | `features/products/actions/product.actions.ts` — create (seller-only)/update/archive (guarded by `requireRole`); `features/products/actions/product-variant.actions.ts` — create/update/delete a variant, same role guard, consumed by the Shop Owner Portal (`/seller/*`) and Admin Portal (`/admin/*`). |
+| **Services** | `lib/supabase/queries.ts` (products section) — `getProductBySlug` (React `cache()`), listing/search/filter queries, `toProduct` mapper; (product variants section) — `listProductVariants`, `listDashboardProductVariants`, `createProductVariant`, `updateProductVariant`, `deleteProductVariant`, `getVariantStock` (public-safe stock lookup for the PDP, since `inventory` itself isn't publicly readable). |
+| **Database Tables** | `products`, `product_images`, `categories` (FK), `product_variants` (nullable per-product; a variant's stock lives in the existing `inventory` table, keyed by `variant_id`, not a separate table). |
+| **Dependencies** | Marketplace (entry point), Cart (add-to-cart, variant-aware), Inventory (owns stock, including per-variant stock; `products.quantity` is a synced mirror — see [Inventory](#4-inventory)). |
+| **Current Status** | ✅ Completed for browsing/detail and for Shop Owner/Admin management (see [Admin](#11-admin) and [Shop Owner](#12-shop-owner)), including variants. |
+| **Future Work** | Variant-specific images are not yet supported — a variant currently shows the parent product's photos; deferred, not planned for a specific phase. |
 
 ---
 
@@ -76,7 +76,7 @@
 | **Components** | `features/inventory/components/{InventoryTable,InventoryRow,StockStatusBadge,StockAdjustmentForm,StockHistoryPanel}`. |
 | **Server Actions** | `features/inventory/actions/inventory.actions.ts` — `adjustStockAction` (guarded by `requireRole(DASHBOARD_ROLES)` + rate limiting), `getStockHistoryAction`. |
 | **Services** | `lib/supabase/queries.ts` (inventory section) — `listDashboardInventory`, `getInventoryForProduct`, `adjustStock` (wraps the `adjust_stock` RPC), `listStockAdjustments`. `updateProduct()` (Products module) reroutes any submitted `quantity` through `adjustStock()` first, so the generic product-edit form still works but every stock write funnels through one audited path. |
-| **Database Tables** | Dedicated `inventory` (one row per product; `quantity`, `low_stock_threshold`) and append-only `stock_adjustments` (audit log — delta, previous/new quantity, reason, note, related order, actor). `products.quantity` remains as a trigger-synced, read-only-by-convention mirror (column-level `REVOKE UPDATE` for `authenticated`) so every buyer-facing read path (PDP, catalog tiles, cart, `getProductsPriceAndStock`) is unaffected. See [ARCHITECTURE.md → Current Database Mapping](./ARCHITECTURE.md#current-database-mapping-target-vs-current). |
+| **Database Tables** | Dedicated `inventory` (one row per product, or one row per product **variant** when the product has variants — `variant_id` is nullable and keys the variant-level row; `quantity`, `low_stock_threshold`) and append-only `stock_adjustments` (audit log — delta, previous/new quantity, reason, note, related order, actor, same optional `variant_id`). `products.quantity` remains as a trigger-synced, read-only-by-convention mirror for the non-variant case (column-level `REVOKE UPDATE` for `authenticated`) so every buyer-facing read path (PDP, catalog tiles, cart, `getProductsPriceAndStock`) is unaffected; it is intentionally **not** kept in sync once a product has variants (see [ARCHITECTURE.md → Current Database Mapping](./ARCHITECTURE.md#current-database-mapping-target-vs-current)). |
 | **Dependencies** | Products (`products_seed_inventory`/`products_sync_inventory_shop` triggers keep an inventory row in lockstep with every product); Orders (`create_order` locks/decrements `inventory`; an `orders_restock_on_cancel` trigger restocks automatically on cancellation — no change needed in `order.actions.ts`). |
 | **Current Status** | ✅ Completed. Resolves ARCHITECTURE.md TD-2. |
 | **Future Work** | A failed/rejected QR payment does not restock today — deliberately deferred as ARCHITECTURE.md TD-9 pending a Payments-module business-rule decision. Multi-location stock (the `inventory` schema's 1:1 product:row shape leaves room for this without a breaking change) is unplanned/speculative — do not build ahead of a stated need. |
@@ -87,17 +87,17 @@
 
 | Field | Detail |
 |---|---|
-| **Purpose** | Hold products from any of the three shops in one place before checkout — the "unified cart" the SAD calls for. |
-| **Responsibilities** | Add/remove/update line items; persist across page loads (not devices); expose totals to Checkout. |
-| **Features** | Add to cart, quantity update, remove item, cart summary, persistent guest cart. |
-| **Pages** | `src/app/(shop)/cart/page.tsx` (intentionally **public** — see [DECISIONS.md → ADR-013](./DECISIONS.md#adr-013-guest-cart-is-client-side-only)). |
-| **Components** | `features/cart/components/{AddToCartButton,CartSummary}`. |
-| **Server Actions** | None — cart is client-only until checkout. |
-| **Services** | `features/cart/providers/CartProvider` (Context), `features/cart/hooks/useCart`, `features/cart/utils/cart-reducer` (localStorage-backed `useReducer`). |
-| **Database Tables** | None — no server-side cart table by design. |
-| **Dependencies** | Products (source of line items); Checkout (consumes cart state, groups by seller). |
-| **Current Status** | ✅ Completed. |
-| **Future Work** | Optional authenticated-user cart sync across devices (see ADR-013 future revisit) — not currently planned. |
+| **Purpose** | Hold products from any of the three shops in one place before checkout — the "unified cart" the SAD calls for. For a guest, ephemeral and browser-local; for a signed-in account, the same cart follows them across browsers/devices. |
+| **Responsibilities** | Add/remove/update line items (product- or variant-level); expose totals to Checkout; for guests, persist across page loads on the same browser only; for authenticated users, persist server-side, isolated per account. |
+| **Features** | Add to cart, quantity update, remove item, cart summary, selective (per-line) checkout, variant-aware line identity (`productId`+`variantId`). Guest cart persists to `localStorage`. Authenticated cart persists to the database and is folded together with any leftover guest cart the moment the buyer signs in (matching lines sum, new lines are added — see [DECISIONS.md → ADR-020](./DECISIONS.md#adr-020-authenticated-cart-becomes-database-backed-with-guest-cart-merge-on-sign-in)). |
+| **Pages** | `src/app/(shop)/cart/page.tsx` (intentionally **public** — see [DECISIONS.md → ADR-013](./DECISIONS.md#adr-013-guest-cart-is-client-side-only); the page itself doesn't change based on guest vs. authenticated, only where `CartProvider` reads/writes). |
+| **Components** | `features/cart/components/{AddToCartButton,BuyNowButton,CartSummary,CartPreview,CartRecommendations}`. |
+| **Server Actions** | `features/cart/actions/cart.actions.ts` — authenticated-cart CRUD (`getMyCartAction`, `addToCartAction`, `updateCartItemQuantityAction`, `removeCartItemAction`, `removeManyCartItemsAction`, `clearCartAction`, `mergeGuestCartAction`), each resolving the caller via `requireSessionUser()` — never a client-supplied id; plus public reads usable by guests (`checkCartAvailabilityAction`, `getCartRecommendationsAction`, `getSimilarProductsAction`). Guest-only cart mutations stay entirely client-side (no action involved). |
+| **Services** | `features/cart/providers/CartProvider` (Context) — forks on the resolved identity: guest reads/writes `localStorage` via a `useReducer` exactly as before; an authenticated identity reads/writes through the Server Actions above, reconciled by refetching the full cart after every mutation. `features/cart/hooks/useCart`, `features/cart/utils/cart-reducer` (the guest-path reducer; also defines the shared `productId`+`variantId` line-identity helpers). `lib/supabase/queries.ts` (cart section) — `getOrCreateCart`, `listCartItems`, `addCartItem`, `updateCartItemQuantity`, `removeCartItem`, `removeManyCartItems`, `clearCart`, `mergeGuestCart`. |
+| **Database Tables** | `carts` (one row per authenticated user) and `cart_items` (`product_id`, nullable `variant_id`, `quantity` — no price/stock stored, always resolved live). Plain RLS, `user_id = auth.uid()`, **no admin or seller override** — same precedent as `addresses`/`wishlists`. Guest carts still have no server-side table, by design. |
+| **Dependencies** | Products (source of line items, including variants); Checkout (consumes cart state, groups by seller); Authentication (resolves the signed-in identity that selects guest vs. database-backed storage). |
+| **Current Status** | ✅ Completed — guest cart (client-side, unchanged) and authenticated cart (database-backed, RLS-isolated, cross-device) with guest→account merge on sign-in. |
+| **Future Work** | None outstanding for the core sync/merge capability. A known, low-severity, accepted gap: two browser tabs signing in at the same moment could both attempt to merge the same guest cart before either clears it, double-counting the affected lines — not solved with a distributed lock, since the buyer can just adjust the quantity like any other line. See ADR-020. |
 
 ---
 

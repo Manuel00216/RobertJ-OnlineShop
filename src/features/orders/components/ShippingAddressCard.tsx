@@ -18,8 +18,12 @@ export function ShippingAddressCard({
           <span className="font-semibold">{address.fullName}</span>
           <span>{address.line1}</span>
           {address.line2 ? <span>{address.line2}</span> : null}
-          <span>{[address.city, address.postalCode].filter(Boolean).join(", ")}</span>
-          <span>{address.country}</span>
+          <span>
+            {[address.barangay, address.city, address.province, address.region]
+              .filter(Boolean)
+              .join(", ")}
+          </span>
+          <span>{[address.postalCode, address.country].filter(Boolean).join(", ")}</span>
           {address.phone ? (
             <span className="mt-1 text-xs text-rj-gray-600">{address.phone}</span>
           ) : null}

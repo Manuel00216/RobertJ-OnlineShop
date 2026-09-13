@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, Menu, Search, ShoppingBag, X } from "lucide-react";
+import { ChevronDown, Menu, Search, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { AccountMenu } from "@/features/account/components/AccountMenu";
@@ -12,7 +12,7 @@ import { RJ_CARD } from "@/components/ui/card";
 import { ROUTES } from "@/constants/routes";
 import { cn } from "@/lib/utils/cn";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { useCart } from "@/features/cart/hooks/useCart";
+import { CartPreview } from "@/features/cart/components/CartPreview";
 import { searchProductSuggestionsAction } from "@/features/products/actions/product.actions";
 import type { Category } from "@/features/categories/types/category.types";
 import type { SessionUser } from "@/types/common.types";
@@ -35,7 +35,6 @@ export interface SiteHeaderClientProps {
  */
 export function SiteHeaderClient({ user, categories }: SiteHeaderClientProps) {
   const router = useRouter();
-  const { itemCount } = useCart();
 
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -227,21 +226,7 @@ export function SiteHeaderClient({ user, categories }: SiteHeaderClientProps) {
             <Search className="h-4 w-4 text-rj-black" aria-hidden="true" />
           </button>
 
-          <Link
-            href={ROUTES.cart}
-            aria-label={`Cart, ${itemCount} item${itemCount === 1 ? "" : "s"}`}
-            className="relative flex h-9 w-9 items-center justify-center rounded-full transition-colors hover:bg-rj-gray-100"
-          >
-            <ShoppingBag className="h-[18px] w-[18px] text-rj-black" aria-hidden="true" />
-            {itemCount > 0 ? (
-              <span
-                className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rj-red px-0.5 text-[9px] font-bold text-white"
-                style={{ animation: "pop 0.2s ease" }}
-              >
-                {itemCount}
-              </span>
-            ) : null}
-          </Link>
+          <CartPreview />
 
           {user ? (
             <AccountMenu user={user} />

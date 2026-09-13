@@ -66,6 +66,9 @@ export function OrderItemsList({
                   ) : (
                     <p className="text-sm font-semibold text-rj-black">{item.productTitle}</p>
                   )}
+                  {item.variantLabel ? (
+                    <p className="mt-0.5 text-xs text-rj-gray-500">{item.variantLabel}</p>
+                  ) : null}
                   <p className="mt-0.5 text-xs text-rj-gray-600">
                     {item.quantity} × {formatCurrency(item.unitPriceCents, currency)}
                   </p>

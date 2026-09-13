@@ -7,14 +7,16 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ConfirmPanel } from "@/components/ui/confirm-panel";
 import { ErrorState } from "@/components/feedback/ErrorState";
+import { RecommendationRuleManager, type RecommendationRule } from "@/features/assistant";
 import {
   archiveProductAction,
   assignProductShopAction,
 } from "@/features/products/actions/product.actions";
 import { ProductForm } from "@/features/products/components/ProductForm";
 import { ProductStatusBadge } from "@/features/products/components/ProductStatusBadge";
+import { ProductVariantManager } from "@/features/products/components/ProductVariantManager";
 import type { Category } from "@/features/categories/types/category.types";
-import type { Product } from "@/features/products/types/product.types";
+import type { Product, ProductVariant } from "@/features/products/types/product.types";
 import type { Shop } from "@/features/shops/types/shop.types";
 import { formatCurrency } from "@/lib/utils/currency";
 import { cn } from "@/lib/utils/cn";
@@ -25,6 +27,10 @@ export interface DashboardProductRowProps {
   /** Populated only for an admin — powers the create-form picker and the unassigned-row assign control. */
   shops: Shop[];
   isAdmin: boolean;
+  /** This product's own variants (already filtered by the panel from one bulk fetch — no N+1). */
+  variants: ProductVariant[];
+  /** This product's own Guided Selection rules (already filtered by the panel from one bulk fetch — no N+1). */
+  rules: RecommendationRule[];
 }
 
 /**
@@ -39,6 +45,8 @@ export function DashboardProductRow({
   categories,
   shops,
   isAdmin,
+  variants,
+  rules,
 }: DashboardProductRowProps) {
   const [mode, setMode] = useState<"view" | "edit">("view");
   const [confirmingArchive, setConfirmingArchive] = useState(false);
@@ -62,6 +70,12 @@ export function DashboardProductRow({
           >
             Cancel
           </Button>
+        </CardContent>
+        <CardContent className="border-t border-border p-5">
+          <ProductVariantManager product={product} variants={variants} />
+        </CardContent>
+        <CardContent className="border-t border-border p-5">
+          <RecommendationRuleManager product={product} rules={rules} variants={variants} />
         </CardContent>
       </Card>
     );

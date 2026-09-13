@@ -4,10 +4,11 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/feedback/EmptyState";
+import type { RecommendationRule } from "@/features/assistant";
 import { DashboardProductRow } from "@/features/products/components/DashboardProductRow";
 import { ProductForm } from "@/features/products/components/ProductForm";
 import type { Category } from "@/features/categories/types/category.types";
-import type { Product } from "@/features/products/types/product.types";
+import type { Product, ProductVariant } from "@/features/products/types/product.types";
 import type { Shop } from "@/features/shops/types/shop.types";
 
 export interface DashboardProductsPanelProps {
@@ -16,6 +17,10 @@ export interface DashboardProductsPanelProps {
   /** Populated only for an admin (from `listShops()`); empty for a seller. */
   shops: Shop[];
   isAdmin: boolean;
+  /** Every variant visible to the caller, one bulk fetch — filtered per row below, no N+1. */
+  variants: ProductVariant[];
+  /** Every Guided Selection rule visible to the caller, one bulk fetch — filtered per row below, no N+1. */
+  rules: RecommendationRule[];
 }
 
 /**
@@ -30,6 +35,8 @@ export function DashboardProductsPanel({
   categories,
   shops,
   isAdmin,
+  variants,
+  rules,
 }: DashboardProductsPanelProps) {
   const [showCreateForm, setShowCreateForm] = useState(false);
 
@@ -73,6 +80,8 @@ export function DashboardProductsPanel({
               categories={categories}
               shops={shops}
               isAdmin={isAdmin}
+              variants={variants.filter((variant) => variant.productId === product.id)}
+              rules={rules.filter((rule) => rule.productId === product.id)}
             />
           ))}
         </div>

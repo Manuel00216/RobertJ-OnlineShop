@@ -35,13 +35,18 @@ export async function adjustStockAction(
   }
 }
 
-/** Recent stock movement history for one product — powers the row's expandable history panel. */
+/**
+ * Recent stock movement history for one product (or one of its variants) —
+ * powers the row's expandable history panel. Omitting `variantId` scopes to
+ * the product-level row's own history only, never a mix with its variants'.
+ */
 export async function getStockHistoryAction(
   productId: string,
+  variantId?: string | null,
 ): Promise<ActionResult<StockAdjustment[]>> {
   try {
     await queries.requireRole(DASHBOARD_ROLES);
-    const history = await queries.listStockAdjustments(productId);
+    const history = await queries.listStockAdjustments(productId, variantId);
     return ok(history);
   } catch (error) {
     return fail(

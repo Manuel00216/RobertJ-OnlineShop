@@ -14,6 +14,68 @@ export type Database = {
   }
   public: {
     Tables: {
+      addresses: {
+        Row: {
+          barangay: string | null
+          city: string
+          country: string
+          created_at: string
+          id: string
+          is_default: boolean
+          label: string
+          phone: string
+          postal_code: string
+          province: string | null
+          recipient_name: string
+          region: string | null
+          street_details: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          barangay?: string | null
+          city: string
+          country?: string
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          label?: string
+          phone: string
+          postal_code: string
+          province?: string | null
+          recipient_name: string
+          region?: string | null
+          street_details: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          barangay?: string | null
+          city?: string
+          country?: string
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          label?: string
+          phone?: string
+          postal_code?: string
+          province?: string | null
+          recipient_name?: string
+          region?: string | null
+          street_details?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "addresses_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       admin_action_log: {
         Row: {
           action: string
@@ -61,6 +123,87 @@ export type Database = {
             foreignKeyName: "admin_action_log_target_user_id_fkey"
             columns: ["target_user_id"]
             isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cart_items: {
+        Row: {
+          cart_id: string
+          created_at: string
+          id: string
+          product_id: string
+          quantity: number
+          updated_at: string
+          variant_id: string | null
+        }
+        Insert: {
+          cart_id: string
+          created_at?: string
+          id?: string
+          product_id: string
+          quantity: number
+          updated_at?: string
+          variant_id?: string | null
+        }
+        Update: {
+          cart_id?: string
+          created_at?: string
+          id?: string
+          product_id?: string
+          quantity?: number
+          updated_at?: string
+          variant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cart_items_cart_id_fkey"
+            columns: ["cart_id"]
+            isOneToOne: false
+            referencedRelation: "carts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cart_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cart_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      carts: {
+        Row: {
+          created_at: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "carts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -125,6 +268,7 @@ export type Database = {
           quantity: number
           shop_id: string | null
           updated_at: string
+          variant_id: string | null
         }
         Insert: {
           created_at?: string
@@ -134,6 +278,7 @@ export type Database = {
           quantity?: number
           shop_id?: string | null
           updated_at?: string
+          variant_id?: string | null
         }
         Update: {
           created_at?: string
@@ -143,12 +288,13 @@ export type Database = {
           quantity?: number
           shop_id?: string | null
           updated_at?: string
+          variant_id?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "inventory_product_id_fkey"
             columns: ["product_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -157,6 +303,13 @@ export type Database = {
             columns: ["shop_id"]
             isOneToOne: false
             referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
             referencedColumns: ["id"]
           },
         ]
@@ -171,6 +324,8 @@ export type Database = {
           quantity: number
           subtotal_cents: number
           unit_price_cents: number
+          variant_id: string | null
+          variant_label: string | null
         }
         Insert: {
           created_at?: string
@@ -181,6 +336,8 @@ export type Database = {
           quantity: number
           subtotal_cents: number
           unit_price_cents: number
+          variant_id?: string | null
+          variant_label?: string | null
         }
         Update: {
           created_at?: string
@@ -191,6 +348,8 @@ export type Database = {
           quantity?: number
           subtotal_cents?: number
           unit_price_cents?: number
+          variant_id?: string | null
+          variant_label?: string | null
         }
         Relationships: [
           {
@@ -205,6 +364,13 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
             referencedColumns: ["id"]
           },
         ]
@@ -450,6 +616,70 @@ export type Database = {
           },
         ]
       }
+      product_variants: {
+        Row: {
+          color: string | null
+          created_at: string
+          id: string
+          price_cents: number | null
+          product_id: string
+          seller_id: string
+          shop_id: string | null
+          size: string | null
+          sku: string | null
+          status: Database["public"]["Enums"]["product_status"]
+          updated_at: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          price_cents?: number | null
+          product_id: string
+          seller_id: string
+          shop_id?: string | null
+          size?: string | null
+          sku?: string | null
+          status?: Database["public"]["Enums"]["product_status"]
+          updated_at?: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          price_cents?: number | null
+          product_id?: string
+          seller_id?: string
+          shop_id?: string | null
+          size?: string | null
+          sku?: string | null
+          status?: Database["public"]["Enums"]["product_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_variants_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_variants_seller_id_fkey"
+            columns: ["seller_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_variants_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           category_id: string | null
@@ -600,6 +830,74 @@ export type Database = {
           window_start?: string
         }
         Relationships: []
+      }
+      recommendation_rules: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          occasion: Database["public"]["Enums"]["recommendation_occasion"] | null
+          product_id: string
+          seller_id: string
+          shop_id: string | null
+          size: string | null
+          updated_at: string
+          variant_id: string | null
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          occasion?: Database["public"]["Enums"]["recommendation_occasion"] | null
+          product_id: string
+          seller_id: string
+          shop_id?: string | null
+          size?: string | null
+          updated_at?: string
+          variant_id?: string | null
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          occasion?: Database["public"]["Enums"]["recommendation_occasion"] | null
+          product_id?: string
+          seller_id?: string
+          shop_id?: string | null
+          size?: string | null
+          updated_at?: string
+          variant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recommendation_rules_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recommendation_rules_seller_id_fkey"
+            columns: ["seller_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recommendation_rules_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recommendation_rules_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       return_requests: {
         Row: {
@@ -844,6 +1142,7 @@ export type Database = {
           reason: Database["public"]["Enums"]["stock_adjustment_reason"]
           related_order_id: string | null
           shop_id: string | null
+          variant_id: string | null
         }
         Insert: {
           created_at?: string
@@ -857,6 +1156,7 @@ export type Database = {
           reason: Database["public"]["Enums"]["stock_adjustment_reason"]
           related_order_id?: string | null
           shop_id?: string | null
+          variant_id?: string | null
         }
         Update: {
           created_at?: string
@@ -870,6 +1170,7 @@ export type Database = {
           reason?: Database["public"]["Enums"]["stock_adjustment_reason"]
           related_order_id?: string | null
           shop_id?: string | null
+          variant_id?: string | null
         }
         Relationships: [
           {
@@ -898,6 +1199,13 @@ export type Database = {
             columns: ["shop_id"]
             isOneToOne: false
             referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_adjustments_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
             referencedColumns: ["id"]
           },
         ]
@@ -949,6 +1257,7 @@ export type Database = {
           p_note?: string
           p_product_id: string
           p_reason: Database["public"]["Enums"]["stock_adjustment_reason"]
+          p_variant_id?: string
         }
         Returns: {
           created_at: string
@@ -958,11 +1267,12 @@ export type Database = {
           quantity: number
           shop_id: string | null
           updated_at: string
+          variant_id: string | null
         }
         SetofOptions: {
           from: "*"
           to: "inventory"
-          isOneToOne: true
+          isOneToOne: false
           isSetofReturn: false
         }
       }
@@ -1192,6 +1502,13 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      get_variant_stock: {
+        Args: { p_variant_ids: string[] }
+        Returns: {
+          quantity: number
+          variant_id: string
+        }[]
+      }
       is_admin: { Args: never; Returns: boolean }
       is_shop_member: { Args: { p_shop_id: string }; Returns: boolean }
       mark_cod_payment_collected: {
@@ -1419,6 +1736,14 @@ export type Database = {
         | "partially_refunded"
       product_condition: "new" | "like_new" | "good" | "fair" | "poor"
       product_status: "draft" | "active" | "sold" | "archived"
+      recommendation_occasion:
+        | "casual"
+        | "formal"
+        | "work"
+        | "sportswear"
+        | "party"
+        | "wedding"
+        | "everyday"
       return_status:
         | "pending"
         | "seller_accepted"
@@ -1580,6 +1905,15 @@ export const Constants = {
       ],
       product_condition: ["new", "like_new", "good", "fair", "poor"],
       product_status: ["draft", "active", "sold", "archived"],
+      recommendation_occasion: [
+        "casual",
+        "formal",
+        "work",
+        "sportswear",
+        "party",
+        "wedding",
+        "everyday",
+      ],
       return_status: [
         "pending",
         "seller_accepted",

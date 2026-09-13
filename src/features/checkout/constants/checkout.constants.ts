@@ -15,6 +15,14 @@ export const CHECKOUT_CONSTANTS = {
    * (`checkout.schema.ts`) and the form's default/locked value.
    */
   shippingCountry: "Philippines",
+  /**
+   * Single source of truth for the checkout delivery-method display
+   * (`ShippingMethodCard`). There's only one method today — no courier API,
+   * no live tracking (SAD Out of Scope) — so this is a static estimate, not
+   * data sourced from a real logistics integration.
+   */
+  standardDeliveryLabel: "Standard Delivery",
+  standardDeliveryEstimate: "Estimated delivery: 3–5 business days",
 } as const;
 
 export const CHECKOUT_COPY = {
@@ -23,10 +31,27 @@ export const CHECKOUT_COPY = {
   codLabel: "Cash on Delivery",
   codDescription: "Pay when your order arrives. The seller marks it collected once received.",
   onlineLabel: "Online Payment",
-  onlineDescription: "Pay securely via GCash, Maya, or Card.",
-  onlineNote: "You'll be able to pay via GCash, Maya, or Card once your order is placed.",
+  onlineDescription:
+    "Pay securely via GCash, Maya, or Card — completed from your order page after checkout.",
   paymentSectionTitle: "Payment",
+  shippingSectionTitle: "Shipping",
+  shippingFreeLabel: "Free",
+  notesSectionTitle: "Order Notes",
+  notesPlaceholder: "Optional message to the seller (e.g. delivery instructions)…",
   emptyTitle: "Your cart is empty",
   emptyDescription: "Add items to your cart before checking out.",
-  agreeNote: "By placing this order you agree to pay via your selected method.",
+  nothingSelectedTitle: "Nothing selected",
+  nothingSelectedDescription:
+    "Go back to your cart and check the items you'd like to order.",
+  agreeNote:
+    "Cash on Delivery needs no action — pay online (GCash, Maya, or Card) from your order page after checkout.",
+  multiShopNoticePrefix: "This will be placed as",
+  multiShopNoticeSuffix: "separate orders — one per shop.",
+  addressPrefilledNote:
+    "Using the address from your last order — edit any field if this delivery is going somewhere else.",
+  defaultAddressNote:
+    "Using your default saved address — edit any field, or tap Change to pick another.",
+  changeAddressLabel: "Change",
+  addNewAddressNote: "Enter a delivery address below.",
+  saveAddressLabel: "Save this address to my account",
 } as const;

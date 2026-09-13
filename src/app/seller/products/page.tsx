@@ -7,6 +7,8 @@ import {
   getOwnShopId,
   listActiveCategories,
   listDashboardProducts,
+  listDashboardProductVariants,
+  listDashboardRecommendationRules,
   requireSessionUser,
 } from "@/lib/supabase/queries";
 
@@ -15,13 +17,22 @@ export const metadata: Metadata = { title: "Products — Seller Portal" };
 async function SellerProductsData() {
   const user = await requireSessionUser();
   const owner = { sellerId: user.id, shopId: await getOwnShopId(user.id) };
-  const [products, categories] = await Promise.all([
+  const [products, categories, variants, rules] = await Promise.all([
     listDashboardProducts(owner),
     listActiveCategories(),
+    listDashboardProductVariants(),
+    listDashboardRecommendationRules(),
   ]);
 
   return (
-    <DashboardProductsPanel products={products} categories={categories} shops={[]} isAdmin={false} />
+    <DashboardProductsPanel
+      products={products}
+      categories={categories}
+      shops={[]}
+      isAdmin={false}
+      variants={variants}
+      rules={rules}
+    />
   );
 }
 

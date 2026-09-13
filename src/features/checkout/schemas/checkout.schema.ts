@@ -20,6 +20,14 @@ export const shippingAddressSchema = z.object({
     .min(1, "Street address is required.")
     .max(120, "Street address must be 120 characters or fewer."),
   line2: z.string().trim().max(120).optional().default(""),
+  // Optional structured fields (Phase 2 — saved addresses carry these; a
+  // manually-typed checkout address may leave them blank). Carried through
+  // to the order's `shipping_address` jsonb snapshot as extra keys — the
+  // snapshot's CHECK constraint only requires fullName/line1/city/postalCode/
+  // country to be present, not that the object contains only those.
+  barangay: z.string().trim().max(120).optional().default(""),
+  province: z.string().trim().max(120).optional().default(""),
+  region: z.string().trim().max(120).optional().default(""),
   city: z.string().trim().min(1, "City is required.").max(120),
   postalCode: z
     .string()
@@ -41,9 +49,10 @@ export const shippingAddressSchema = z.object({
     .default(""),
 });
 
-/** One line to order: product + quantity. The RPC re-validates stock/price. */
+/** One line to order: product + quantity, optionally a specific variant. The RPC re-validates stock/price. */
 export const checkoutItemSchema = z.object({
   productId: uuidSchema,
+  variantId: uuidSchema.optional(),
   quantity: z.number().int().min(1).max(999),
 });
 
@@ -53,10 +62,22 @@ export const checkoutGroupSchema = z.object({
   items: z.array(checkoutItemSchema).min(1, "A group must contain at least one item."),
 });
 
+/**
+ * Optional buyer message, applied identically to every seller order created
+ * from this checkout — `orders.notes` already exists and `create_order`
+ * already accepts `p_notes`; this is the first UI path that populates it.
+ */
+export const orderNotesSchema = z
+  .string()
+  .trim()
+  .max(500, "Notes must be 500 characters or fewer.")
+  .optional();
+
 /** Payload for `placeOrderAction`. */
 export const placeOrderSchema = z.object({
   address: shippingAddressSchema,
   groups: z.array(checkoutGroupSchema).min(1, "Your cart is empty."),
+  notes: orderNotesSchema,
 });
 
 export type ShippingAddressInput = z.infer<typeof shippingAddressSchema>;

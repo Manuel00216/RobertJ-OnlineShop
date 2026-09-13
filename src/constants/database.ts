@@ -29,6 +29,11 @@ export const DATABASE_TABLES = {
   WISHLISTS: "wishlists",
   REVIEWS: "reviews",
   RETURN_REQUESTS: "return_requests",
+  ADDRESSES: "addresses",
+  PRODUCT_VARIANTS: "product_variants",
+  CARTS: "carts",
+  CART_ITEMS: "cart_items",
+  RECOMMENDATION_RULES: "recommendation_rules",
 } as const;
 
 /** Union of every table name in the schema. */

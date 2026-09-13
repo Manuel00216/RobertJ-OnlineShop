@@ -1,0 +1,206 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { z } from "zod";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ConfirmPanel } from "@/components/ui/confirm-panel";
+import { ErrorState } from "@/components/feedback/ErrorState";
+import { FormField } from "@/components/forms/FormField";
+import {
+  deleteProductVariantAction,
+  updateProductVariantAction,
+} from "@/features/products/actions/product-variant.actions";
+import {
+  updateProductVariantSchema,
+  type UpdateProductVariantInput,
+} from "@/features/products/schemas/product-variant.schema";
+import type { Product, ProductVariant } from "@/features/products/types/product.types";
+import { fromCents } from "@/lib/utils/currency";
+import { formatCurrency } from "@/lib/utils/currency";
+
+type FieldErrors = Record<string, string[] | undefined>;
+type Mode = "view" | "edit" | "delete";
+
+function toInput(variant: ProductVariant): UpdateProductVariantInput {
+  return {
+    id: variant.id,
+    sku: variant.sku ?? "",
+    color: variant.color ?? "",
+    size: variant.size ?? "",
+    price: variant.priceCents !== null ? fromCents(variant.priceCents) : undefined,
+    status: variant.status,
+  };
+}
+
+export interface ProductVariantRowProps {
+  variant: ProductVariant;
+  product: Product;
+  onChange: (variant: ProductVariant) => void;
+  onDelete: (variantId: string) => void;
+}
+
+/** One variant in `ProductVariantManager`: view, edit-in-place, delete-confirm. */
+export function ProductVariantRow({
+  variant,
+  product,
+  onChange,
+  onDelete,
+}: ProductVariantRowProps) {
+  const [mode, setMode] = useState<Mode>("view");
+  const [values, setValues] = useState<UpdateProductVariantInput>(() => toInput(variant));
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [formError, setFormError] = useState<string | null>(null);
+  const [isSaving, startSaving] = useTransition();
+  const [isDeleting, startDeleting] = useTransition();
+
+  function handleChange(field: "sku" | "color" | "size", value: string) {
+    setValues((prev) => ({ ...prev, [field]: value }));
+    setFieldErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev));
+  }
+
+  function handleSave() {
+    setFormError(null);
+    const parsed = updateProductVariantSchema.safeParse({
+      ...values,
+      price: values.price === undefined || Number.isNaN(values.price) ? undefined : values.price,
+    });
+    if (!parsed.success) {
+      setFieldErrors(z.flattenError(parsed.error).fieldErrors as FieldErrors);
+      return;
+    }
+    startSaving(async () => {
+      const result = await updateProductVariantAction(parsed.data);
+      if (!result.success) {
+        setFormError(result.error);
+        return;
+      }
+      onChange(result.data);
+      setMode("view");
+    });
+  }
+
+  function handleCancelEdit() {
+    setValues(toInput(variant));
+    setFieldErrors({});
+    setFormError(null);
+    setMode("view");
+  }
+
+  function handleDelete() {
+    startDeleting(async () => {
+      const result = await deleteProductVariantAction({ id: variant.id });
+      if (!result.success) {
+        setFormError(result.error);
+        setMode("view");
+        return;
+      }
+      onDelete(variant.id);
+    });
+  }
+
+  const label = [variant.color, variant.size].filter(Boolean).join(" / ") || "—";
+
+  if (mode === "edit") {
+    return (
+      <li className="rounded-xl border border-border p-4">
+        <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-2 gap-3">
+            <FormField
+              label="Color"
+              value={values.color ?? ""}
+              onChange={(event) => handleChange("color", event.target.value)}
+              errors={fieldErrors.color}
+            />
+            <FormField
+              label="Size"
+              value={values.size ?? ""}
+              onChange={(event) => handleChange("size", event.target.value)}
+              errors={fieldErrors.size}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <FormField
+              label="SKU (optional)"
+              value={values.sku ?? ""}
+              onChange={(event) => handleChange("sku", event.target.value)}
+              errors={fieldErrors.sku}
+            />
+            <FormField
+              label={`Price override (optional — inherits ${formatCurrency(product.priceCents, product.currency)})`}
+              type="number"
+              step="0.01"
+              min="0.01"
+              value={values.price ?? ""}
+              onChange={(event) =>
+                setValues((prev) => ({
+                  ...prev,
+                  price: event.target.value === "" ? undefined : Number(event.target.value),
+                }))
+              }
+              errors={fieldErrors.price}
+            />
+          </div>
+          {formError ? <ErrorState title="Couldn't save variant" message={formError} /> : null}
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="rj" size="rjSm" isLoading={isSaving} onClick={handleSave}>
+              Save
+            </Button>
+            <Button type="button" variant="outline" size="rjSm" disabled={isSaving} onClick={handleCancelEdit}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </li>
+    );
+  }
+
+  if (mode === "delete") {
+    return (
+      <li className="rounded-xl border border-border p-4">
+        <ConfirmPanel
+          label={`Delete ${label} variant`}
+          title={`Delete "${label}"?`}
+          description="This can't be undone. Variants that have already been ordered can't be deleted — archive them instead."
+          tone="danger"
+          confirmLabel="Delete"
+          pendingLabel="Deleting…"
+          isPending={isDeleting}
+          onConfirm={handleDelete}
+          onCancel={() => setMode("view")}
+        />
+        {formError ? (
+          <div className="mt-2">
+            <ErrorState title="Couldn't delete variant" message={formError} />
+          </div>
+        ) : null}
+      </li>
+    );
+  }
+
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border p-4">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm font-medium text-foreground">{label}</p>
+          {variant.status !== "active" ? <Badge tone="warning">{variant.status}</Badge> : null}
+        </div>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          {variant.sku ? `SKU ${variant.sku} · ` : ""}
+          {variant.priceCents !== null
+            ? formatCurrency(variant.priceCents, product.currency)
+            : `Inherits ${formatCurrency(product.priceCents, product.currency)}`}
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="outline" size="rjSm" onClick={() => setMode("edit")}>
+          Edit
+        </Button>
+        <Button type="button" variant="outline" size="rjSm" onClick={() => setMode("delete")}>
+          Delete
+        </Button>
+      </div>
+    </li>
+  );
+}

@@ -4,7 +4,8 @@ import type { StockAdjustmentReason } from "@/features/inventory/constants/inven
 /** Derived, not stored: quantity <= 0 is out of stock, <= threshold is low. */
 export type StockStatus = "out_of_stock" | "low_stock" | "in_stock";
 
-/** Domain model returned by the inventory service — one row per product. */
+/** Domain model returned by the inventory service — one row per product, or
+ * one row per variant for a product that has variants (Phase 3b). */
 export interface InventoryItem {
   id: string;
   productId: string;
@@ -13,6 +14,10 @@ export interface InventoryItem {
   productStatus: ProductStatus;
   shopId: string | null;
   shopName: string | null;
+  /** Set when this row is a variant's stock, not the product's own. */
+  variantId: string | null;
+  /** e.g. "Blue / Medium" — null for a product-level row. */
+  variantLabel: string | null;
   quantity: number;
   lowStockThreshold: number;
   stockStatus: StockStatus;

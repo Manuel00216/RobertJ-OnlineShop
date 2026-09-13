@@ -10,7 +10,14 @@ export interface ShippingAddress {
   fullName: string;
   line1: string;
   line2: string | null;
+  /** Structured fields added in the Phase 2 saved-address work — optional
+   * because historical snapshots (and manually-typed addresses that left
+   * them blank) never had them. Extra keys on the same jsonb object; no
+   * schema/CHECK-constraint change was needed to add them. */
+  barangay: string | null;
   city: string;
+  province: string | null;
+  region: string | null;
   postalCode: string;
   country: string;
   phone: string | null;
@@ -31,6 +38,10 @@ export interface OrderItem {
   subtotalCents: number;
   productSlug: string | null;
   imageUrl: string | null;
+  /** Snapshot reference to the purchased variant, or null for a non-variant line (including every historical order placed before Phase 3c). */
+  variantId: string | null;
+  /** Snapshot display label (e.g. "Blue / Medium") captured at purchase time — never re-derived from product_variants. */
+  variantLabel: string | null;
 }
 
 /** Domain model returned by the order service to the rest of the app. */

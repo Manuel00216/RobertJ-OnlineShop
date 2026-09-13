@@ -13,32 +13,35 @@ import { formatDateTime } from "@/lib/utils/date";
 
 export interface StockHistoryPanelProps {
   productId: string;
+  /** Scopes history to one variant's own movements; omit for the product-level row's history only. */
+  variantId?: string | null;
 }
 
 type Result =
   | { key: string; ok: true; data: StockAdjustment[] }
   | { key: string; ok: false; error: string };
 
-/** Recent stock movement history for one product, fetched on first expand. */
-export function StockHistoryPanel({ productId }: StockHistoryPanelProps) {
-  // Tagged with the productId it was fetched for, mirroring CartSummary's
+/** Recent stock movement history for one product (or one of its variants), fetched on first expand. */
+export function StockHistoryPanel({ productId, variantId }: StockHistoryPanelProps) {
+  // Tagged with the id set it was fetched for, mirroring CartSummary's
   // `availability` pattern — avoids setState-in-effect-body by never
   // resetting state synchronously; loading is just "no result for this id yet".
+  const key = `${productId}:${variantId ?? ""}`;
   const [result, setResult] = useState<Result | null>(null);
   const [, startFetch] = useTransition();
 
   useEffect(() => {
     startFetch(async () => {
-      const response = await getStockHistoryAction(productId);
+      const response = await getStockHistoryAction(productId, variantId);
       setResult(
         response.success
-          ? { key: productId, ok: true, data: response.data }
-          : { key: productId, ok: false, error: response.error },
+          ? { key, ok: true, data: response.data }
+          : { key, ok: false, error: response.error },
       );
     });
-  }, [productId, startFetch]);
+  }, [key, productId, variantId, startFetch]);
 
-  const current = result?.key === productId ? result : null;
+  const current = result?.key === key ? result : null;
 
   if (current && !current.ok) {
     return <ErrorState title="Couldn't load stock history" message={current.error} />;

@@ -18,6 +18,8 @@ export const stockAdjustmentReasonSchema = z.enum([
 export const adjustStockSchema = z
   .object({
     productId: z.uuid(),
+    /** Set to adjust a specific variant's stock instead of the product's own. */
+    variantId: z.uuid().optional(),
     delta: z.coerce
       .number()
       .int("Enter a whole number.")

@@ -12,6 +12,7 @@ export const ROUTES = {
   orders: "/orders",
   orderDetail: (id: string) => `/orders/${id}`,
   profile: "/profile",
+  addresses: "/addresses",
   wishlist: "/wishlist",
   /** Legacy Shop Owner/Admin routes — every page under here is now a redirect
    * stub to its `/admin/*` or `/seller/*` equivalent (see `redirectToPortal`),
@@ -74,6 +75,7 @@ export const PROTECTED_ROUTE_PREFIXES = [
   "/checkout",
   "/notifications",
   "/profile",
+  "/addresses",
   "/wishlist",
 ] as const;
 

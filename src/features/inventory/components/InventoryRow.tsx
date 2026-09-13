@@ -28,7 +28,11 @@ export function InventoryRow({ item, isAdmin }: InventoryRowProps) {
             <div className="flex flex-wrap items-center gap-2">
               <p className="truncate text-sm font-semibold text-rj-black">
                 {item.productTitle}
+                {item.variantLabel ? (
+                  <span className="font-normal text-rj-gray-600"> — {item.variantLabel}</span>
+                ) : null}
               </p>
+              {item.variantId ? <Badge tone="info">Variant</Badge> : null}
               <StockStatusBadge status={item.stockStatus} />
               {isAdmin && item.shopName ? <Badge tone="neutral">{item.shopName}</Badge> : null}
             </div>
@@ -65,7 +69,7 @@ export function InventoryRow({ item, isAdmin }: InventoryRowProps) {
 
         {mode === "history" ? (
           <div className="rounded-2xl border border-rj-gray-100 bg-rj-gray-50 p-4">
-            <StockHistoryPanel productId={item.productId} />
+            <StockHistoryPanel productId={item.productId} variantId={item.variantId} />
           </div>
         ) : null}
       </CardContent>
