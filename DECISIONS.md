@@ -251,7 +251,7 @@ Every decision is a numbered ADR with a fixed shape: **Context → Problem → O
 
 **Consequences:**
 - Rules are deterministic, explainable, and testable without a model-evaluation harness.
-- The target schema includes a `recommendation_rules` table (see [ARCHITECTURE.md → Target Database Schema](./ARCHITECTURE.md#target-database-schema)); none exists yet — `features/assistant` is currently a stub, and the landing page's `SmartAssistantPreview` is a **visual preview only**, not a working engine.
+- The `recommendation_rules` table (see [ARCHITECTURE.md → Target Database Schema](./ARCHITECTURE.md#target-database-schema)) is implemented with explicit typed columns (`occasion`, `size`, optional `variant_id`), not the SAD's indicative `jsonb conditions` blob — same rationale as `products`/`orders` already preferring real columns. `features/assistant` now has admin/seller rule authoring and a buyer-facing quiz (`GuidedSelectorQuiz`); the landing page's `SmartAssistantPreview` opens the real quiz instead of showing a cosmetic chat demo.
 - Any AI/LLM approach is explicitly **out of scope** and must not be introduced without a new ADR superseding this one.
 
 **Future Revisit:** Only via explicit SAD amendment — this is a business-scope decision, not a technical preference.

@@ -178,17 +178,16 @@
 | Field | Detail |
 |---|---|
 | **Purpose** | Reduce manual "what do you recommend?" requests with a **rule-based** (not AI) recommendation assistant, per the SAD. |
-| **Responsibilities** (target) | Evaluate explicit rules (category, price range, tags, stated preference) against the catalog; present suggested products to Guests and Customers. |
-| **Features** (target) | Guided-selection flow/quiz, rule-matched product suggestions. |
-| **Features** (current) | `SmartAssistantPreview` — a **visual preview only** on the landing page; no working rule engine behind it. |
-| **Pages** | Reserved at `ROUTES.assistant` (`/assistant`); no page built. |
-| **Components** | `features/landing/components/SmartAssistantPreview` (preview only). `src/features/assistant/` is otherwise a stub. |
-| **Server Actions** | None. |
-| **Services** | None. |
-| **Database Tables** (target) | `recommendation_rules` per the target schema (does not exist yet). |
-| **Dependencies** | Products (recommendation targets), Categories (rule conditions). |
-| **Current Status** | ⏳ Upcoming (stub; landing preview is cosmetic only). |
-| **Future Work** | Design the rule schema (conditions → product matches) and build `features/assistant` end-to-end. **Must remain rule-based** — see [DECISIONS.md → ADR-009](./DECISIONS.md#adr-009-rule-based-guided-product-selection-not-ai); do not introduce AI/ML without a superseding ADR. |
+| **Responsibilities** | Let a seller/admin author explicit occasion/size rules per product (optionally naming one specific variant); let a buyer answer occasion/size/budget and see matching, in-stock products. Budget is always checked against the **live** product/variant price — never a value stored on the rule. |
+| **Features** | Admin/seller rule authoring (`RecommendationRuleManager`/`RecommendationRuleRow`) mounted in the existing `/admin/products`/`/seller/products` edit flow; buyer-facing `GuidedSelectorQuiz` modal (occasion/size/budget → matches), reachable from the landing page. |
+| **Pages** | No dedicated page — the quiz is a modal launched from the landing page; rule authoring lives on the existing product-management pages. `ROUTES.assistant` (`/assistant`) remains reserved and unused. |
+| **Components** | `features/assistant/components/{RecommendationRuleManager,RecommendationRuleRow,GuidedSelectorQuiz}`; `features/landing/components/SmartAssistantPreview` (a real preview of the occasion/size/budget mechanism that opens the actual quiz — no longer a cosmetic AI-styled chat demo). |
+| **Server Actions** | `features/assistant/actions/rule.actions.ts` — `createRecommendationRuleAction`/`updateRecommendationRuleAction`/`deleteRecommendationRuleAction`, seller/shop-co-member/admin gated (`DASHBOARD_ROLES`). `features/assistant/actions/quiz.actions.ts` — `getGuidedSelectionMatchesAction`, public/rate-limited, no session required (same guest-accessible precedent as the cart's public reads). |
+| **Services** | `lib/supabase/queries.ts` — `listProductRecommendationRules`, `listDashboardRecommendationRules`, `createRecommendationRule`, `updateRecommendationRule`, `deleteRecommendationRule`, `listGuidedSelectionMatches`. |
+| **Database Tables** | `recommendation_rules` (`product_id`, optional `variant_id`, `seller_id`, `shop_id`, `occasion` enum, `size` text, `active`) — see `20260914000000_recommendation_rules.sql` (RLS/trigger fix in `20260914010000_fix_recommendation_rules_insert_rls.sql`). |
+| **Dependencies** | Products / Product Variants (recommendation targets and live pricing); Shops (co-member authorship via `is_shop_member`). |
+| **Current Status** | ✅ Schema, admin/seller rule authoring, and the buyer-facing quiz are implemented and live-DB verified. Not yet in scope: matching by category/tags/price-range presets (the SAD's original, more speculative rule shape), and a dedicated `/assistant` page. |
+| **Future Work** | Consider surfacing Guided Selection matches elsewhere (e.g. category pages), and whether `ROUTES.assistant` should become a real page instead of a landing-page modal. **Must remain rule-based** — see [DECISIONS.md → ADR-009](./DECISIONS.md#adr-009-rule-based-guided-product-selection-not-ai); do not introduce AI/ML without a superseding ADR. |
 
 ---
 
