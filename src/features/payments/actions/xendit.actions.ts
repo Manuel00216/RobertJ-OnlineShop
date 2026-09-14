@@ -55,6 +55,7 @@ export async function createXenditEwalletPaymentAction(
         currency: attempt.currency,
         successReturnUrl: returnUrl,
         failureReturnUrl: returnUrl,
+        customer: { id: user.id, givenNames: user.fullName || user.email },
       });
 
       const action = response.actions?.find((a) => a.type === "REDIRECT_CUSTOMER");
@@ -114,6 +115,13 @@ export async function createXenditCardSessionAction(
       currency: attempt.currency,
       successReturnUrl: returnUrl,
       cancelReturnUrl: returnUrl,
+      // Xendit treats an inlined `customer` object on /sessions as a
+      // one-time create call: reusing the same reference_id across separate
+      // Card attempts (e.g. the buyer's own stable user.id) is rejected as
+      // "already used" on the second attempt. attempt.id is a fresh payments
+      // row per Card attempt, so it's unique every time. Card-only — GCash
+      // and Maya still use user.id, unaffected by this change.
+      customer: { id: attempt.id, givenNames: user.fullName || user.email },
     });
 
     await queries.finalizeXenditPaymentRequest({

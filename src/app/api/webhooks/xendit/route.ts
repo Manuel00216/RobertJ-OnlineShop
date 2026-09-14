@@ -39,7 +39,13 @@ export async function POST(request: NextRequest) {
   }
 
   const data = payload?.data;
-  const referenceId = data?.reference_id;
+  // Card's underlying payment_request reference_id is Xendit-derived from the
+  // payment_session's reference_id we set ({ours}_{xendit-suffix}) rather than
+  // reused verbatim — the session can host more than one payment attempt, so
+  // Xendit disambiguates them. Our own reference_id (and process_xendit_webhook's
+  // p_reference_id) is a bare uuid, so take only the part before the first
+  // underscore; uuids never contain one, so this is a no-op for GCash/Maya.
+  const referenceId = data?.reference_id?.split("_")[0];
   const status = data?.status;
 
   if (!referenceId || !status) {

@@ -72,6 +72,8 @@ export function getServerEnv() {
   const result = serverEnvSchema.safeParse({
     ...publicEnv,
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    XENDIT_SECRET_KEY: process.env.XENDIT_SECRET_KEY,
+    XENDIT_WEBHOOK_TOKEN: process.env.XENDIT_WEBHOOK_TOKEN,
   });
 
   if (!result.success) formatEnvError(result.error);

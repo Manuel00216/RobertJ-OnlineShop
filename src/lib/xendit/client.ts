@@ -66,6 +66,13 @@ async function xenditFetch<T>(path: string, init: RequestInit & { idempotencyKey
   return body as T;
 }
 
+export interface XenditCustomerInput {
+  /** Buyer's own id, sent as Xendit's `customer.reference_id`. */
+  id: string;
+  /** Buyer's display name, sent as `customer.individual_detail.given_names`. */
+  givenNames: string;
+}
+
 export interface CreateEwalletPaymentRequestInput {
   referenceId: string;
   channelCode: XenditEwalletChannelCode;
@@ -73,12 +80,20 @@ export interface CreateEwalletPaymentRequestInput {
   currency: string;
   successReturnUrl: string;
   failureReturnUrl: string;
+  customer: XenditCustomerInput;
 }
 
-/** GCash / Maya — POST /v3/payment_requests, redirect-based e-wallet flow. */
+/**
+ * GCash / Maya — POST /v3/payment_requests, redirect-based e-wallet flow.
+ * PAYMAYA's validator additionally requires `channel_properties.cancel_return_url`
+ * and a `customer` object (confirmed against live test-mode API responses);
+ * GCASH was confirmed working without either, so both stay GCash-only-absent
+ * rather than being added unconditionally.
+ */
 export async function createEwalletPaymentRequest(
   input: CreateEwalletPaymentRequestInput,
 ): Promise<XenditPaymentRequestResponse> {
+  const isPayMaya = input.channelCode === "PAYMAYA";
   return xenditFetch<XenditPaymentRequestResponse>("/v3/payment_requests", {
     method: "POST",
     idempotencyKey: input.referenceId,
@@ -93,7 +108,17 @@ export async function createEwalletPaymentRequest(
       channel_properties: {
         success_return_url: input.successReturnUrl,
         failure_return_url: input.failureReturnUrl,
+        ...(isPayMaya ? { cancel_return_url: input.failureReturnUrl } : {}),
       },
+      ...(isPayMaya
+        ? {
+            customer: {
+              type: "INDIVIDUAL",
+              reference_id: input.customer.id,
+              individual_detail: { given_names: input.customer.givenNames },
+            },
+          }
+        : {}),
     }),
   });
 }
@@ -104,6 +129,7 @@ export interface CreateCardPaymentSessionInput {
   currency: string;
   successReturnUrl: string;
   cancelReturnUrl: string;
+  customer: XenditCustomerInput;
 }
 
 /**
@@ -113,6 +139,10 @@ export interface CreateCardPaymentSessionInput {
  * reaches this server. The exact webhook event family fired on completion
  * (payment_session.* vs payment.*) is unconfirmed against a live sandbox —
  * the webhook route handles both shapes defensively.
+ *
+ * `channel_properties`, a populated `customer`, and
+ * `components_configuration.origins` are all confirmed-required by live
+ * test-mode API responses — the session create call 400s without them.
  */
 export async function createCardPaymentSession(
   input: CreateCardPaymentSessionInput,
@@ -130,8 +160,17 @@ export async function createCardPaymentSession(
       capture_method: "AUTOMATIC",
       success_return_url: input.successReturnUrl,
       cancel_return_url: input.cancelReturnUrl,
-      customer: {},
+      channel_properties: {
+        success_return_url: input.successReturnUrl,
+        cancel_return_url: input.cancelReturnUrl,
+      },
+      customer: {
+        type: "INDIVIDUAL",
+        reference_id: input.customer.id,
+        individual_detail: { given_names: input.customer.givenNames },
+      },
       components_configuration: {
+        origins: [new URL(input.successReturnUrl).origin],
         payment_method: {
           card: {},
         },

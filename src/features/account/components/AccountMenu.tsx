@@ -17,8 +17,6 @@ import type { SessionUser } from "@/types/common.types";
 const BASE_MENU_ITEMS = [
   { href: ROUTES.account, label: "My Account" },
   { href: ROUTES.orders, label: "Orders" },
-  { href: ROUTES.addresses, label: "Addresses" },
-  { href: ROUTES.profile, label: "Profile" },
 ] as const;
 
 /** Links straight to the user's own portal — Admin and Seller each have a dedicated dashboard, not a shared one. */
