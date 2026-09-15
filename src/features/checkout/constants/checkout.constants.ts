@@ -49,6 +49,9 @@ export const CHECKOUT_COPY = {
     "Cash on Delivery needs no action — pay online (GCash, Maya, or Card) from your order page after checkout.",
   multiShopNoticePrefix: "This will be placed as",
   multiShopNoticeSuffix: "separate orders — one per shop.",
+  /** Shown instead of multiShopNotice* when Online Payment is selected for a multi-seller cart — orders are still one per shop, but paid for together in one combined Xendit payment. */
+  multiShopOnlinePaymentNotice:
+    "One combined online payment will cover all shops in this checkout.",
   addressPrefilledNote:
     "Using the address from your last order — edit any field if this delivery is going somewhere else.",
   defaultAddressNote:

@@ -2,6 +2,8 @@ export { markCodPaymentCollectedAction } from "./actions/payment.actions";
 export {
   createXenditEwalletPaymentAction,
   createXenditCardSessionAction,
+  createXenditGroupEwalletPaymentAction,
+  createXenditGroupCardSessionAction,
 } from "./actions/xendit.actions";
 export {
   markCodPaymentCollectedSchema,
@@ -10,8 +12,12 @@ export {
 export {
   createXenditEwalletPaymentSchema,
   createXenditCardSessionSchema,
+  createXenditGroupEwalletPaymentSchema,
+  createXenditGroupCardSessionSchema,
   type CreateXenditEwalletPaymentInput,
   type CreateXenditCardSessionInput,
+  type CreateXenditGroupEwalletPaymentInput,
+  type CreateXenditGroupCardSessionInput,
 } from "./schemas/xendit.schema";
 export type { Payment, PaymentAttempt, PaymentMethodType } from "./types/payment.types";
 export { XenditPaymentOptions } from "./components/XenditPaymentOptions";

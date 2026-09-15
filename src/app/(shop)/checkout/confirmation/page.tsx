@@ -7,9 +7,11 @@ import { buttonVariants } from "@/components/ui/button";
 import { ROUTES } from "@/constants/routes";
 import { USER_ROLES } from "@/constants/roles";
 import { OrderCard } from "@/features/orders/components/OrderCard";
+import { XenditPaymentOptions } from "@/features/payments";
 import { cn } from "@/lib/utils/cn";
 import { formatCurrency } from "@/lib/utils/currency";
 import {
+  getActivePaymentForGroup,
   getBuyerOrder,
   getShopNamesBySellerIds,
   requireSessionUser,
@@ -62,6 +64,30 @@ export default async function CheckoutConfirmationPage({
   const grandTotalCents = orders.reduce((sum, order) => sum + order.totalCents, 0);
   const currency = orders[0]?.currency ?? "PHP";
 
+  // Every order from one `create_order_group` call shares one checkout_group_id
+  // (re-verified per order via `getBuyerOrder`, never trusted from the query
+  // string) — when that's the case and every sibling is still awaiting
+  // payment, this is where the buyer starts the one combined Xendit payment
+  // for the whole group. Mirrors the order-detail page's single-order
+  // section, which stays untouched for single-seller checkouts.
+  const checkoutGroupId =
+    orders.length > 1 && orders.every((order) => order.checkoutGroupId === orders[0]?.checkoutGroupId)
+      ? orders[0]?.checkoutGroupId ?? null
+      : null;
+  const showGroupPayment =
+    checkoutGroupId !== null && orders.every((order) => order.paymentStatus === "pending");
+
+  const activeGroupPayment = showGroupPayment
+    ? await getActivePaymentForGroup(checkoutGroupId)
+    : null;
+  const resumableGroupCheckoutUrl =
+    activeGroupPayment?.paymentMethodType === "xendit" &&
+    activeGroupPayment.status === "pending" &&
+    activeGroupPayment.checkoutUrl &&
+    (!activeGroupPayment.expiresAt || new Date(activeGroupPayment.expiresAt) > new Date())
+      ? activeGroupPayment.checkoutUrl
+      : null;
+
   return (
     <div className="mx-auto flex max-w-2xl flex-col items-center gap-8 text-center">
       <div className="flex flex-col items-center gap-4">
@@ -90,6 +116,29 @@ export default async function CheckoutConfirmationPage({
           </span>
         </div>
       </div>
+
+      {showGroupPayment && checkoutGroupId ? (
+        <section
+          aria-label="Payment"
+          className="w-full rounded-2xl border border-rj-gray-100 bg-rj-gray-50 p-5 text-left"
+        >
+          <h2 className="text-[10px] font-bold uppercase tracking-[0.3em] text-rj-gray-400">
+            Online Payment
+          </h2>
+          <p className="mt-1 text-xs text-rj-gray-600">
+            Pay once to cover all {orders.length} shops in this checkout. Paying by Cash on
+            Delivery instead? No action needed — each seller marks their order collected once
+            received.
+          </p>
+          <div className="mt-3">
+            <XenditPaymentOptions
+              checkoutGroupId={checkoutGroupId}
+              existingCheckoutUrl={resumableGroupCheckoutUrl}
+              allowSwitchingWhileActive
+            />
+          </div>
+        </section>
+      ) : null}
 
       <ul className="flex w-full flex-col gap-3 text-left">
         {orders.map((order) => (

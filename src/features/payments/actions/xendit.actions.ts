@@ -11,6 +11,8 @@ import type { ActionResult } from "@/types/action.types";
 import {
   createXenditCardSessionSchema,
   createXenditEwalletPaymentSchema,
+  createXenditGroupCardSessionSchema,
+  createXenditGroupEwalletPaymentSchema,
 } from "@/features/payments/schemas/xendit.schema";
 
 /**
@@ -132,6 +134,128 @@ export async function createXenditCardSessionAction(
     });
 
     return ok({ paymentId: attempt.id, componentsSdkKey: session.components_sdk_key });
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : "Could not start this payment.");
+  }
+}
+
+/**
+ * Combined-payment counterpart of `createXenditEwalletPaymentAction` for a
+ * multi-seller checkout: takes only the server-issued `checkoutGroupId` —
+ * order ownership/membership is resolved and re-validated entirely inside
+ * `begin_xendit_group_payment_attempt`, and the amount is always the
+ * server-computed sum from `getXenditGroupPaymentTotal`, never client-supplied.
+ * Single-order behavior (`createXenditEwalletPaymentAction` above) is untouched.
+ */
+export async function createXenditGroupEwalletPaymentAction(
+  checkoutGroupId: string,
+  channelCode: "GCASH" | "PAYMAYA",
+): Promise<ActionResult<null>> {
+  const parsed = createXenditGroupEwalletPaymentSchema.safeParse({ checkoutGroupId, channelCode });
+  if (!parsed.success) return fromZodError(parsed.error);
+
+  const user = await queries.requireSessionUser();
+
+  let redirectUrl: string;
+  try {
+    const attempt = await queries.beginXenditGroupPaymentAttempt(
+      parsed.data.checkoutGroupId,
+      parsed.data.channelCode,
+    );
+
+    if (attempt.xenditPaymentRequestId && attempt.checkoutUrl) {
+      redirectUrl = attempt.checkoutUrl;
+    } else {
+      const { amountCents, currency } = await queries.getXenditGroupPaymentTotal(
+        parsed.data.checkoutGroupId,
+        parsed.data.channelCode,
+      );
+      const orderIds = await queries.getOrderIdsForCheckoutGroup(parsed.data.checkoutGroupId);
+      const returnUrl = `${publicEnv.NEXT_PUBLIC_SITE_URL}${ROUTES.checkoutConfirmation}?orders=${orderIds.join(",")}&xendit_return=1`;
+
+      const response = await createEwalletPaymentRequest({
+        referenceId: parsed.data.checkoutGroupId,
+        channelCode: parsed.data.channelCode,
+        amountCents,
+        currency,
+        successReturnUrl: returnUrl,
+        failureReturnUrl: returnUrl,
+        customer: { id: user.id, givenNames: user.fullName || user.email },
+      });
+
+      const action = response.actions?.find((a) => a.type === "REDIRECT_CUSTOMER");
+      if (!action?.value) {
+        await queries.finalizeXenditGroupPaymentRequest({
+          checkoutGroupId: parsed.data.checkoutGroupId,
+          channelCode: parsed.data.channelCode,
+          xenditPaymentRequestId: response.payment_request_id,
+          checkoutUrl: "",
+          expiresAt: null,
+          status: "failed",
+        });
+        return fail("Xendit did not return a checkout link. Please try again.");
+      }
+
+      const finalized = await queries.finalizeXenditGroupPaymentRequest({
+        checkoutGroupId: parsed.data.checkoutGroupId,
+        channelCode: parsed.data.channelCode,
+        xenditPaymentRequestId: response.payment_request_id,
+        checkoutUrl: action.value,
+        expiresAt: null,
+      });
+      redirectUrl = finalized.checkoutUrl ?? action.value;
+    }
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : "Could not start this payment.");
+  }
+
+  redirect(redirectUrl);
+}
+
+/**
+ * Combined-payment counterpart of `createXenditCardSessionAction` for a
+ * multi-seller checkout. Same customer.reference_id-uniqueness fix as the
+ * single-order Card action (a fresh member payment id, not the buyer's
+ * stable user id). Single-order Card behavior is untouched.
+ */
+export async function createXenditGroupCardSessionAction(
+  checkoutGroupId: string,
+): Promise<ActionResult<{ checkoutGroupId: string; componentsSdkKey: string }>> {
+  const parsed = createXenditGroupCardSessionSchema.safeParse({ checkoutGroupId });
+  if (!parsed.success) return fromZodError(parsed.error);
+
+  const user = await queries.requireSessionUser();
+
+  try {
+    const attempt = await queries.beginXenditGroupPaymentAttempt(parsed.data.checkoutGroupId, "CARD");
+    const { amountCents, currency } = await queries.getXenditGroupPaymentTotal(
+      parsed.data.checkoutGroupId,
+      "CARD",
+    );
+    const orderIds = await queries.getOrderIdsForCheckoutGroup(parsed.data.checkoutGroupId);
+    const returnUrl = `${publicEnv.NEXT_PUBLIC_SITE_URL}${ROUTES.checkoutConfirmation}?orders=${orderIds.join(",")}&xendit_return=1`;
+
+    const session = await createCardPaymentSession({
+      referenceId: parsed.data.checkoutGroupId,
+      amountCents,
+      currency,
+      successReturnUrl: returnUrl,
+      cancelReturnUrl: returnUrl,
+      customer: { id: attempt.id, givenNames: user.fullName || user.email },
+    });
+
+    await queries.finalizeXenditGroupPaymentRequest({
+      checkoutGroupId: parsed.data.checkoutGroupId,
+      channelCode: "CARD",
+      xenditPaymentRequestId: session.payment_session_id,
+      checkoutUrl: returnUrl,
+      expiresAt: null,
+    });
+
+    return ok({
+      checkoutGroupId: parsed.data.checkoutGroupId,
+      componentsSdkKey: session.components_sdk_key,
+    });
   } catch (error) {
     return fail(error instanceof Error ? error.message : "Could not start this payment.");
   }

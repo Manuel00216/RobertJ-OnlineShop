@@ -73,14 +73,23 @@ export const orderNotesSchema = z
   .max(500, "Notes must be 500 characters or fewer.")
   .optional();
 
+/**
+ * Channel sub-selection under Online Payment. Only meaningful when
+ * `paymentMethod === "xendit"`; ignored (and not required) for COD.
+ */
+export const xenditChannelSchema = z.enum(["GCASH", "PAYMAYA", "CARD"]);
+
 /** Payload for `placeOrderAction`. */
 export const placeOrderSchema = z.object({
   address: shippingAddressSchema,
   groups: z.array(checkoutGroupSchema).min(1, "Your cart is empty."),
   notes: orderNotesSchema,
+  paymentMethod: z.enum(["cod", "xendit"]).default("cod"),
+  xenditChannel: xenditChannelSchema.optional(),
 });
 
 export type ShippingAddressInput = z.infer<typeof shippingAddressSchema>;
 export type CheckoutItemInput = z.infer<typeof checkoutItemSchema>;
 export type CheckoutGroupInput = z.infer<typeof checkoutGroupSchema>;
 export type PlaceOrderInput = z.infer<typeof placeOrderSchema>;
+export type XenditChannel = z.infer<typeof xenditChannelSchema>;

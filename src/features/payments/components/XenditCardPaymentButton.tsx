@@ -3,9 +3,16 @@
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { createXenditCardSessionAction } from "@/features/payments/actions/xendit.actions";
+import {
+  createXenditCardSessionAction,
+  createXenditGroupCardSessionAction,
+} from "@/features/payments/actions/xendit.actions";
 
 type Phase = "idle" | "loading" | "ready" | "submitting" | "complete" | "expired" | "error";
+
+type XenditCardPaymentButtonProps =
+  | { orderId: string; checkoutGroupId?: undefined }
+  | { orderId?: undefined; checkoutGroupId: string };
 
 /**
  * Card payment via a Xendit Payment Session (mode=COMPONENTS). Raw card data
@@ -13,8 +20,13 @@ type Phase = "idle" | "loading" | "ready" | "submitting" | "complete" | "expired
  * tokenizes it directly against Xendit using a short-lived, session-scoped
  * `components_sdk_key` minted server-side. Completion here ("session-complete")
  * is informational only; the webhook is what actually confirms payment.
+ *
+ * Pass `orderId` for a single order, or `checkoutGroupId` to pay for an
+ * entire multi-seller checkout group with one combined Card session — the
+ * widget itself is identical either way, only the action that mints the
+ * session differs.
  */
-export function XenditCardPaymentButton({ orderId }: { orderId: string }) {
+export function XenditCardPaymentButton(props: XenditCardPaymentButtonProps) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -30,7 +42,10 @@ export function XenditCardPaymentButton({ orderId }: { orderId: string }) {
     setError(null);
     setPhase("loading");
 
-    const result = await createXenditCardSessionAction(orderId);
+    const result =
+      props.orderId !== undefined
+        ? await createXenditCardSessionAction(props.orderId)
+        : await createXenditGroupCardSessionAction(props.checkoutGroupId);
     if (!result.success) {
       setError(result.error);
       setPhase("error");

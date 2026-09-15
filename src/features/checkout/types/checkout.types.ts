@@ -3,10 +3,15 @@ import type { CartItem, CartLineRef } from "@/features/cart/types/cart.types";
 /**
  * Payment method selected at checkout. The Stripe/card spike (ADR-014) and
  * the QR/manual-verification flow have both been retired — COD and Xendit
- * Online Payment (GCash, Maya, Card) are the only two options. Selecting
- * `xendit` here is purely informational — nothing is persisted at
- * order-placement time (`create_order` is unchanged); the buyer actually
- * starts the Xendit payment afterward from the order detail page.
+ * Online Payment (GCash, Maya, Card) are the only two options.
+ *
+ * Selecting `xendit` is purely informational at order-placement time in both
+ * cases — nothing is persisted here. For a single-seller cart, the buyer
+ * starts the Xendit payment afterward from the order detail page, unchanged.
+ * For a multi-seller cart, orders are placed atomically via
+ * `create_order_group` and the buyer picks the channel (GCash/Maya/Card)
+ * afterward on the checkout confirmation page, which starts one combined
+ * payment for the whole group — see `checkout/confirmation/page.tsx`.
  */
 export type PaymentMethod = "cod" | "xendit";
 
@@ -41,4 +46,11 @@ export interface FailedGroup {
 export interface PlaceOrderResult {
   created: PlacedOrder[];
   failed: FailedGroup[];
+  /**
+   * Set only when a multi-seller cart was placed with Online Payment —
+   * `created` are all-or-nothing in that case (no partial success), and this
+   * is the handle the client uses to immediately start the combined payment.
+   * Undefined for COD and single-seller checkouts.
+   */
+  checkoutGroupId?: string;
 }

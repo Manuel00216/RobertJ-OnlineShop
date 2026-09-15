@@ -194,6 +194,7 @@ export function CheckoutForm({
           })),
         })),
         notes: notes.trim() || undefined,
+        paymentMethod: method,
       });
 
       if (!actionResult.success) {
@@ -380,8 +381,9 @@ export function CheckoutForm({
               role="note"
               className="rounded-xl bg-rj-gray-50 px-3 py-2 text-xs font-medium text-rj-gray-600"
             >
-              {CHECKOUT_COPY.multiShopNoticePrefix} {groups.length}{" "}
-              {CHECKOUT_COPY.multiShopNoticeSuffix}
+              {method === "xendit"
+                ? CHECKOUT_COPY.multiShopOnlinePaymentNotice
+                : `${CHECKOUT_COPY.multiShopNoticePrefix} ${groups.length} ${CHECKOUT_COPY.multiShopNoticeSuffix}`}
             </p>
           ) : null}
 

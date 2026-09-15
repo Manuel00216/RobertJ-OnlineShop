@@ -78,6 +78,8 @@ export interface Order {
   cancelledAt: string | null;
   /** True while the buyer may still cancel (status in `CANCELLABLE_ORDER_STATUSES`). */
   cancellable: boolean;
+  /** Set when this order was placed as part of a multi-seller, one-combined-payment checkout; null for COD and single-seller orders. */
+  checkoutGroupId: string | null;
 }
 
 /** Filters accepted by the buyer order listing query. */

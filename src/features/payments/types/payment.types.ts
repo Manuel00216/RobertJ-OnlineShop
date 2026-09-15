@@ -44,4 +44,6 @@ export interface PaymentAttempt {
   expiresAt: string | null;
   xenditPaymentRequestId: string | null;
   failureReason: string | null;
+  /** Set only for a combined multi-seller payment; null for a single-order attempt. */
+  checkoutGroupId: string | null;
 }

@@ -1471,7 +1471,7 @@ type OrderItemRow = Database["public"]["Tables"]["order_items"]["Row"];
 const ORDER_COLUMNS = `
   id, order_number, buyer_id, seller_id, subtotal_cents, shipping_fee_cents,
   total_cents, currency, payment_status, order_status, shipping_address, notes,
-  placed_at, paid_at, shipped_at, delivered_at, cancelled_at,
+  placed_at, paid_at, shipped_at, delivered_at, cancelled_at, checkout_group_id,
   buyer:profiles!orders_buyer_id_fkey ( full_name, username ),
   seller:profiles!orders_seller_id_fkey ( full_name, username, role ),
   order_items (
@@ -1551,6 +1551,7 @@ function toOrder(row: OrderRowWithItems): Order {
     deliveredAt: row.delivered_at,
     cancelledAt: row.cancelled_at,
     cancellable: CANCELLABLE_ORDER_STATUSES.includes(row.order_status),
+    checkoutGroupId: row.checkout_group_id,
   };
 }
 
@@ -1912,6 +1913,83 @@ export async function createOrder(
     orderNumber: data.order_number,
     sellerId: data.seller_id,
   };
+}
+
+/** One seller's slice of a multi-seller checkout group. */
+export interface CreateOrderGroupInput {
+  groups: {
+    sellerId: string;
+    items: { productId: string; quantity: number; variantId?: string }[];
+  }[];
+  shippingAddress: Json;
+  shippingFeeCents: number;
+  notes?: string | null;
+}
+
+/**
+ * Creates every seller's order for one multi-seller, one-combined-payment
+ * checkout via the `create_order_group` RPC. The `checkout_group_id` is
+ * minted by the database inside that RPC — never generated here or sent by
+ * the client. All-or-nothing: any per-seller failure (stock, pricing) rolls
+ * back every order in the batch, unlike the single-seller `createOrder` loop
+ * in `placeOrderAction`, which stays partial-success and untouched.
+ */
+export async function createOrderGroup(
+  input: CreateOrderGroupInput,
+): Promise<{
+  checkoutGroupId: string;
+  orders: { orderId: string; orderNumber: string; sellerId: string }[];
+}> {
+  const supabase = await createSupabaseServerClient();
+
+  const { data, error } = await supabase.rpc("create_order_group", {
+    p_groups: input.groups.map((group) => ({
+      seller_id: group.sellerId,
+      items: group.items.map((item) => ({
+        product_id: item.productId,
+        quantity: item.quantity,
+        variant_id: item.variantId ?? undefined,
+      })),
+    })),
+    p_shipping_address: input.shippingAddress,
+    p_shipping_fee_cents: input.shippingFeeCents,
+    p_notes: input.notes ?? undefined,
+  });
+
+  if (error) {
+    throw rpcError("Could not place this order.", error);
+  }
+  if (!data || data.length === 0 || !data[0].checkout_group_id) {
+    throw new Error("Could not create the order.");
+  }
+
+  return {
+    checkoutGroupId: data[0].checkout_group_id,
+    orders: data.map((order) => ({
+      orderId: order.id,
+      orderNumber: order.order_number,
+      sellerId: order.seller_id,
+    })),
+  };
+}
+
+/**
+ * Order ids for a checkout group, RLS-scoped to the buyer's own orders —
+ * used only to build the post-payment redirect URL back to the confirmation
+ * page; ownership for any actual mutation is always re-verified inside the
+ * relevant RPC regardless of this list.
+ */
+export async function getOrderIdsForCheckoutGroup(checkoutGroupId: string): Promise<string[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.ORDERS)
+    .select("id")
+    .eq("checkout_group_id", checkoutGroupId);
+
+  if (error) {
+    throw queryError("Failed to load checkout group orders", error);
+  }
+  return (data ?? []).map((row) => row.id);
 }
 
 // ============================================================================
@@ -2420,6 +2498,7 @@ function toPaymentAttempt(row: PaymentRow): PaymentAttempt {
     expiresAt: row.expires_at,
     xenditPaymentRequestId: row.xendit_payment_request_id,
     failureReason: row.failure_reason,
+    checkoutGroupId: row.checkout_group_id,
   };
 }
 
@@ -2470,6 +2549,93 @@ export async function finalizeXenditPaymentRequest(input: {
     throw rpcError("Could not confirm this payment request.", error);
   }
   return toPaymentAttempt(data as PaymentRow);
+}
+
+/**
+ * Idempotently reserves (or reuses) a combined Xendit payment attempt for
+ * every order in a multi-seller checkout group, via
+ * `begin_xendit_group_payment_attempt` — takes only the server-issued
+ * `checkoutGroupId`; order ownership and membership are resolved and
+ * re-validated entirely inside the RPC, never trusted from the caller.
+ */
+export async function beginXenditGroupPaymentAttempt(
+  checkoutGroupId: string,
+  channelCode: "GCASH" | "PAYMAYA" | "CARD",
+): Promise<PaymentAttempt> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("begin_xendit_group_payment_attempt", {
+    p_checkout_group_id: checkoutGroupId,
+    p_channel_code: channelCode,
+  });
+
+  if (error || !data) {
+    throw rpcError("Could not start this payment. Please try again.", error);
+  }
+  return toPaymentAttempt(data as PaymentRow);
+}
+
+/**
+ * Records Xendit's synchronous response against the payment rows sharing
+ * `checkoutGroupId` for one specific `channelCode`, via
+ * `finalize_xendit_group_payment_request` — scoped so finalizing a Card
+ * attempt never touches an abandoned GCash/Maya attempt's rows (or vice
+ * versa) when the buyer switched channels without finishing the first one.
+ */
+export async function finalizeXenditGroupPaymentRequest(input: {
+  checkoutGroupId: string;
+  channelCode: "GCASH" | "PAYMAYA" | "CARD";
+  xenditPaymentRequestId: string;
+  checkoutUrl: string;
+  expiresAt: string | null;
+  status?: "pending" | "failed";
+}): Promise<PaymentAttempt> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("finalize_xendit_group_payment_request", {
+    p_checkout_group_id: input.checkoutGroupId,
+    p_channel_code: input.channelCode,
+    p_xendit_payment_request_id: input.xenditPaymentRequestId,
+    p_checkout_url: input.checkoutUrl,
+    p_expires_at: input.expiresAt ?? undefined,
+    p_status: input.status ?? "pending",
+  });
+
+  if (error || !data) {
+    throw rpcError("Could not confirm this payment request.", error);
+  }
+  return toPaymentAttempt(data as PaymentRow);
+}
+
+/**
+ * The authoritative combined amount for a checkout group's specific payment
+ * attempt — summed server-side from only that `channelCode`'s payment rows
+ * (RLS-scoped to the caller's own orders), never accepted from the client.
+ * Scoped by channel so an abandoned attempt on a different channel (the
+ * buyer started GCash, then switched to Card without finishing) is never
+ * folded into the amount charged. Used immediately before calling Xendit to
+ * create the combined payment request/session.
+ */
+export async function getXenditGroupPaymentTotal(
+  checkoutGroupId: string,
+  channelCode: "GCASH" | "PAYMAYA" | "CARD",
+): Promise<{ amountCents: number; currency: string }> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PAYMENTS)
+    .select("amount_cents, currency")
+    .eq("checkout_group_id", checkoutGroupId)
+    .eq("payment_channel", channelCode);
+
+  if (error) {
+    throw queryError("Failed to load payment group total", error);
+  }
+  if (!data || data.length === 0) {
+    throw new Error("Payment group not found.");
+  }
+
+  return {
+    amountCents: data.reduce((sum, row) => sum + row.amount_cents, 0),
+    currency: data[0].currency,
+  };
 }
 
 /**
@@ -3379,6 +3545,32 @@ export async function getActivePaymentForOrder(
     .from(DATABASE_TABLES.PAYMENTS)
     .select(PAYMENT_COLUMNS)
     .eq("order_id", orderId)
+    .in("status", [PAYMENT_STATUS.pending, PAYMENT_STATUS.paid, PAYMENT_STATUS.failed])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw queryError("Failed to load payment", error);
+  }
+  return data ? toPayment(data as PaymentRowWithOrder) : null;
+}
+
+/**
+ * Mirrors `getActivePaymentForOrder` for a checkout group — the confirmation
+ * page uses this to detect an already-in-flight combined payment (a prior
+ * click, a page refresh, or another tab) and show a resume link instead of
+ * starting a second one. RLS-scoped to the buyer's own orders, same as
+ * `getActivePaymentForOrder`.
+ */
+export async function getActivePaymentForGroup(
+  checkoutGroupId: string,
+): Promise<Payment | null> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PAYMENTS)
+    .select(PAYMENT_COLUMNS)
+    .eq("checkout_group_id", checkoutGroupId)
     .in("status", [PAYMENT_STATUS.pending, PAYMENT_STATUS.paid, PAYMENT_STATUS.failed])
     .order("created_at", { ascending: false })
     .limit(1)
