@@ -17,6 +17,7 @@ import {
   getDashboardOrder,
   getReturnEvidenceSignedUrl,
   getReturnRequestForOrder,
+  hasXenditPaymentAttempt,
   requireSessionUser,
 } from "@/lib/supabase/queries";
 import { RETURN_STATUS } from "@/constants/status";
@@ -42,6 +43,12 @@ export default async function SellerOrderDetailPage({ params }: SellerOrderDetai
 
   if (!order) notFound();
 
+  // Same signal `advanceOrderStatus` uses server-side: a not-yet-paid order
+  // only blocks fulfilment advancement if it's actually a Xendit order (COD
+  // sits at "pending" until delivery and must stay unaffected).
+  const paymentRequired =
+    order.paymentStatus !== "paid" && (await hasXenditPaymentAttempt(order.id));
+
   const returnRequest = await getReturnRequestForOrder(order.id).catch(() => null);
   const returnEvidenceUrl = returnRequest?.evidencePath
     ? await getReturnEvidenceSignedUrl(returnRequest.evidencePath).catch(() => null)
@@ -51,7 +58,12 @@ export default async function SellerOrderDetailPage({ params }: SellerOrderDetai
     <article className="flex flex-col gap-8 p-5 lg:p-7">
       <OrderHeader order={order} />
       <OrderTimeline status={order.status} />
-      <OrderStatusControl orderId={order.id} orderNumber={order.orderNumber} status={order.status} />
+      <OrderStatusControl
+        orderId={order.id}
+        orderNumber={order.orderNumber}
+        status={order.status}
+        paymentRequired={paymentRequired}
+      />
 
       {returnRequest ? (
         <div className="flex flex-col gap-3">

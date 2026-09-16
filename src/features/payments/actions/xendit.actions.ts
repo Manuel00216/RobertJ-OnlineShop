@@ -9,6 +9,11 @@ import * as queries from "@/lib/supabase/queries";
 import { createEwalletPaymentRequest, createCardPaymentSession } from "@/lib/xendit/client";
 import type { ActionResult } from "@/types/action.types";
 import {
+  RECONCILIATION_RETRY_MESSAGE,
+  isStaleXenditAttempt,
+  reconcileStaleXenditAttempt,
+} from "@/features/payments/lib/xendit-reconciliation";
+import {
   createXenditCardSessionSchema,
   createXenditEwalletPaymentSchema,
   createXenditGroupCardSessionSchema,
@@ -36,6 +41,24 @@ export async function createXenditEwalletPaymentAction(
   const user = await queries.requireSessionUser();
   const order = await queries.getBuyerOrder(parsed.data.orderId, user.id);
   if (!order) return fail("Order not found.");
+
+  const existingAttempt = await queries.getFinalizedPendingXenditPayment(
+    parsed.data.orderId,
+    parsed.data.channelCode,
+  );
+  if (existingAttempt && isStaleXenditAttempt(existingAttempt)) {
+    const reconciliation = await reconcileStaleXenditAttempt(
+      existingAttempt.id,
+      parsed.data.channelCode,
+      existingAttempt,
+    );
+    if (reconciliation === "blocked") return fail(RECONCILIATION_RETRY_MESSAGE);
+    if (reconciliation === "already_paid") {
+      redirect(`${ROUTES.orderDetail(parsed.data.orderId)}?xendit_return=1`);
+    }
+    // "cleared_for_retry": the old attempt is now genuinely failed/expired —
+    // fall through, beginXenditPaymentAttempt will correctly start a fresh one.
+  }
 
   let redirectUrl: string;
   try {
@@ -103,6 +126,18 @@ export async function createXenditCardSessionAction(
   const order = await queries.getBuyerOrder(parsed.data.orderId, user.id);
   if (!order) return fail("Order not found.");
 
+  const existingAttempt = await queries.getFinalizedPendingXenditPayment(parsed.data.orderId, "CARD");
+  if (existingAttempt && isStaleXenditAttempt(existingAttempt)) {
+    const reconciliation = await reconcileStaleXenditAttempt(existingAttempt.id, "CARD", existingAttempt);
+    if (reconciliation === "blocked") return fail(RECONCILIATION_RETRY_MESSAGE);
+    if (reconciliation === "already_paid") {
+      return fail("This order has already been paid. Refresh the page to see the updated status.");
+    }
+    // "cleared_for_retry": fall through — beginXenditPaymentAttempt will
+    // start a genuinely fresh attempt (new payments.id => new Xendit
+    // idempotency key => a real new Card session, not the stale one).
+  }
+
   try {
     // Card sessions carry a short-lived components_sdk_key that can't be
     // meaningfully reused across requests, so every call mints a fresh
@@ -130,7 +165,10 @@ export async function createXenditCardSessionAction(
       paymentId: attempt.id,
       xenditPaymentRequestId: session.payment_session_id,
       checkoutUrl: returnUrl,
-      expiresAt: null,
+      // Xendit's Sessions API returns a real expiry (documented default: 30
+      // minutes after creation) — stored as-is so staleness checks can rely
+      // on it instead of falling back to an approximated window.
+      expiresAt: session.expires_at ?? null,
     });
 
     return ok({ paymentId: attempt.id, componentsSdkKey: session.components_sdk_key });
@@ -155,6 +193,25 @@ export async function createXenditGroupEwalletPaymentAction(
   if (!parsed.success) return fromZodError(parsed.error);
 
   const user = await queries.requireSessionUser();
+
+  const existingAttempt = await queries.getFinalizedPendingXenditGroupPayment(
+    parsed.data.checkoutGroupId,
+    parsed.data.channelCode,
+  );
+  if (existingAttempt && isStaleXenditAttempt(existingAttempt)) {
+    const reconciliation = await reconcileStaleXenditAttempt(
+      parsed.data.checkoutGroupId,
+      parsed.data.channelCode,
+      existingAttempt,
+    );
+    if (reconciliation === "blocked") return fail(RECONCILIATION_RETRY_MESSAGE);
+    if (reconciliation === "already_paid") {
+      const orderIds = await queries.getOrderIdsForCheckoutGroup(parsed.data.checkoutGroupId);
+      redirect(`${ROUTES.checkoutConfirmation}?orders=${orderIds.join(",")}&xendit_return=1`);
+    }
+    // "cleared_for_retry": fall through, beginXenditGroupPaymentAttempt will
+    // correctly start a fresh combined attempt for the whole group.
+  }
 
   let redirectUrl: string;
   try {
@@ -226,6 +283,23 @@ export async function createXenditGroupCardSessionAction(
 
   const user = await queries.requireSessionUser();
 
+  const existingAttempt = await queries.getFinalizedPendingXenditGroupPayment(
+    parsed.data.checkoutGroupId,
+    "CARD",
+  );
+  if (existingAttempt && isStaleXenditAttempt(existingAttempt)) {
+    const reconciliation = await reconcileStaleXenditAttempt(
+      parsed.data.checkoutGroupId,
+      "CARD",
+      existingAttempt,
+    );
+    if (reconciliation === "blocked") return fail(RECONCILIATION_RETRY_MESSAGE);
+    if (reconciliation === "already_paid") {
+      return fail("This order has already been paid. Refresh the page to see the updated status.");
+    }
+    // "cleared_for_retry": fall through to a genuinely fresh group attempt.
+  }
+
   try {
     const attempt = await queries.beginXenditGroupPaymentAttempt(parsed.data.checkoutGroupId, "CARD");
     const { amountCents, currency } = await queries.getXenditGroupPaymentTotal(
@@ -249,7 +323,8 @@ export async function createXenditGroupCardSessionAction(
       channelCode: "CARD",
       xenditPaymentRequestId: session.payment_session_id,
       checkoutUrl: returnUrl,
-      expiresAt: null,
+      // Same real-expiry capture as the single-order Card action above.
+      expiresAt: session.expires_at ?? null,
     });
 
     return ok({

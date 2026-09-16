@@ -22,6 +22,14 @@ export interface OrderStatusControlProps {
   orderId: string;
   orderNumber: string;
   status: OrderStatus;
+  /**
+   * True when this is a Xendit order whose payment hasn't succeeded yet —
+   * mirrors the server-side guard in `queries.advanceOrderStatus()`. Blocks
+   * only the forward-advancement button so the seller sees why, instead of
+   * clicking it and hitting the server error. Cancellation is unaffected.
+   * Omitted/false for COD orders and already-paid Xendit orders.
+   */
+  paymentRequired?: boolean;
 }
 
 /**
@@ -36,10 +44,12 @@ export function OrderStatusControl({
   orderId,
   orderNumber,
   status,
+  paymentRequired = false,
 }: OrderStatusControlProps) {
   const allowed = ORDER_STATUS_TRANSITIONS[status];
   const nextStatus = allowed.find((candidate) => candidate !== "cancelled") ?? null;
   const canCancel = allowed.includes("cancelled");
+  const blockedByPayment = paymentRequired && nextStatus !== null;
 
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,8 +76,15 @@ export function OrderStatusControl({
         <ErrorState title="Couldn't update the order" message={error} />
       ) : null}
 
+      {blockedByPayment ? (
+        <p className="text-xs text-rj-gray-600">
+          This order&apos;s online payment hasn&apos;t been completed yet. It can&apos;t be
+          moved forward until the payment succeeds.
+        </p>
+      ) : null}
+
       <div className="flex flex-wrap gap-2">
-        {nextStatus ? (
+        {nextStatus && !blockedByPayment ? (
           <Button
             type="button"
             variant="rj"

@@ -178,3 +178,31 @@ export async function createCardPaymentSession(
     }),
   });
 }
+
+/**
+ * GCash / Maya — GET /v3/payment_requests/{id}. Used only for the fix #5A
+ * reconcile-before-replace check (never for the initial create flow): before
+ * treating a finalized-but-unresolved attempt as abandoned and starting a
+ * fresh one, ask Xendit directly whether it actually already succeeded.
+ */
+export async function getPaymentRequestStatus(
+  paymentRequestId: string,
+): Promise<XenditPaymentRequestResponse> {
+  return xenditFetch<XenditPaymentRequestResponse>(
+    `/v3/payment_requests/${encodeURIComponent(paymentRequestId)}`,
+    { method: "GET" },
+  );
+}
+
+/**
+ * Card — GET /sessions/{id}. Same reconcile-before-replace purpose as
+ * `getPaymentRequestStatus` above, for the Card flow.
+ */
+export async function getCardSessionStatus(
+  sessionId: string,
+): Promise<XenditPaymentSessionResponse> {
+  return xenditFetch<XenditPaymentSessionResponse>(
+    `/sessions/${encodeURIComponent(sessionId)}`,
+    { method: "GET" },
+  );
+}

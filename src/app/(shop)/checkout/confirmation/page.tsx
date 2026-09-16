@@ -67,15 +67,21 @@ export default async function CheckoutConfirmationPage({
   // Every order from one `create_order_group` call shares one checkout_group_id
   // (re-verified per order via `getBuyerOrder`, never trusted from the query
   // string) — when that's the case and every sibling is still awaiting
-  // payment, this is where the buyer starts the one combined Xendit payment
-  // for the whole group. Mirrors the order-detail page's single-order
-  // section, which stays untouched for single-seller checkouts.
+  // payment (or every sibling's prior combined attempt failed and can be
+  // retried), this is where the buyer starts a Xendit payment for the whole
+  // group. Checked as "all pending" or "all failed" rather than a per-order
+  // OR, since a mixed pending/failed group would signal an inconsistent
+  // state the one-payment architecture doesn't otherwise produce. Mirrors
+  // the order-detail page's single-order section, which stays untouched for
+  // single-seller checkouts.
   const checkoutGroupId =
     orders.length > 1 && orders.every((order) => order.checkoutGroupId === orders[0]?.checkoutGroupId)
       ? orders[0]?.checkoutGroupId ?? null
       : null;
   const showGroupPayment =
-    checkoutGroupId !== null && orders.every((order) => order.paymentStatus === "pending");
+    checkoutGroupId !== null &&
+    (orders.every((order) => order.paymentStatus === "pending") ||
+      orders.every((order) => order.paymentStatus === "failed"));
 
   const activeGroupPayment = showGroupPayment
     ? await getActivePaymentForGroup(checkoutGroupId)
@@ -126,9 +132,9 @@ export default async function CheckoutConfirmationPage({
             Online Payment
           </h2>
           <p className="mt-1 text-xs text-rj-gray-600">
-            Pay once to cover all {orders.length} shops in this checkout. Paying by Cash on
-            Delivery instead? No action needed — each seller marks their order collected once
-            received.
+            {orders.every((order) => order.paymentStatus === "failed")
+              ? `Your combined payment for all ${orders.length} shops didn't go through. You can try again below.`
+              : `Pay once to cover all ${orders.length} shops in this checkout. Paying by Cash on Delivery instead? No action needed — each seller marks their order collected once received.`}
           </p>
           <div className="mt-3">
             <XenditPaymentOptions

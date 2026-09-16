@@ -1808,6 +1808,14 @@ export const getDashboardOrder = cache(
  * silent no-op. Cancelling an order (newStatus = 'cancelled') restocks
  * automatically via the `orders_restock_on_cancel` trigger — no extra code
  * needed here.
+ *
+ * Forward transitions (anything but 'cancelled') additionally require the
+ * order to actually be paid if it's a Xendit order — see the unpaid-Xendit
+ * guard below. `orders.payment_status` starts 'pending' for COD orders too
+ * (COD is settled on delivery via `mark_cod_payment_collected`), so `<> paid`
+ * alone can't distinguish "COD, pay on delivery" from "Xendit attempt still
+ * unresolved" — the guard only fires when a `payments` row for this order is
+ * actually `payment_method_type = 'xendit'`.
  */
 /**
  * `sellerId`: the caller's own id for a non-admin request (`null` = admin,
@@ -1824,7 +1832,7 @@ export async function advanceOrderStatus(
 
   let readQuery = supabase
     .from(DATABASE_TABLES.ORDERS)
-    .select("order_status")
+    .select("order_status, payment_status")
     .eq("id", orderId);
   if (sellerId) readQuery = readQuery.eq("seller_id", sellerId);
 
@@ -1843,6 +1851,29 @@ export async function advanceOrderStatus(
     throw new Error(
       `Cannot move an order from "${getOrderStatusLabel(currentStatus)}" to "${getOrderStatusLabel(newStatus)}".`,
     );
+  }
+
+  // Unpaid-Xendit guard: cancellation is exempt (unaffected by this fix), and
+  // an already-paid order never needs the extra lookup. Only a forward step
+  // on a not-yet-paid order pays the cost of checking whether it's a Xendit
+  // order at all.
+  if (newStatus !== "cancelled" && existing.payment_status !== "paid") {
+    const { data: xenditPayment, error: xenditCheckError } = await supabase
+      .from(DATABASE_TABLES.PAYMENTS)
+      .select("id")
+      .eq("order_id", orderId)
+      .eq("payment_method_type", "xendit")
+      .limit(1)
+      .maybeSingle();
+
+    if (xenditCheckError) {
+      throw queryError("Failed to verify payment status", xenditCheckError);
+    }
+    if (xenditPayment) {
+      throw new Error(
+        "This order's online payment hasn't been completed yet. It can't be moved forward until the payment succeeds.",
+      );
+    }
   }
 
   let writeQuery = supabase
@@ -2499,6 +2530,7 @@ function toPaymentAttempt(row: PaymentRow): PaymentAttempt {
     xenditPaymentRequestId: row.xendit_payment_request_id,
     failureReason: row.failure_reason,
     checkoutGroupId: row.checkout_group_id,
+    createdAt: row.created_at,
   };
 }
 
@@ -2636,6 +2668,177 @@ export async function getXenditGroupPaymentTotal(
     amountCents: data.reduce((sum, row) => sum + row.amount_cents, 0),
     currency: data[0].currency,
   };
+}
+
+/**
+ * The most recent finalized-but-unresolved Xendit attempt for this order and
+ * channel, if any — regardless of whether it's still within the fix #4
+ * staleness window. `hasXenditPaymentAttempt`'s caller (the retry/reconcile
+ * flow) decides what "stale" means; this just returns the raw candidate so
+ * the action layer can check it with Xendit before letting
+ * `beginXenditPaymentAttempt` decide to fabricate a fresh attempt.
+ */
+export async function getFinalizedPendingXenditPayment(
+  orderId: string,
+  channelCode: "GCASH" | "PAYMAYA" | "CARD",
+): Promise<PaymentAttempt | null> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PAYMENTS)
+    .select("*")
+    .eq("order_id", orderId)
+    .eq("payment_method_type", "xendit")
+    .eq("payment_channel", channelCode)
+    .eq("status", "pending")
+    .not("xendit_payment_request_id", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw queryError("Failed to check for an existing payment attempt", error);
+  }
+  return data ? toPaymentAttempt(data as PaymentRow) : null;
+}
+
+/** Group counterpart of `getFinalizedPendingXenditPayment` — every member row shares one `xendit_payment_request_id`, so any one row represents the whole group's attempt. */
+export async function getFinalizedPendingXenditGroupPayment(
+  checkoutGroupId: string,
+  channelCode: "GCASH" | "PAYMAYA" | "CARD",
+): Promise<PaymentAttempt | null> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PAYMENTS)
+    .select("*")
+    .eq("checkout_group_id", checkoutGroupId)
+    .eq("payment_method_type", "xendit")
+    .eq("payment_channel", channelCode)
+    .eq("status", "pending")
+    .not("xendit_payment_request_id", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw queryError("Failed to check for an existing payment attempt", error);
+  }
+  return data ? toPaymentAttempt(data as PaymentRow) : null;
+}
+
+/**
+ * Applies a Xendit status fetched via a synchronous reconciliation check
+ * (fix #5A) through the exact same `process_xendit_webhook` RPC the real
+ * webhook uses — never duplicates its terminal-state, reference, or amount
+ * validation. Uses the admin client because the RPC is service_role-only,
+ * same as the webhook route itself; called only from the narrow
+ * reconcile-before-replace path in `xendit.actions.ts`, never exposed
+ * directly to a client component.
+ */
+export async function reconcileXenditWebhookStatus(input: {
+  referenceId: string;
+  xenditPaymentRequestId: string;
+  xenditPaymentId: string;
+  status: string;
+  channelCode: string;
+  amountCents: number;
+  currency: string;
+}): Promise<PaymentAttempt | null> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin.rpc("process_xendit_webhook", {
+    p_reference_id: input.referenceId,
+    p_xendit_payment_request_id: input.xenditPaymentRequestId,
+    p_xendit_payment_id: input.xenditPaymentId,
+    p_status: input.status,
+    p_channel_code: input.channelCode,
+    p_amount_cents: input.amountCents,
+    p_currency: input.currency,
+    p_raw_payload: { source: "reconciliation_check", status: input.status } as Json,
+  });
+
+  if (error) {
+    throw rpcError("Could not confirm the status of your previous payment attempt.", error);
+  }
+  return data ? toPaymentAttempt(data as PaymentRow) : null;
+}
+
+/** One candidate found by `getFinalizedPendingXenditAttemptsForCancellation` — pairs a payment attempt with the exact id that must be used as `process_xendit_webhook`'s reference (see that function's docs for why single vs. group differ). */
+export interface XenditCancellationCandidate {
+  referenceId: string;
+  channelCode: "GCASH" | "PAYMAYA" | "CARD";
+  attempt: PaymentAttempt;
+}
+
+/**
+ * Fix #5B: every finalized-pending Xendit payment relevant to a possible
+ * cancellation of this order — its own rows if single-seller, or every
+ * distinct channel's row sharing its `checkout_group_id` if part of a
+ * multi-seller group. Staleness is NOT filtered here (this file must not
+ * depend on the feature-level `isStaleXenditAttempt` helper — see
+ * `src/features/payments/lib/xendit-reconciliation.ts`); the caller decides
+ * which candidates are actually stale before reconciling them.
+ *
+ * `referenceId` matters and differs by shape: a single-order attempt's
+ * `reference_id` sent to Xendit was the payment row's own id
+ * (`beginXenditPaymentAttempt`'s caller uses `attempt.id`), so each row here
+ * carries its own id. A group attempt's `reference_id` was the shared
+ * `checkout_group_id` — every member row for one channel represents the
+ * *same* combined charge, so they're collapsed to one candidate per channel
+ * rather than reconciling the same Xendit payment request multiple times.
+ */
+export async function getFinalizedPendingXenditAttemptsForCancellation(
+  orderId: string,
+): Promise<XenditCancellationCandidate[]> {
+  const supabase = await createSupabaseServerClient();
+
+  const { data: order, error: orderError } = await supabase
+    .from(DATABASE_TABLES.ORDERS)
+    .select("checkout_group_id")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (orderError) {
+    throw queryError("Failed to load order", orderError);
+  }
+  if (!order) return [];
+
+  const baseQuery = supabase
+    .from(DATABASE_TABLES.PAYMENTS)
+    .select("*")
+    .eq("payment_method_type", "xendit")
+    .eq("status", "pending")
+    .not("xendit_payment_request_id", "is", null);
+
+  const { data, error } = order.checkout_group_id
+    ? await baseQuery.eq("checkout_group_id", order.checkout_group_id)
+    : await baseQuery.eq("order_id", orderId);
+
+  if (error) {
+    throw queryError("Failed to check for existing payment attempts", error);
+  }
+
+  const rows = (data ?? []) as PaymentRow[];
+
+  if (!order.checkout_group_id) {
+    return rows
+      .filter((row): row is PaymentRow & { payment_channel: string } => row.payment_channel !== null)
+      .map((row) => ({
+        referenceId: row.id,
+        channelCode: row.payment_channel as "GCASH" | "PAYMAYA" | "CARD",
+        attempt: toPaymentAttempt(row),
+      }));
+  }
+
+  const oneRowPerChannel = new Map<string, PaymentRow>();
+  for (const row of rows) {
+    if (row.payment_channel && !oneRowPerChannel.has(row.payment_channel)) {
+      oneRowPerChannel.set(row.payment_channel, row);
+    }
+  }
+  return [...oneRowPerChannel.entries()].map(([channelCode, row]) => ({
+    referenceId: order.checkout_group_id as string,
+    channelCode: channelCode as "GCASH" | "PAYMAYA" | "CARD",
+    attempt: toPaymentAttempt(row),
+  }));
 }
 
 /**
@@ -3580,6 +3783,30 @@ export async function getActivePaymentForGroup(
     throw queryError("Failed to load payment", error);
   }
   return data ? toPayment(data as PaymentRowWithOrder) : null;
+}
+
+/**
+ * Whether an order has ever had a Xendit payment attempt (any status) — the
+ * same signal `advanceOrderStatus` uses to distinguish "Xendit order not yet
+ * paid" (fulfilment blocked) from a COD order sitting at `payment_status =
+ * 'pending'` until delivery (fulfilment unaffected). Used by the seller/admin
+ * order-detail pages to decide whether `OrderStatusControl` should show the
+ * payment-required message instead of the advance button.
+ */
+export async function hasXenditPaymentAttempt(orderId: string): Promise<boolean> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PAYMENTS)
+    .select("id")
+    .eq("order_id", orderId)
+    .eq("payment_method_type", "xendit")
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw queryError("Failed to check payment attempts", error);
+  }
+  return data !== null;
 }
 
 // ============================================================================

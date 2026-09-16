@@ -20,6 +20,8 @@ export interface XenditPaymentRequestResponse {
   request_amount?: number;
   currency?: string;
   created?: string;
+  /** Only present once a payment actually succeeds against this request. Not documented for GCASH/PAYMAYA responses generally — read defensively. */
+  payment_id?: string;
   [key: string]: unknown;
 }
 
@@ -31,6 +33,11 @@ export interface XenditPaymentSessionResponse {
   currency?: string;
   amount?: number;
   created?: string;
+  /** ISO 8601. Xendit documents Sessions as expiring 30 minutes after creation by default. */
+  expires_at?: string;
+  /** Present once the session resolves to a completed payment. */
+  payment_id?: string;
+  payment_request_id?: string;
   [key: string]: unknown;
 }
 

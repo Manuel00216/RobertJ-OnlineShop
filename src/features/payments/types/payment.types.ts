@@ -46,4 +46,5 @@ export interface PaymentAttempt {
   failureReason: string | null;
   /** Set only for a combined multi-seller payment; null for a single-order attempt. */
   checkoutGroupId: string | null;
+  createdAt: string;
 }

@@ -59,10 +59,11 @@ export default async function OrderDetailPage({
     shopNames.get(order.sellerId) ??
     (order.sellerRole === USER_ROLES.seller ? order.sellerName : null);
 
-  // Pending: shows Xendit payment options (or a "continue to payment" link
-  // if an attempt is already in flight). Failed: carries the failure reason,
-  // shown in the Payment card below. Paid needs neither — PaymentStatusBadge
-  // already reflects it.
+  // Pending or failed: shows Xendit payment options (a "continue to payment"
+  // link if an attempt is already in flight, otherwise fresh channel choices
+  // to retry) — the failed case also carries its failure reason, shown in
+  // the Payment card below. Paid needs neither — PaymentStatusBadge already
+  // reflects it.
   const activePayment =
     order.paymentStatus === "pending" || order.paymentStatus === "failed"
       ? await getActivePaymentForOrder(order.id)
@@ -115,7 +116,7 @@ export default async function OrderDetailPage({
         <BuyAgainButton order={order} sellerName={shopName} />
       </div>
 
-      {order.paymentStatus === "pending" ? (
+      {order.paymentStatus === "pending" || order.paymentStatus === "failed" ? (
         <section
           aria-label="Payment"
           className="rounded-2xl border border-rj-gray-100 bg-rj-gray-50 p-5"
@@ -124,8 +125,9 @@ export default async function OrderDetailPage({
             Online Payment
           </h2>
           <p className="mt-1 text-xs text-rj-gray-600">
-            Paying by Cash on Delivery? No action needed — {shopName ?? "the seller"} will
-            mark it collected once received. Prefer to pay now instead?
+            {order.paymentStatus === "failed"
+              ? "Your online payment didn't go through. You can try again below."
+              : `Paying by Cash on Delivery? No action needed — ${shopName ?? "the seller"} will mark it collected once received. Prefer to pay now instead?`}
           </p>
           <div className="mt-3">
             <XenditPaymentOptions orderId={order.id} existingCheckoutUrl={resumableCheckoutUrl} />
