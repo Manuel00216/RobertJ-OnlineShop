@@ -94,13 +94,21 @@ export default async function OrderDetailPage({
         )
       : undefined;
 
+  // Phase 5A: request_return now also accepts a cancelled order that was
+  // already paid (see the migration for why — cancelling a paid order used
+  // to leave it with no refund path at all). Mirrors request_return's own
+  // precondition exactly so this entry point never offers something the
+  // server would reject.
+  const canRequestReturn =
+    order.status === ORDER_STATUS.delivered ||
+    (order.status === ORDER_STATUS.cancelled && order.paymentStatus === "paid");
+
   // Whole-order return only in this UI (the RPC also supports a per-item
   // scope — see request_return — but a single "Request Return" entry point
   // matches the buyer-facing lifecycle this phase actually asked for).
-  const returnRequest =
-    order.status === ORDER_STATUS.delivered
-      ? await getReturnRequestForOrder(order.id).catch(() => null)
-      : null;
+  const returnRequest = canRequestReturn
+    ? await getReturnRequestForOrder(order.id).catch(() => null)
+    : null;
   const returnEvidenceUrl = returnRequest?.evidencePath
     ? await getReturnEvidenceSignedUrl(returnRequest.evidencePath).catch(() => null)
     : null;
@@ -135,7 +143,7 @@ export default async function OrderDetailPage({
         </section>
       ) : null}
 
-      {order.status === ORDER_STATUS.delivered ? (
+      {canRequestReturn ? (
         returnRequest ? (
           <ReturnRequestStatusCard request={returnRequest} evidenceUrl={returnEvidenceUrl} />
         ) : (
