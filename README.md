@@ -188,7 +188,7 @@ Detailed purpose, boundaries, and interactions for each module are in [`ARCHITEC
 | Inventory (dedicated module) | ✅ Completed | `supabase/migrations/20260815000000_inventory_and_stock_history.sql`, `src/features/inventory`, `src/app/admin/inventory`, `src/app/seller/inventory` |
 | Payments (COD + Xendit Online Payment) | ✅ Completed (sandbox/test-mode — see [ADR-019](./DECISIONS.md#adr-019-xendit-online-payment-gcash-maya-card-superseding-adr-008s-no-gateway-stance)) | `src/features/payments`; Xendit payment options + COD collection on the order detail page; read-only payment history at `/admin/payments` and `/seller/payments` |
 | Reports | ✅ Completed | `src/features/reports`, `src/app/admin/reports`, `src/app/seller/reports`, `src/components/charts` |
-| Guided Product Selection | 🚧 In Progress — `recommendation_rules` schema + admin/seller rule-authoring UI done; buyer-facing quiz not yet built | `src/features/assistant`, `supabase/migrations/20260914000000_recommendation_rules.sql` |
+| Guided Product Selection | ✅ Completed — `recommendation_rules` schema + admin/seller rule-authoring UI, plus the buyer-facing quiz (`GuidedSelectorQuiz`), live on the landing page | `src/features/assistant`, `src/features/landing/components/SmartAssistantPreview.tsx`, `supabase/migrations/20260914000000_recommendation_rules.sql` |
 
 Legend: ✅ Completed · 🚧 In Progress · ⏳ Upcoming
 
@@ -215,9 +215,8 @@ flowchart LR
     classDef done fill:#1f7a3d,stroke:#0d3d1f,color:#fff;
     classDef todo fill:#3a3f4b,stroke:#20242c,color:#fff;
     classDef partial fill:#8a6d1f,stroke:#4d3c10,color:#fff;
-    class P1,P2,P3,P4,P5,P7,P8 done;
+    class P1,P2,P3,P4,P5,P7,P8,P9 done;
     class P6 partial;
-    class P9 todo;
 ```
 
 > [!NOTE]
@@ -442,11 +441,11 @@ The interface follows modern marketplace best practices, inspired by **Lazada, S
 | **Shop Owner** role | `seller` role | Current model has **seller accounts**, not shop entities. |
 | **Administrator** role | `admin` role | Matches. |
 | **Guest** | Unauthenticated visitor (no profile) | Matches. |
-| `shops` table | 🚧 **Foundation implemented** | Table + RLS + backfill exist (one shop per seller). Products still attach to a **seller** (`products.seller_id`), not a `shop_id` — no FK bridge yet. |
+| `shops` table | 🚧 **Foundation implemented** | Table + RLS + backfill exist (one shop per seller). `products.shop_id` now exists (`products` is shop-scoped, alongside `inventory`/`product_variants`/`stock_adjustments`/`recommendation_rules`) — but `orders`/`order_items`/`payments`/`return_requests` still key off **seller** (`seller_id`) only, no `shop_id` bridge yet. See [ARCHITECTURE.md → TD-1](./ARCHITECTURE.md#technical-debt-register). |
 | `shop_users` table | 🚧 **Foundation implemented** | Proper junction table (supports >1 staff per shop later); today exactly one member per shop (DB-enforced via `unique (user_id)`), admin-managed via `/admin/users` (no self-service join). |
 | `roles` table | Role stored on `profiles.role` (enum) | Roles are an enum column, not a separate table. |
 | `inventory` table | ✅ **Implemented** — dedicated `inventory` + `stock_adjustments` tables | `products.quantity` is now a trigger-synced mirror, not the source of truth. See [ARCHITECTURE.md → Architecture Evolution Strategy](./ARCHITECTURE.md#architecture-evolution-strategy). |
-| `recommendation_rules` table | 🚧 **Schema + admin/seller authoring UI implemented** | Explicit typed columns (not the SAD's indicative `jsonb conditions`), same rationale as `products`/`orders` — see the migration's header comment. Admin/seller manage rules from the existing `/admin/products`/`/seller/products` edit mode (`RecommendationRuleManager`), mirroring the product-variants placement. The buyer-facing quiz (occasion/size/budget → matching products) is a separate, later phase — not yet built. |
+| `recommendation_rules` table | ✅ **Implemented**, schema + full flow | Explicit typed columns (not the SAD's indicative `jsonb conditions`), same rationale as `products`/`orders` — see the migration's header comment. Admin/seller manage rules from the existing `/admin/products`/`/seller/products` edit mode (`RecommendationRuleManager`), mirroring the product-variants placement. The buyer-facing quiz (occasion/size/budget → matching products, `GuidedSelectorQuiz`) is live on the marketing landing page. |
 | `reports` table | ✅ **Implemented as computed RPCs** (no physical table) | Reports are aggregated DB-side by four read-only `SECURITY DEFINER` RPCs (`report_sales_summary`/`_timeseries`/`_order_status_breakdown`/`_top_products`) over the existing `orders`/`order_items`/`payments`, scoped per shop/admin. A stored `reports` table was deliberately not modelled — see [ARCHITECTURE.md → Reporting RPCs](./ARCHITECTURE.md#reporting-rpcs-analytics-over-existing-orders). |
 | Unified **cart** | Guest: client-side (`localStorage` + `useReducer`), unchanged. Authenticated: database-backed (`carts`/`cart_items`, RLS-isolated per account — no admin/seller override) via `features/cart/actions/cart.actions.ts`, synced across browsers/devices. | Guest cart merges into the account cart on sign-in (matching lines sum, new lines are added); still only committed to an order at checkout. See [DECISIONS.md → ADR-020](./DECISIONS.md#adr-020-authenticated-cart-becomes-database-backed-with-guest-cart-merge-on-sign-in). |
 | **Payments:** COD + Xendit Online Payment (GCash, Maya, Card) | ✅ **Implemented** (sandbox/test-mode) — COD (seller/admin marks collected) + Xendit (webhook-confirmed only, never the frontend redirect) | Supersedes the former COD + QR-receipt-upload target (ADR-008 → [ADR-019](./DECISIONS.md#adr-019-xendit-online-payment-gcash-maya-card-superseding-adr-008s-no-gateway-stance)). Stripe/card spike removed (ADR-014). |
