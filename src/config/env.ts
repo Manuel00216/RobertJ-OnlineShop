@@ -21,6 +21,8 @@ const serverEnvSchema = publicEnvSchema.extend({
   XENDIT_SECRET_KEY: z.string().min(1).optional(),
   /** Compared against the incoming `x-callback-token` webhook header. */
   XENDIT_WEBHOOK_TOKEN: z.string().min(1).optional(),
+  /** Compared against the `Authorization: Bearer <secret>` header Vercel Cron sends when this env var is set. Phase 4A passive-reconciliation sweep only — distinct from XENDIT_WEBHOOK_TOKEN (different caller, different trust boundary). */
+  CRON_SECRET: z.string().min(1).optional(),
 });
 
 /**
@@ -74,6 +76,7 @@ export function getServerEnv() {
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
     XENDIT_SECRET_KEY: process.env.XENDIT_SECRET_KEY,
     XENDIT_WEBHOOK_TOKEN: process.env.XENDIT_WEBHOOK_TOKEN,
+    CRON_SECRET: process.env.CRON_SECRET,
   });
 
   if (!result.success) formatEnvError(result.error);

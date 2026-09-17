@@ -21,6 +21,10 @@ export interface Payment {
   failureReason: string | null;
   verifiedBy: string | null;
   verifiedAt: string | null;
+  /** Xendit's own reference for this attempt. Null until finalized, always null for COD/legacy QR. Phase 4B: surfaced so Admin can spot a stale-but-unresolved attempt (same field `isStaleXenditAttempt` reads). */
+  xenditPaymentRequestId: string | null;
+  /** Set only for a combined multi-seller payment; null for a single-order attempt. Phase 4B: surfaced so Admin can tell a row is one leg of a shared charge. */
+  checkoutGroupId: string | null;
   createdAt: string;
 }
 

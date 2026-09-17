@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/xendit-reconciliation",
+      "schedule": "0 3 * * *"
+    }
+  ]
+}

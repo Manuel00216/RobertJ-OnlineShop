@@ -12,6 +12,7 @@ import {
   PAYMENT_STATUS,
   PRODUCT_STATUS,
   type OrderStatus,
+  type PaymentStatus,
   type ProductCondition,
   type ProductStatus,
   type ReturnStatus,
@@ -2482,6 +2483,7 @@ const PAYMENT_COLUMNS = `
   id, order_id, receipt_path, failure_reason, payment_method_type,
   payment_channel, checkout_url, expires_at, amount_cents,
   currency, status, verified_by, verified_at, created_at,
+  xendit_payment_request_id, checkout_group_id,
   order:orders!payments_order_id_fkey (
     order_number,
     buyer:profiles!orders_buyer_id_fkey ( full_name, username )
@@ -2512,6 +2514,8 @@ function toPayment(row: PaymentRowWithOrder): Payment {
     failureReason: row.failure_reason,
     verifiedBy: row.verified_by,
     verifiedAt: row.verified_at,
+    xenditPaymentRequestId: row.xendit_payment_request_id,
+    checkoutGroupId: row.checkout_group_id,
     createdAt: row.created_at,
   };
 }
@@ -2841,6 +2845,78 @@ export async function getFinalizedPendingXenditAttemptsForCancellation(
   }));
 }
 
+/** Same shape as `XenditCancellationCandidate` — named separately because it's produced system-wide for the passive reconciliation sweep (phase #4A), not for one specific order/group's cancellation check. */
+export interface XenditReconciliationCandidate {
+  referenceId: string;
+  channelCode: "GCASH" | "PAYMAYA" | "CARD";
+  attempt: PaymentAttempt;
+}
+
+/**
+ * Phase #4A: every finalized-pending Xendit payment across the whole system,
+ * for the passive reconciliation sweep's cron route — NOT scoped to any one
+ * user, so (unlike `getFinalizedPendingXenditAttemptsForCancellation`) this
+ * must use the admin client; there is no authenticated caller whose RLS
+ * scope would otherwise limit the read. `fetchLimit` bounds the raw row
+ * fetch (oldest first, most likely stale); the caller is still responsible
+ * for filtering by `isStaleXenditAttempt` and capping the batch it actually
+ * reconciles — this function only avoids scanning the whole table.
+ *
+ * Same single-vs-group `referenceId` rule as the cancellation candidate
+ * function: a single order's own payment row id, or the shared
+ * `checkout_group_id` for a combined multi-seller payment (deduplicated to
+ * one candidate per group+channel, since every member row represents the
+ * same underlying Xendit charge).
+ */
+export async function getStaleXenditPaymentsForReconciliationSweep(
+  fetchLimit: number,
+): Promise<XenditReconciliationCandidate[]> {
+  const admin = createSupabaseAdminClient();
+
+  const { data, error } = await admin
+    .from(DATABASE_TABLES.PAYMENTS)
+    .select("*")
+    .eq("payment_method_type", "xendit")
+    .eq("status", "pending")
+    .not("xendit_payment_request_id", "is", null)
+    .order("created_at", { ascending: true })
+    .limit(fetchLimit);
+
+  if (error) {
+    throw queryError("Failed to load pending payments for reconciliation sweep", error);
+  }
+
+  const rows = (data ?? []) as PaymentRow[];
+  const singleRows = rows.filter((row) => !row.checkout_group_id);
+  const groupRows = rows.filter((row) => row.checkout_group_id);
+
+  const candidates: XenditReconciliationCandidate[] = singleRows
+    .filter((row): row is PaymentRow & { payment_channel: string } => row.payment_channel !== null)
+    .map((row) => ({
+      referenceId: row.id,
+      channelCode: row.payment_channel as "GCASH" | "PAYMAYA" | "CARD",
+      attempt: toPaymentAttempt(row),
+    }));
+
+  const oneRowPerGroupChannel = new Map<string, PaymentRow>();
+  for (const row of groupRows) {
+    if (!row.payment_channel || !row.checkout_group_id) continue;
+    const key = `${row.checkout_group_id}:${row.payment_channel}`;
+    if (!oneRowPerGroupChannel.has(key)) {
+      oneRowPerGroupChannel.set(key, row);
+    }
+  }
+  for (const row of oneRowPerGroupChannel.values()) {
+    candidates.push({
+      referenceId: row.checkout_group_id as string,
+      channelCode: row.payment_channel as "GCASH" | "PAYMAYA" | "CARD",
+      attempt: toPaymentAttempt(row),
+    });
+  }
+
+  return candidates;
+}
+
 /**
  * Seller (of the order) or admin marks a COD order's cash as collected via
  * the `mark_cod_payment_collected` RPC — the sole path by which a COD
@@ -2884,14 +2960,24 @@ export async function getPaymentReceiptSignedUrl(path: string): Promise<string> 
  * primary boundary" pattern as everywhere else in this file). Xendit
  * payments settle themselves via webhook — nothing here requires manual
  * action, unlike the retired QR verification queue.
+ *
+ * Phase 4B: optional `status` filter (same "no manual scoping, just an
+ * optional `.eq`" shape as `listReturnRequests`) — lets the Admin payments
+ * view narrow to e.g. `pending` without any new query function.
  */
-export async function listPaymentHistory(limit = 50): Promise<Payment[]> {
+export async function listPaymentHistory(limit = 50, status?: PaymentStatus): Promise<Payment[]> {
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from(DATABASE_TABLES.PAYMENTS)
     .select(PAYMENT_COLUMNS)
     .order("created_at", { ascending: false })
     .limit(limit);
+
+  if (status) {
+    query = query.eq("status", status);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     throw queryError("Failed to load payment history", error);
