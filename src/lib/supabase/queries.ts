@@ -86,6 +86,7 @@ import type {
 import type { BuyerActivityEvent } from "@/features/notifications/types/notification.types";
 import type {
   AdminReturnDecision,
+  PendingXenditRefund,
   ReturnRequest,
   SellerReturnDecision,
 } from "@/features/returns/types/return.types";
@@ -3122,10 +3123,13 @@ export async function respondToReturn(
 }
 
 /**
- * Admin-only: approves (executes the refund) or rejects a return request
- * via the `decide_return` RPC — the sole path that can ever move a payment
- * to `refunded`. State-transition and duplicate-refund checks happen
- * inside the RPC.
+ * Admin-only: approves or rejects a return request via the `decide_return`
+ * RPC. For a COD (or retired legacy) payment this immediately finalizes to
+ * `refunded`/`partially_refunded`, exactly as before. For a Xendit payment,
+ * approving only submits a pending refund attempt (row in `xendit_refunds`)
+ * — the caller must follow up with `getPendingXenditRefundForReturn` to
+ * check whether one was created and needs to actually be sent to Xendit.
+ * State-transition and duplicate-refund checks happen inside the RPC.
  */
 export async function decideReturn(
   returnId: string,
@@ -3141,6 +3145,90 @@ export async function decideReturn(
 
   if (error) {
     throw new Error(mapPostgresError(error, "Could not decide this return request."));
+  }
+}
+
+/**
+ * Phase 5B: the most recent still-`pending` Xendit refund attempt for a
+ * return request, or null. Two uses: (1) `decideReturnAction` calls this
+ * right after `decideReturn` to find out whether a refund now needs to be
+ * submitted to Xendit; (2) the UI calls this to show "refund submitted,
+ * awaiting confirmation" instead of silently looking like nothing happened
+ * — `return_requests.status` deliberately doesn't change until the webhook
+ * confirms, so this is the explicit "still pending" signal.
+ */
+export async function getPendingXenditRefundForReturn(
+  returnRequestId: string,
+): Promise<PendingXenditRefund | null> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.XENDIT_REFUNDS)
+    .select("id, xendit_payment_request_id, amount_cents, currency")
+    .eq("return_request_id", returnRequestId)
+    .eq("status", "pending")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw queryError("Failed to check for a pending refund", error);
+  }
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    xenditPaymentRequestId: data.xendit_payment_request_id,
+    amountCents: data.amount_cents,
+    currency: data.currency,
+  };
+}
+
+/**
+ * Records Xendit's synchronous response to the refund submission (id + raw
+ * body) via the `record_xendit_refund_submission` RPC. Never changes the
+ * attempt's status away from `pending` — only `process_xendit_refund_webhook`
+ * (triggered by the real `refund.succeeded`/`refund.failed` webhook) does
+ * that, so a "SUCCEEDED" synchronous response is never trusted here.
+ */
+export async function recordXenditRefundSubmission(
+  refundId: string,
+  xenditRefundId: string,
+  rawResponse: Json,
+): Promise<void> {
+  // The admin's own authenticated session, not the service-role client —
+  // record_xendit_refund_submission re-derives is_admin() from auth.uid(),
+  // which is null under the admin client (no session context at all).
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("record_xendit_refund_submission", {
+    p_refund_id: refundId,
+    p_xendit_refund_id: xenditRefundId,
+    p_raw_response: rawResponse,
+  });
+
+  if (error) {
+    throw rpcError("Could not record the refund submission.", error);
+  }
+}
+
+/**
+ * The outbound call to Xendit itself failed (no refund id was ever
+ * returned) — marks the attempt `failed` immediately via
+ * `fail_xendit_refund_submission` so the admin can safely retry. Nothing on
+ * `return_requests`/`payments`/`orders` needs reverting: `decide_return`
+ * never moved them in the first place.
+ */
+export async function failXenditRefundSubmission(
+  refundId: string,
+  errorNote: string,
+): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("fail_xendit_refund_submission", {
+    p_refund_id: refundId,
+    p_error_note: errorNote,
+  });
+
+  if (error) {
+    throw rpcError("Could not record the refund failure.", error);
   }
 }
 

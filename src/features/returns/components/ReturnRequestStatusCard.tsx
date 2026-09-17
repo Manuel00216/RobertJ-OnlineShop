@@ -7,6 +7,7 @@ import type { ReturnRequest } from "@/features/returns/types/return.types";
 import { formatCurrency } from "@/lib/utils/currency";
 import { formatDate } from "@/lib/utils/date";
 import { cn } from "@/lib/utils/cn";
+import { getPendingXenditRefundForReturn } from "@/lib/supabase/queries";
 
 const RETURN_STATUS_TONE: Record<ReturnStatus, "neutral" | "info" | "success" | "danger"> = {
   pending: "neutral",
@@ -27,11 +28,23 @@ export interface ReturnRequestStatusCardProps {
  * page, the seller's dashboard order page (alongside `RespondToReturnPanel`),
  * and the admin queue. No actions live here; each surface composes its own
  * action panel next to this card.
+ *
+ * Phase 5B: async Server Component so every caller gets the "refund
+ * submitted, awaiting confirmation" state for free, with no prop threading.
+ * `status` deliberately stays `seller_accepted`/`seller_rejected` while a
+ * Xendit refund is in flight (see the migration) — this component is what
+ * makes that pending state explicit instead of the card looking like
+ * nothing happened after an admin approves.
  */
-export function ReturnRequestStatusCard({
+export async function ReturnRequestStatusCard({
   request,
   evidenceUrl,
 }: ReturnRequestStatusCardProps) {
+  const pendingRefund =
+    request.status === "seller_accepted" || request.status === "seller_rejected"
+      ? await getPendingXenditRefundForReturn(request.id).catch(() => null)
+      : null;
+
   return (
     <section aria-label="Return/refund request" className={cn(RJ_CARD, "p-5")}>
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -73,6 +86,16 @@ export function ReturnRequestStatusCard({
           <span className="font-semibold text-rj-black">Admin decision:</span>{" "}
           {request.adminDecisionNote}
         </p>
+      ) : null}
+
+      {pendingRefund ? (
+        <div className="mt-3 border-t border-rj-gray-100 pt-3">
+          <Badge tone="warning">Refund submitted — awaiting confirmation</Badge>
+          <p className="mt-1 text-xs text-rj-gray-600">
+            {formatCurrency(pendingRefund.amountCents, pendingRefund.currency)} was submitted to
+            the payment provider. This can take a few minutes to confirm.
+          </p>
+        </div>
       ) : null}
 
       {request.status === RETURN_STATUS.refunded && request.refundAmountCents !== null ? (

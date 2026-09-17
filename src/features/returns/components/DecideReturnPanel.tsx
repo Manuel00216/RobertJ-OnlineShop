@@ -53,7 +53,7 @@ export function DecideReturnPanel({ returnId, sellerRejected }: DecideReturnPane
           }
           description={
             pendingDecision === "approve"
-              ? "This immediately marks the payment refunded — it can't be undone or repeated."
+              ? "Cash-on-delivery orders are marked refunded immediately. Online (GCash/Maya/Card) payments submit a refund to the payment provider, which can take a few minutes to confirm. Either way, this can't be repeated once submitted."
               : "The buyer will not be refunded. This is final."
           }
           tone="danger"

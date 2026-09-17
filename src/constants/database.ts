@@ -35,6 +35,7 @@ export const DATABASE_TABLES = {
   CART_ITEMS: "cart_items",
   RECOMMENDATION_RULES: "recommendation_rules",
   BUYER_PREFERENCES: "buyer_preferences",
+  XENDIT_REFUNDS: "xendit_refunds",
 } as const;
 
 /** Union of every table name in the schema. */

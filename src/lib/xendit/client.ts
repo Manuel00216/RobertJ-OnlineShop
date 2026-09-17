@@ -6,6 +6,7 @@ import type {
   XenditEwalletChannelCode,
   XenditPaymentRequestResponse,
   XenditPaymentSessionResponse,
+  XenditRefundResponse,
 } from "./types";
 
 const XENDIT_API_BASE_URL = "https://api.xendit.co";
@@ -205,4 +206,41 @@ export async function getCardSessionStatus(
     `/sessions/${encodeURIComponent(sessionId)}`,
     { method: "GET" },
   );
+}
+
+export interface CreateRefundInput {
+  /** `payments.xendit_payment_request_id` — the same field for GCash, Maya, and Card once a payment is genuinely 'paid' (see Phase 5B-1: process_xendit_webhook already overwrites Card's session id with the real Payment Request ID on success). */
+  paymentRequestId: string;
+  amountCents: number;
+  currency: string;
+  /** This app only ever creates buyer-initiated return refunds. */
+  reason?: "REQUESTED_BY_CUSTOMER" | "FRAUDULENT" | "DUPLICATE" | "CANCELLATION" | "OTHERS";
+  /**
+   * Verified live against Test Mode (Phase 5B-1): Xendit's `/refunds`
+   * endpoint honors the `Idempotency-Key` header (the same one `xenditFetch`
+   * already sends for payment creation) — two calls with the same key and
+   * body return the identical refund object. `X-IDEMPOTENCY-KEY` (a name
+   * seen in third-party summaries) was tested and does NOT dedupe.
+   */
+  idempotencyKey: string;
+}
+
+/**
+ * POST /refunds — full or partial (`amountCents` less than the original
+ * charge). The returned `status` is never authoritative even when it reads
+ * "SUCCEEDED" synchronously (observed in Test Mode) — only the
+ * `refund.succeeded`/`refund.failed` webhook, processed by
+ * `process_xendit_refund_webhook`, is trusted to finalize anything.
+ */
+export async function createRefund(input: CreateRefundInput): Promise<XenditRefundResponse> {
+  return xenditFetch<XenditRefundResponse>("/refunds", {
+    method: "POST",
+    idempotencyKey: input.idempotencyKey,
+    body: JSON.stringify({
+      payment_request_id: input.paymentRequestId,
+      amount: centsToXenditAmount(input.amountCents),
+      currency: input.currency,
+      reason: input.reason ?? "REQUESTED_BY_CUSTOMER",
+    }),
+  });
 }

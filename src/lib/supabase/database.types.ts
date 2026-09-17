@@ -1311,6 +1311,66 @@ export type Database = {
           },
         ]
       }
+      xendit_refunds: {
+        Row: {
+          amount_cents: number
+          created_at: string
+          currency: string
+          failure_code: string | null
+          id: string
+          payment_id: string
+          raw_response: Json | null
+          return_request_id: string
+          status: Database["public"]["Enums"]["xendit_refund_status"]
+          updated_at: string
+          xendit_payment_request_id: string
+          xendit_refund_id: string | null
+        }
+        Insert: {
+          amount_cents: number
+          created_at?: string
+          currency: string
+          failure_code?: string | null
+          id?: string
+          payment_id: string
+          raw_response?: Json | null
+          return_request_id: string
+          status?: Database["public"]["Enums"]["xendit_refund_status"]
+          updated_at?: string
+          xendit_payment_request_id: string
+          xendit_refund_id?: string | null
+        }
+        Update: {
+          amount_cents?: number
+          created_at?: string
+          currency?: string
+          failure_code?: string | null
+          id?: string
+          payment_id?: string
+          raw_response?: Json | null
+          return_request_id?: string
+          status?: Database["public"]["Enums"]["xendit_refund_status"]
+          updated_at?: string
+          xendit_payment_request_id?: string
+          xendit_refund_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "xendit_refunds_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "xendit_refunds_return_request_id_fkey"
+            columns: ["return_request_id"]
+            isOneToOne: false
+            referencedRelation: "return_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -1576,6 +1636,29 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      fail_xendit_refund_submission: {
+        Args: { p_error_note: string; p_refund_id: string }
+        Returns: {
+          amount_cents: number
+          created_at: string
+          currency: string
+          failure_code: string | null
+          id: string
+          payment_id: string
+          raw_response: Json | null
+          return_request_id: string
+          status: Database["public"]["Enums"]["xendit_refund_status"]
+          updated_at: string
+          xendit_payment_request_id: string
+          xendit_refund_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "xendit_refunds"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       finalize_xendit_group_payment_request: {
         Args: {
           p_channel_code: string
@@ -1722,6 +1805,35 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      process_xendit_refund_webhook: {
+        Args: {
+          p_amount_cents: number
+          p_failure_code: string
+          p_raw_payload: Json
+          p_status: string
+          p_xendit_refund_id: string
+        }
+        Returns: {
+          amount_cents: number
+          created_at: string
+          currency: string
+          failure_code: string | null
+          id: string
+          payment_id: string
+          raw_response: Json | null
+          return_request_id: string
+          status: Database["public"]["Enums"]["xendit_refund_status"]
+          updated_at: string
+          xendit_payment_request_id: string
+          xendit_refund_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "xendit_refunds"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       process_xendit_webhook: {
         Args: {
           p_amount_cents: number
@@ -1757,6 +1869,33 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "payments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      record_xendit_refund_submission: {
+        Args: {
+          p_raw_response: Json
+          p_refund_id: string
+          p_xendit_refund_id: string
+        }
+        Returns: {
+          amount_cents: number
+          created_at: string
+          currency: string
+          failure_code: string | null
+          id: string
+          payment_id: string
+          raw_response: Json | null
+          return_request_id: string
+          status: Database["public"]["Enums"]["xendit_refund_status"]
+          updated_at: string
+          xendit_payment_request_id: string
+          xendit_refund_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "xendit_refunds"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -1944,6 +2083,7 @@ export type Database = {
         | "shrinkage"
         | "other"
       user_role: "buyer" | "seller" | "admin"
+      xendit_refund_status: "pending" | "succeeded" | "failed"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2117,6 +2257,7 @@ export const Constants = {
         "other",
       ],
       user_role: ["buyer", "seller", "admin"],
+      xendit_refund_status: ["pending", "succeeded", "failed"],
     },
   },
 } as const

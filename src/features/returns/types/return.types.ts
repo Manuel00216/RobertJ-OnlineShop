@@ -34,3 +34,16 @@ export interface ReturnRequest {
 export type SellerReturnDecision = "accept" | "reject";
 /** The only two outcomes `decide_return` accepts. */
 export type AdminReturnDecision = "approve" | "reject";
+
+/**
+ * Phase 5B: a Xendit refund attempt still awaiting `refund.succeeded`/
+ * `refund.failed` confirmation. `return_requests.status` deliberately stays
+ * `seller_accepted`/`seller_rejected` while this exists — this is the
+ * explicit "pending, not yet refunded" signal the UI reads instead.
+ */
+export interface PendingXenditRefund {
+  id: string;
+  xenditPaymentRequestId: string;
+  amountCents: number;
+  currency: string;
+}
