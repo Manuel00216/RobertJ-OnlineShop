@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils/cn";
 
 const TONE_CLASSES: Record<"danger" | "neutral", string> = {
   danger: "border-danger/40 bg-danger/5",
-  neutral: "border-rj-gray-200 bg-rj-gray-50",
+  neutral: "border-border bg-muted",
 };
 
 export interface ConfirmPanelProps {
@@ -21,7 +21,7 @@ export interface ConfirmPanelProps {
   /** Shown on the confirm button instead of confirmLabel while isPending, if set. */
   pendingLabel?: string;
   cancelLabel?: string;
-  /** Defaults to "danger" for a danger tone, "rj" otherwise. */
+  /** Defaults to "danger" for a danger tone, "primary" otherwise. */
   confirmVariant?: ButtonProps["variant"];
   onConfirm: () => void;
   onCancel: () => void;
@@ -84,13 +84,13 @@ export function ConfirmPanel({
       tabIndex={-1}
       className={cn("rounded-2xl border p-4 outline-none", TONE_CLASSES[tone])}
     >
-      <p className="text-sm font-bold text-rj-black">{title}</p>
-      {description ? <p className="mt-1 text-xs text-rj-gray-600">{description}</p> : null}
+      <p className="text-sm font-bold text-foreground">{title}</p>
+      {description ? <p className="mt-1 text-xs text-muted-foreground">{description}</p> : null}
       {children}
       <div className="mt-3 flex flex-wrap gap-2">
         <Button
           type="button"
-          variant={confirmVariant ?? (tone === "danger" ? "danger" : "rj")}
+          variant={confirmVariant ?? (tone === "danger" ? "danger" : "primary")}
           size="rjSm"
           isLoading={isPending}
           disabled={confirmDisabled}

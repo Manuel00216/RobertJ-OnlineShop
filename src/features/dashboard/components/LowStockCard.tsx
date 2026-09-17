@@ -25,11 +25,11 @@ export async function LowStockCard({ viewAllHref = ROUTES.inventory }: LowStockC
   }
 
   return (
-    <Card className="border-rj-gray-100">
+    <Card>
       <CardContent className="flex flex-col gap-4 p-5">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold text-rj-black">Low stock</h2>
-          <Link href={viewAllHref} className="text-xs font-semibold text-rj-black underline">
+          <h2 className="text-sm font-bold text-foreground">Low stock</h2>
+          <Link href={viewAllHref} className="text-xs font-semibold text-foreground underline">
             View inventory →
           </Link>
         </div>
@@ -41,8 +41,8 @@ export async function LowStockCard({ viewAllHref = ROUTES.inventory }: LowStockC
             {items.slice(0, MAX_ROWS).map((item) => (
               <li key={item.id} className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-rj-black">{item.productTitle}</p>
-                  <p className="text-xs text-rj-gray-600">{item.quantity} left</p>
+                  <p className="truncate text-sm font-medium text-foreground">{item.productTitle}</p>
+                  <p className="text-xs text-muted-foreground">{item.quantity} left</p>
                 </div>
                 <StockStatusBadge status={item.stockStatus} />
               </li>
@@ -56,7 +56,7 @@ export async function LowStockCard({ viewAllHref = ROUTES.inventory }: LowStockC
 
 export function LowStockCardSkeleton() {
   return (
-    <Card className="border-rj-gray-100">
+    <Card>
       <CardContent className="flex flex-col gap-3 p-5">
         <Skeleton className="h-5 w-24" />
         {Array.from({ length: 3 }).map((_, i) => (

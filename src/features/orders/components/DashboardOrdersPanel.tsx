@@ -64,7 +64,7 @@ export async function DashboardOrdersPanel({
           filtering ? (
             <Link
               href={clearFiltersHref}
-              className={cn(buttonVariants({ variant: "rjOutline", size: "rjSm" }))}
+              className={cn(buttonVariants({ variant: "outline", size: "rjSm" }))}
             >
               Clear filters
             </Link>
@@ -77,7 +77,7 @@ export async function DashboardOrdersPanel({
   return (
     <section className="flex flex-col gap-6">
       <p
-        className="text-[10px] font-bold uppercase tracking-[0.3em] text-rj-gray-400"
+        className="text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground"
         aria-live="polite"
       >
         {total} order{total === 1 ? "" : "s"}
@@ -85,12 +85,12 @@ export async function DashboardOrdersPanel({
       <ul className="flex flex-col gap-3">
         {items.map((order) => (
           <li key={order.id}>
-            <OrderCard order={order} href={orderHref(order.id)} />
+            <OrderCard order={order} href={orderHref(order.id)} themed />
           </li>
         ))}
       </ul>
       {totalPages > 1 ? (
-        <PaginationControls page={page} totalPages={totalPages} />
+        <PaginationControls page={page} totalPages={totalPages} themed />
       ) : null}
     </section>
   );

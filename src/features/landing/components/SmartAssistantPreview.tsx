@@ -66,9 +66,9 @@ export function SmartAssistantPreview() {
 
         {/* Preview */}
         <div>
-          <div className="overflow-hidden rounded-3xl border border-rj-gray-800 bg-[#141414] shadow-2xl">
+          <div className="overflow-hidden rounded-3xl border border-rj-gray-800 bg-rj-gray-900 shadow-2xl">
             {/* Header */}
-            <div className="flex items-center gap-3 border-b border-rj-gray-800 bg-[#1A1A1A] px-5 py-4">
+            <div className="flex items-center gap-3 border-b border-rj-gray-800 bg-rj-gray-800 px-5 py-4">
               <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-rj-red to-rj-red-dark">
                 <ListChecks className="h-[15px] w-[15px] text-white" aria-hidden="true" />
               </div>

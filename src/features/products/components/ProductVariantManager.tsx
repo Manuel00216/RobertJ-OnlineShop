@@ -115,6 +115,7 @@ export function ProductVariantManager({ product, variants: initialVariants }: Pr
                 onChange={(event) => handleChange("color", event.target.value)}
                 placeholder="e.g. Blue"
                 errors={fieldErrors.color}
+                themed
               />
               <FormField
                 label="Size"
@@ -122,6 +123,7 @@ export function ProductVariantManager({ product, variants: initialVariants }: Pr
                 onChange={(event) => handleChange("size", event.target.value)}
                 placeholder="e.g. Medium"
                 errors={fieldErrors.size}
+                themed
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -130,6 +132,7 @@ export function ProductVariantManager({ product, variants: initialVariants }: Pr
                 value={values.sku ?? ""}
                 onChange={(event) => handleChange("sku", event.target.value)}
                 errors={fieldErrors.sku}
+                themed
               />
               <FormField
                 label="Price override (optional)"
@@ -145,11 +148,12 @@ export function ProductVariantManager({ product, variants: initialVariants }: Pr
                   }))
                 }
                 errors={fieldErrors.price}
+                themed
               />
             </div>
             {formError ? <ErrorState title="Couldn't add variant" message={formError} /> : null}
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="rj" size="rjSm" isLoading={isPending} onClick={handleAdd}>
+              <Button type="button" variant="primary" size="rjSm" isLoading={isPending} onClick={handleAdd}>
                 Add variant
               </Button>
               <Button

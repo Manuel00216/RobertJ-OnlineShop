@@ -175,7 +175,7 @@ export function RecommendationRuleRow({
 
           {formError ? <ErrorState title="Couldn't save rule" message={formError} /> : null}
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="rj" size="rjSm" isLoading={isSaving} onClick={handleSave}>
+            <Button type="button" variant="primary" size="rjSm" isLoading={isSaving} onClick={handleSave}>
               Save
             </Button>
             <Button

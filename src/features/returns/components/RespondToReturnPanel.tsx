@@ -55,7 +55,7 @@ export function RespondToReturnPanel({ returnId }: RespondToReturnPanelProps) {
               : "The buyer can still escalate — an administrator may overrule this."
           }
           tone="neutral"
-          confirmVariant={pendingDecision === "accept" ? "rj" : "danger"}
+          confirmVariant={pendingDecision === "accept" ? "primary" : "danger"}
           confirmLabel={`Yes, ${pendingDecision}`}
           isPending={isPending}
           onConfirm={confirmDecision}
@@ -65,7 +65,7 @@ export function RespondToReturnPanel({ returnId }: RespondToReturnPanelProps) {
         <div className="flex flex-wrap gap-2">
           <Button
             type="button"
-            variant="rj"
+            variant="primary"
             size="rjSm"
             onClick={() => setPendingDecision("accept")}
           >

@@ -27,11 +27,11 @@ export async function RecentOrdersCard({
   }
 
   return (
-    <Card className="border-rj-gray-100">
+    <Card>
       <CardContent className="flex flex-col gap-4 p-5">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold text-rj-black">Recent orders</h2>
-          <Link href={viewAllHref} className="text-xs font-semibold text-rj-black underline">
+          <h2 className="text-sm font-bold text-foreground">Recent orders</h2>
+          <Link href={viewAllHref} className="text-xs font-semibold text-foreground underline">
             View all orders →
           </Link>
         </div>
@@ -41,7 +41,7 @@ export async function RecentOrdersCard({
         ) : (
           <div className="flex flex-col gap-3">
             {recentOrders.map((order) => (
-              <OrderCard key={order.id} order={order} href={orderHref(order.id)} />
+              <OrderCard key={order.id} order={order} href={orderHref(order.id)} themed />
             ))}
           </div>
         )}
@@ -52,7 +52,7 @@ export async function RecentOrdersCard({
 
 export function RecentOrdersCardSkeleton() {
   return (
-    <Card className="border-rj-gray-100">
+    <Card>
       <CardContent className="flex flex-col gap-3 p-5">
         <Skeleton className="h-5 w-32" />
         {Array.from({ length: 3 }).map((_, i) => (

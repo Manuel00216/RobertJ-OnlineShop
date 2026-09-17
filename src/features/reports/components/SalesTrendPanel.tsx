@@ -50,17 +50,17 @@ export async function SalesTrendPanel({ filters }: { filters: ReportFilters }) {
   const granularityLabel = GRANULARITY_LABELS[filters.granularity].toLowerCase();
 
   return (
-    <Card className="border-rj-gray-100">
+    <Card>
       <CardContent className="flex flex-col gap-6 p-5">
         <div className="flex flex-col gap-6 md:flex-row">
           <section className="flex-1">
-            <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-rj-gray-400">
+            <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
               Revenue ({granularityLabel})
             </p>
             <TrendChart points={revenuePoints} ariaLabel={`Revenue per ${granularityLabel} bucket`} />
           </section>
           <section className="flex-1">
-            <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-rj-gray-400">
+            <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
               Orders ({granularityLabel})
             </p>
             <TrendChart points={orderPoints} ariaLabel={`Orders per ${granularityLabel} bucket`} />

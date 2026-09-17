@@ -4,12 +4,15 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { cn } from "@/lib/utils/cn";
 
 /**
  * Keeps the `search` query param in sync with a debounced Order-ID input.
- * Clears `page` so a search always restarts from page 1.
+ * Clears `page` so a search always restarts from page 1. Renders on Buyer
+ * /orders and both portals' Orders list — pass `themed` from the portal
+ * pages only; Buyer omits it and keeps the fixed rj-* look.
  */
-export function OrderSearchInput() {
+export function OrderSearchInput({ themed = false }: { themed?: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -42,7 +45,12 @@ export function OrderSearchInput() {
         value={value}
         onChange={(event) => setValue(event.target.value)}
         placeholder="Search by Order ID…"
-        className="h-11 w-full rounded-full border-[1.5px] border-rj-gray-200 bg-transparent px-5 text-sm text-rj-black outline-none transition-colors placeholder:text-rj-gray-400 focus-visible:border-rj-black"
+        className={cn(
+          "h-11 w-full rounded-full border-[1.5px] bg-transparent px-5 text-sm outline-none transition-colors",
+          themed
+            ? "border-border text-foreground placeholder:text-muted-foreground focus-visible:border-primary"
+            : "border-rj-gray-200 text-rj-black placeholder:text-rj-gray-400 focus-visible:border-rj-black",
+        )}
       />
     </div>
   );

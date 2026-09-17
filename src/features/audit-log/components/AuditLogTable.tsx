@@ -42,7 +42,7 @@ export function AuditLogTable({ entries }: AuditLogTableProps) {
   return (
     <div className="flex flex-col gap-3">
       {entries.map((entry) => (
-        <Card key={entry.id} className="border-rj-gray-100">
+        <Card key={entry.id}>
           <CardContent className="flex flex-col gap-2 p-5 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
@@ -50,7 +50,7 @@ export function AuditLogTable({ entries }: AuditLogTableProps) {
                   {ACTION_LABELS[entry.action] ?? entry.action}
                 </Badge>
               </div>
-              <p className="mt-1.5 text-sm text-rj-black">
+              <p className="mt-1.5 text-sm text-foreground">
                 <span className="font-semibold">{entry.actorName ?? "Unknown admin"}</span>
                 {entry.targetUserName ? (
                   <>
@@ -66,7 +66,7 @@ export function AuditLogTable({ entries }: AuditLogTableProps) {
                 ) : null}
               </p>
             </div>
-            <p className="shrink-0 text-xs text-rj-gray-600">{formatDateTime(entry.createdAt)}</p>
+            <p className="shrink-0 text-xs text-muted-foreground">{formatDateTime(entry.createdAt)}</p>
           </CardContent>
         </Card>
       ))}

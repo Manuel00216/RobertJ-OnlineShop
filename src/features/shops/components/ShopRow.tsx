@@ -22,7 +22,7 @@ export function ShopRow({ shop }: ShopRowProps) {
 
   if (mode === "edit") {
     return (
-      <Card className="border-rj-gray-100">
+      <Card>
         <CardContent className="p-5">
           <ShopForm shop={shop} onDone={() => setMode("view")} />
           <Button
@@ -48,16 +48,16 @@ export function ShopRow({ shop }: ShopRowProps) {
   }
 
   return (
-    <Card className="border-rj-gray-100">
+    <Card>
       <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="truncate text-sm font-semibold text-rj-black">{shop.name}</p>
+            <p className="truncate text-sm font-semibold text-foreground">{shop.name}</p>
             <Badge tone={shop.active ? "success" : "neutral"}>
               {shop.active ? "Active" : "Inactive"}
             </Badge>
           </div>
-          <p className="mt-1 text-xs text-rj-gray-600">
+          <p className="mt-1 text-xs text-muted-foreground">
             {shop.memberName ?? "Unassigned"} · /{shop.slug}
           </p>
           {error ? (

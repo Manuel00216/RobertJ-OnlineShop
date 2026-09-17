@@ -22,6 +22,13 @@ export interface FormFieldProps
    * `brand` resolves errors/hints to the RobertJ red family for auth surfaces.
    */
   tone?: "default" | "brand";
+  /**
+   * Renders the resting input through the Admin/Seller portal tokens instead of
+   * the fixed rj-* palette, so it inverts correctly in dark mode. Pass from
+   * portal forms only (ProductForm, StockAdjustmentForm, ShopForm); Buyer/auth
+   * forms omit it and keep the fixed-light look.
+   */
+  themed?: boolean;
 }
 
 /** Labelled text input wired for screen readers and inline error reporting. */
@@ -33,6 +40,7 @@ export function FormField({
   icon,
   trailing,
   tone = "default",
+  themed = false,
   className,
   ...props
 }: FormFieldProps) {
@@ -45,7 +53,9 @@ export function FormField({
   // Error classes come AFTER `className` so a field's resting border (passed
   // in via className) can never mask the error state.
   const inputClasses = cn(
-    "h-10 rounded-md border border-rj-gray-200 bg-rj-white px-3 text-sm text-rj-black outline-none transition-colors placeholder:text-rj-gray-400 focus-visible:border-rj-black focus-visible:ring-2 focus-visible:ring-rj-red/30",
+    themed
+      ? "h-10 rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+      : "h-10 rounded-md border border-rj-gray-200 bg-rj-white px-3 text-sm text-rj-black outline-none transition-colors placeholder:text-rj-gray-400 focus-visible:border-rj-black focus-visible:ring-2 focus-visible:ring-rj-red/30",
     icon && "pl-10",
     className,
     hasError &&
@@ -77,7 +87,10 @@ export function FormField({
           {inputEl}
           {icon ? (
             <span
-              className="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-rj-gray-400"
+              className={cn(
+                "pointer-events-none absolute inset-y-0 left-3.5 flex items-center",
+                themed ? "text-muted-foreground" : "text-rj-gray-400",
+              )}
               aria-hidden="true"
             >
               {icon}

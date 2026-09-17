@@ -2,13 +2,12 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
+import {
+  FILTER_CHIP_ACTIVE_THEMED as CHIP_ACTIVE,
+  FILTER_CHIP_IDLE_THEMED as CHIP_IDLE,
+} from "@/components/ui/filter-chip";
 import { PAYMENT_STATUS, PAYMENT_STATUS_LABELS } from "@/constants/status";
 import type { PaymentStatus } from "@/constants/status";
-
-const CHIP_ACTIVE =
-  "rounded-full border-[1.5px] border-rj-black bg-rj-black px-4 py-1.5 text-[11px] font-bold text-rj-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30";
-const CHIP_IDLE =
-  "rounded-full border-[1.5px] border-rj-gray-200 bg-transparent px-4 py-1.5 text-[11px] font-bold text-rj-gray-600 transition-all hover:border-rj-black hover:text-rj-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30";
 
 const STATUS_CHIPS = Object.values(PAYMENT_STATUS) as PaymentStatus[];
 

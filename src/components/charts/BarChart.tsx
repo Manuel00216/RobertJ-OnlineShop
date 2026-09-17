@@ -18,9 +18,7 @@ export interface BarChartProps {
 }
 
 const TONE_BAR: Record<BarChartTone, string> = {
-  // `rj-gray-300` was never a defined token — this tone rendered invisibly
-  // before. `rj-gray-200` gives "neutral" an actual visible bar.
-  neutral: "bg-rj-gray-200",
+  neutral: "bg-muted-foreground",
   info: "bg-info",
   success: "bg-success",
   warning: "bg-warning",
@@ -43,13 +41,13 @@ export function BarChart({ data, ariaLabel, className }: BarChartProps) {
         return (
           <li key={d.label} className="flex flex-col gap-1">
             <div className="flex items-baseline justify-between gap-3 text-sm">
-              <span className="truncate text-rj-black">{d.label}</span>
-              <span className="shrink-0 font-medium text-rj-gray-600">
+              <span className="truncate text-foreground">{d.label}</span>
+              <span className="shrink-0 font-medium text-muted-foreground">
                 {d.valueLabel ?? d.value}
               </span>
             </div>
             <div
-              className="h-2 w-full overflow-hidden rounded-full bg-rj-gray-100"
+              className="h-2 w-full overflow-hidden rounded-full bg-muted"
               role="presentation"
             >
               <div

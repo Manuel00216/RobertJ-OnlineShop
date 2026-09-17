@@ -64,7 +64,7 @@ export function StockHistoryPanel({ productId, variantId }: StockHistoryPanelPro
   }
 
   return (
-    <ul className="flex flex-col divide-y divide-rj-gray-100">
+    <ul className="flex flex-col divide-y divide-border">
       {current.data.map((entry) => (
         <li key={entry.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
           <div className="min-w-0">
@@ -72,15 +72,15 @@ export function StockHistoryPanel({ productId, variantId }: StockHistoryPanelPro
               <Badge tone={entry.delta > 0 ? "success" : "danger"}>
                 {entry.delta > 0 ? `+${entry.delta}` : entry.delta}
               </Badge>
-              <span className="font-medium text-rj-black">
+              <span className="font-medium text-foreground">
                 {STOCK_ADJUSTMENT_REASON_LABELS[entry.reason]}
               </span>
             </div>
             {entry.note ? (
-              <p className="mt-0.5 truncate text-xs text-rj-gray-600">{entry.note}</p>
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">{entry.note}</p>
             ) : null}
           </div>
-          <div className="shrink-0 text-right text-xs text-rj-gray-500">
+          <div className="shrink-0 text-right text-xs text-muted-foreground">
             <p>{entry.previousQuantity} → {entry.newQuantity}</p>
             <p>{formatDateTime(entry.createdAt)}</p>
             {entry.createdByName ? <p>{entry.createdByName}</p> : null}

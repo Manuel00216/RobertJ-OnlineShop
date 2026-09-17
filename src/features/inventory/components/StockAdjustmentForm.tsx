@@ -14,9 +14,9 @@ import type { InventoryItem } from "@/features/inventory/types/inventory.types";
 import type { ActionResult } from "@/types/action.types";
 
 const selectClasses =
-  "h-10 rounded-md border border-rj-gray-200 bg-rj-white px-3 text-sm text-rj-black outline-none transition-colors focus-visible:border-rj-black focus-visible:ring-2 focus-visible:ring-rj-red/30";
+  "h-10 rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30";
 const textareaClasses =
-  "min-h-20 rounded-md border border-rj-gray-200 bg-rj-white px-3 py-2 text-sm text-rj-black outline-none transition-colors placeholder:text-rj-gray-400 focus-visible:border-rj-black focus-visible:ring-2 focus-visible:ring-rj-red/30";
+  "min-h-20 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30";
 
 export interface StockAdjustmentFormProps {
   item: InventoryItem;
@@ -56,6 +56,7 @@ export function StockAdjustmentForm({ item, onDone }: StockAdjustmentFormProps) 
           hint="Positive to add stock, negative to remove."
           errors={fieldErrors?.delta}
           required
+          themed
         />
         <div className="flex flex-col gap-1.5">
           <label htmlFor="adjustment-reason" className="text-sm font-medium">
@@ -73,7 +74,7 @@ export function StockAdjustmentForm({ item, onDone }: StockAdjustmentFormProps) 
 
       <div className="flex flex-col gap-1.5">
         <label htmlFor="adjustment-note" className="text-sm font-medium">
-          Note {fieldErrors?.note ? null : <span className="font-normal text-rj-gray-500">(optional)</span>}
+          Note {fieldErrors?.note ? null : <span className="font-normal text-muted-foreground">(optional)</span>}
         </label>
         <textarea
           id="adjustment-note"
@@ -88,7 +89,7 @@ export function StockAdjustmentForm({ item, onDone }: StockAdjustmentFormProps) 
         ) : null}
       </div>
 
-      <Button type="submit" variant="rj" size="rjSm" isLoading={isPending} className="w-full sm:w-auto">
+      <Button type="submit" variant="primary" size="rjSm" isLoading={isPending} className="w-full sm:w-auto">
         {isPending ? "Saving…" : "Apply adjustment"}
       </Button>
     </form>

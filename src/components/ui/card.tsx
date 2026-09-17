@@ -15,6 +15,16 @@ import { cn } from "@/lib/utils/cn";
  */
 export const RJ_CARD = "rounded-2xl border border-rj-gray-100 bg-rj-white text-rj-black";
 
+/**
+ * Theme-aware counterpart to RJ_CARD — same rounded-2xl shape, but resolves
+ * through the Admin/Seller portal's [data-theme-scope] tokens so it inverts
+ * correctly in dark mode. For components that render inside both a themed
+ * portal and the fixed-light Buyer surface: pass `themed` from the portal
+ * call site only, leave it unset on the Buyer path so RJ_CARD (and this
+ * file's rationale above) stays exactly as-is there.
+ */
+export const THEMED_CARD = "rounded-2xl border border-border bg-card text-card-foreground";
+
 export interface CardProps extends HTMLAttributes<HTMLDivElement> {
   /** `default`: generic shadcn look (dashboard/admin surfaces). `rj`: see `RJ_CARD`. */
   tone?: "default" | "rj";

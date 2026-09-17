@@ -38,7 +38,7 @@ export function MarkCodCollectedButton({ orderId }: { orderId: string }) {
         <button
           type="button"
           ref={triggerRef}
-          className={cn(buttonVariants({ variant: "rj", size: "rjSm" }))}
+          className={cn(buttonVariants({ variant: "primary", size: "rjSm" }))}
           onClick={() => setConfirmOpen(true)}
         >
           Mark COD payment as collected

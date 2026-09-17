@@ -22,8 +22,8 @@ export function MyShopPanel({ shop }: MyShopPanelProps) {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h2 className="text-lg font-semibold text-rj-black">{shop.name}</h2>
-        <p className="text-sm text-rj-gray-500">
+        <h2 className="text-lg font-semibold text-foreground">{shop.name}</h2>
+        <p className="text-sm text-muted-foreground">
           Manage your shop&apos;s public branding. Homepage placement is determined
           automatically from your shop&apos;s activity and can&apos;t be set here.
         </p>

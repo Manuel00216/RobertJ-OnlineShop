@@ -57,7 +57,7 @@ export function DecideReturnPanel({ returnId, sellerRejected }: DecideReturnPane
               : "The buyer will not be refunded. This is final."
           }
           tone="danger"
-          confirmVariant={pendingDecision === "approve" ? "rj" : "danger"}
+          confirmVariant={pendingDecision === "approve" ? "primary" : "danger"}
           confirmLabel={`Yes, ${pendingDecision}`}
           isPending={isPending}
           onConfirm={confirmDecision}
@@ -67,7 +67,7 @@ export function DecideReturnPanel({ returnId, sellerRejected }: DecideReturnPane
         <div className="flex flex-wrap gap-2">
           <Button
             type="button"
-            variant="rj"
+            variant="primary"
             size="rjSm"
             onClick={() => setPendingDecision("approve")}
           >

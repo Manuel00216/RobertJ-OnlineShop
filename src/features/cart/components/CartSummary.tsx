@@ -499,7 +499,7 @@ export function CartSummary({ isAuthenticated }: CartSummaryProps) {
 
       {/* Bulk-selection bar + checkout — sticks to the viewport bottom while
           scrolling a long cart, mirroring the header's own sticky treatment. */}
-      <div className="sticky bottom-0 z-40 flex flex-col gap-3 rounded-2xl border border-rj-gray-100 bg-rj-white/96 p-5 shadow-[0_-1px_0_#EBEBEB,0_-8px_24px_rgba(0,0,0,0.06)] backdrop-blur-lg">
+      <div className="sticky bottom-0 z-40 flex flex-col gap-3 rounded-2xl border border-rj-gray-100 bg-rj-white/96 p-5 shadow-[0_-1px_0_var(--color-rj-gray-100),0_-8px_24px_rgba(0,0,0,0.06)] backdrop-blur-lg">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-4">
             <label className="flex items-center gap-2 text-sm font-semibold text-rj-black">

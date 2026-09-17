@@ -62,7 +62,7 @@ const TRUST_BADGES = ["Verified Sellers", "Buyer Protected", "Secure Payments"];
  */
 export function SiteFooter() {
   return (
-    <footer className="bg-[#0A0A0A] pb-8 pt-16 text-rj-white">
+    <footer className="bg-rj-black pb-8 pt-16 text-rj-white">
       <div className="mx-auto max-w-7xl px-5 md:px-8">
         <div className="mb-10 grid grid-cols-1 gap-10 border-b border-rj-gray-800 pb-12 md:grid-cols-3">
           {/* Brand column */}
@@ -94,7 +94,7 @@ export function SiteFooter() {
               {TRUST_BADGES.map((badge) => (
                 <div
                   key={badge}
-                  className="flex items-center gap-1.5 rounded-full bg-[#1A1A1A] px-3 py-1.5"
+                  className="flex items-center gap-1.5 rounded-full bg-rj-gray-800 px-3 py-1.5"
                 >
                   <ShieldCheck className="h-2.5 w-2.5 text-rj-green" aria-hidden="true" />
                   <span className="text-[10px] text-rj-gray-600">{badge}</span>

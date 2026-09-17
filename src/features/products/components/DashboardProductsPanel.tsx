@@ -43,7 +43,7 @@ export function DashboardProductsPanel({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-rj-gray-600">
+        <p className="text-sm text-muted-foreground">
           {products.length} product{products.length === 1 ? "" : "s"}
         </p>
         {/* Admin manages/moderates existing products only — never creates
@@ -51,7 +51,7 @@ export function DashboardProductsPanel({
         {!isAdmin ? (
           <Button
             type="button"
-            variant="rj"
+            variant="primary"
             size="rjSm"
             onClick={() => setShowCreateForm((value) => !value)}
           >
@@ -61,7 +61,7 @@ export function DashboardProductsPanel({
       </div>
 
       {!isAdmin && showCreateForm ? (
-        <div className="rounded-2xl border border-rj-gray-100 bg-rj-gray-50 p-5">
+        <div className="rounded-2xl border border-border bg-muted p-5">
           <ProductForm categories={categories} onDone={() => setShowCreateForm(false)} />
         </div>
       ) : null}

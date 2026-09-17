@@ -77,7 +77,7 @@ export function ShopBrandingForm({ shop }: ShopBrandingFormProps) {
       </div>
 
       <div className="flex items-center gap-3">
-        <Button type="submit" variant="rj" size="rj" isLoading={isPending} className="w-full sm:w-auto">
+        <Button type="submit" variant="primary" size="rj" isLoading={isPending} className="w-full sm:w-auto">
           {isPending ? "Saving…" : "Save description"}
         </Button>
         {justSaved && !isPending ? (

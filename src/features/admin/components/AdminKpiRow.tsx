@@ -1,9 +1,8 @@
-import Link from "next/link";
-import type { ReactNode } from "react";
 import { AlertTriangle, CreditCard, Package, ShoppingBag, Timer, TrendingUp } from "lucide-react";
 
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { Skeleton } from "@/components/ui/skeleton";
+import { StatCard } from "@/components/ui/stat-card";
 import { ROUTES } from "@/constants/routes";
 import { formatCurrency } from "@/lib/utils/currency";
 import {
@@ -12,36 +11,6 @@ import {
   getSalesSummary,
   listDashboardProducts,
 } from "@/lib/supabase/queries";
-
-function StatCard({
-  href,
-  label,
-  value,
-  icon: Icon,
-  iconBg,
-  iconColor,
-}: {
-  href: string;
-  label: string;
-  value: ReactNode;
-  icon: React.ComponentType<{ className?: string }>;
-  iconBg: string;
-  iconColor: string;
-}) {
-  return (
-    <Link href={href} className="block">
-      <div className="h-full rounded-xl border border-border bg-card p-5 transition-shadow hover:shadow-md">
-        <div className={`mb-4 flex h-9 w-9 items-center justify-center rounded-lg ${iconBg}`}>
-          <Icon className={`h-4.5 w-4.5 ${iconColor}`} />
-        </div>
-        <div className="mb-1 truncate text-2xl font-semibold leading-none tabular-nums text-foreground">
-          {value}
-        </div>
-        <div className="text-xs text-muted-foreground">{label}</div>
-      </div>
-    </Link>
-  );
-}
 
 export interface AdminKpiRowProps {
   from: string;

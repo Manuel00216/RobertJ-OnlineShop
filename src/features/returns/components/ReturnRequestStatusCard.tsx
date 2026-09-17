@@ -1,7 +1,7 @@
 import Image from "next/image";
 
 import { Badge } from "@/components/ui/badge";
-import { RJ_CARD } from "@/components/ui/card";
+import { RJ_CARD, THEMED_CARD } from "@/components/ui/card";
 import { RETURN_STATUS, RETURN_STATUS_LABELS, type ReturnStatus } from "@/constants/status";
 import type { ReturnRequest } from "@/features/returns/types/return.types";
 import { formatCurrency } from "@/lib/utils/currency";
@@ -21,6 +21,8 @@ export interface ReturnRequestStatusCardProps {
   request: ReturnRequest;
   /** Pre-resolved signed URL (bucket is private) for `request.evidencePath`, or null if none/failed to load. */
   evidenceUrl: string | null;
+  /** Renders through the Admin/Seller portal's tokens instead of the fixed rj-* palette. See OrderHeader. */
+  themed?: boolean;
 }
 
 /**
@@ -39,16 +41,22 @@ export interface ReturnRequestStatusCardProps {
 export async function ReturnRequestStatusCard({
   request,
   evidenceUrl,
+  themed = false,
 }: ReturnRequestStatusCardProps) {
   const pendingRefund =
     request.status === "seller_accepted" || request.status === "seller_rejected"
       ? await getPendingXenditRefundForReturn(request.id).catch(() => null)
       : null;
 
+  const ink = themed ? "text-foreground" : "text-rj-black";
+  const muted = themed ? "text-muted-foreground" : "text-rj-gray-600";
+  const border = themed ? "border-border" : "border-rj-gray-100";
+  const ring = themed ? "focus-visible:ring-ring/30" : "focus-visible:ring-rj-red/30";
+
   return (
-    <section aria-label="Return/refund request" className={cn(RJ_CARD, "p-5")}>
+    <section aria-label="Return/refund request" className={cn(themed ? THEMED_CARD : RJ_CARD, "p-5")}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-[10px] font-bold uppercase tracking-[0.3em] text-rj-gray-600">
+        <h2 className={cn("text-[10px] font-bold uppercase tracking-[0.3em]", muted)}>
           {request.orderItemTitle ? `Return: ${request.orderItemTitle}` : "Return request"}
         </h2>
         <Badge tone={RETURN_STATUS_TONE[request.status]}>
@@ -56,18 +64,22 @@ export async function ReturnRequestStatusCard({
         </Badge>
       </div>
 
-      <p className="mt-2 text-xs text-rj-gray-600">
+      <p className={cn("mt-2 text-xs", muted)}>
         Requested {formatDate(request.createdAt)}
         {request.buyerName ? ` by ${request.buyerName}` : ""}
       </p>
-      <p className="mt-2 text-sm text-rj-black">{request.reason}</p>
+      <p className={cn("mt-2 text-sm", ink)}>{request.reason}</p>
 
       {evidenceUrl ? (
         <a
           href={evidenceUrl}
           target="_blank"
           rel="noreferrer"
-          className="relative mt-3 block h-32 w-32 overflow-hidden rounded-xl border border-rj-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30"
+          className={cn(
+            "relative mt-3 block h-32 w-32 overflow-hidden rounded-xl border focus-visible:outline-none focus-visible:ring-2",
+            border,
+            ring,
+          )}
         >
           {/* unoptimized: a short-lived signed Storage URL, not a stable path next/image should cache/optimize. */}
           <Image src={evidenceUrl} alt="Return evidence" fill unoptimized className="object-cover" />
@@ -75,23 +87,23 @@ export async function ReturnRequestStatusCard({
       ) : null}
 
       {request.sellerDecisionNote ? (
-        <p className="mt-3 border-t border-rj-gray-100 pt-3 text-xs text-rj-gray-600">
-          <span className="font-semibold text-rj-black">Seller response:</span>{" "}
+        <p className={cn("mt-3 border-t pt-3 text-xs", border, muted)}>
+          <span className={cn("font-semibold", ink)}>Seller response:</span>{" "}
           {request.sellerDecisionNote}
         </p>
       ) : null}
 
       {request.adminDecisionNote ? (
-        <p className="mt-2 text-xs text-rj-gray-600">
-          <span className="font-semibold text-rj-black">Admin decision:</span>{" "}
+        <p className={cn("mt-2 text-xs", muted)}>
+          <span className={cn("font-semibold", ink)}>Admin decision:</span>{" "}
           {request.adminDecisionNote}
         </p>
       ) : null}
 
       {pendingRefund ? (
-        <div className="mt-3 border-t border-rj-gray-100 pt-3">
+        <div className={cn("mt-3 border-t pt-3", border)}>
           <Badge tone="warning">Refund submitted — awaiting confirmation</Badge>
-          <p className="mt-1 text-xs text-rj-gray-600">
+          <p className={cn("mt-1 text-xs", muted)}>
             {formatCurrency(pendingRefund.amountCents, pendingRefund.currency)} was submitted to
             the payment provider. This can take a few minutes to confirm.
           </p>
@@ -99,7 +111,7 @@ export async function ReturnRequestStatusCard({
       ) : null}
 
       {request.status === RETURN_STATUS.refunded && request.refundAmountCents !== null ? (
-        <p className="mt-3 text-sm font-semibold text-rj-green">
+        <p className={cn("mt-3 text-sm font-semibold", themed ? "text-success" : "text-rj-green")}>
           Refunded {formatCurrency(request.refundAmountCents, request.currency)}
         </p>
       ) : null}

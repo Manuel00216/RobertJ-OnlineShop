@@ -112,12 +112,14 @@ export function ProductVariantRow({
               value={values.color ?? ""}
               onChange={(event) => handleChange("color", event.target.value)}
               errors={fieldErrors.color}
+              themed
             />
             <FormField
               label="Size"
               value={values.size ?? ""}
               onChange={(event) => handleChange("size", event.target.value)}
               errors={fieldErrors.size}
+              themed
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -126,6 +128,7 @@ export function ProductVariantRow({
               value={values.sku ?? ""}
               onChange={(event) => handleChange("sku", event.target.value)}
               errors={fieldErrors.sku}
+              themed
             />
             <FormField
               label={`Price override (optional — inherits ${formatCurrency(product.priceCents, product.currency)})`}
@@ -140,11 +143,12 @@ export function ProductVariantRow({
                 }))
               }
               errors={fieldErrors.price}
+              themed
             />
           </div>
           {formError ? <ErrorState title="Couldn't save variant" message={formError} /> : null}
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="rj" size="rjSm" isLoading={isSaving} onClick={handleSave}>
+            <Button type="button" variant="primary" size="rjSm" isLoading={isSaving} onClick={handleSave}>
               Save
             </Button>
             <Button type="button" variant="outline" size="rjSm" disabled={isSaving} onClick={handleCancelEdit}>

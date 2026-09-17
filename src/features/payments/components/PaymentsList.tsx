@@ -3,7 +3,7 @@ import Link from "next/link";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { Badge } from "@/components/ui/badge";
-import { RJ_CARD } from "@/components/ui/card";
+import { THEMED_CARD } from "@/components/ui/card";
 import { ROUTES } from "@/constants/routes";
 import type { PaymentStatus } from "@/constants/status";
 import { PaymentStatusBadge } from "@/features/orders/components/PaymentStatusBadge";
@@ -83,30 +83,30 @@ export async function PaymentsList({ status, showAdminTools = false }: PaymentsL
           const isMultiSeller = showAdminTools && Boolean(payment.checkoutGroupId);
 
           return (
-            <li key={payment.id} className={cn(RJ_CARD, "flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between")}>
+            <li key={payment.id} className={cn(THEMED_CARD, "flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between")}>
               <div className="min-w-0">
                 <Link
                   href={ROUTES.orderDetail(payment.orderId)}
-                  className="text-sm font-bold text-rj-black hover:underline"
+                  className="text-sm font-bold text-foreground hover:underline"
                 >
                   {payment.orderNumber}
                 </Link>
-                <p className="mt-0.5 text-xs text-rj-gray-600">
+                <p className="mt-0.5 text-xs text-muted-foreground">
                   {payment.buyerName ?? "Buyer"} · {formatDate(payment.createdAt)}
                 </p>
-                <p className="mt-0.5 text-xs text-rj-gray-600">
+                <p className="mt-0.5 text-xs text-muted-foreground">
                   {METHOD_LABELS[payment.paymentMethodType] ?? payment.paymentMethodType}
                   {payment.paymentChannel ? ` · ${payment.paymentChannel}` : ""}
                 </p>
                 {payment.status === "failed" && payment.failureReason ? (
-                  <p className="mt-0.5 text-xs text-rj-red-dark">{payment.failureReason}</p>
+                  <p className="mt-0.5 text-xs text-danger">{payment.failureReason}</p>
                 ) : null}
                 {receiptUrl ? (
                   <a
                     href={receiptUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="mt-0.5 inline-block text-xs font-semibold text-rj-red-dark hover:underline"
+                    className="mt-0.5 inline-block text-xs font-semibold text-danger hover:underline"
                   >
                     View receipt
                   </a>
@@ -119,7 +119,7 @@ export async function PaymentsList({ status, showAdminTools = false }: PaymentsL
                 ) : null}
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-sm font-semibold text-rj-black">
+                <span className="text-sm font-semibold text-foreground">
                   {formatCurrency(payment.amountCents, payment.currency)}
                 </span>
                 <PaymentStatusBadge status={payment.status} />

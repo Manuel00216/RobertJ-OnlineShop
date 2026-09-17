@@ -104,7 +104,7 @@ export function SiteHeaderClient({ user, categories }: SiteHeaderClientProps) {
     <header
       className={`sticky top-0 z-50 transition-all duration-300 ${
         scrolled
-          ? "bg-rj-white/96 shadow-[0_1px_0_#EBEBEB] backdrop-blur-lg"
+          ? "bg-rj-white/96 shadow-[0_1px_0_var(--color-rj-gray-100)] backdrop-blur-lg"
           : "bg-rj-white"
       }`}
     >

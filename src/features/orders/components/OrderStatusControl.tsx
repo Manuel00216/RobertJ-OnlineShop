@@ -77,7 +77,7 @@ export function OrderStatusControl({
       ) : null}
 
       {blockedByPayment ? (
-        <p className="text-xs text-rj-gray-600">
+        <p className="text-xs text-muted-foreground">
           This order&apos;s online payment hasn&apos;t been completed yet. It can&apos;t be
           moved forward until the payment succeeds.
         </p>
@@ -87,7 +87,7 @@ export function OrderStatusControl({
         {nextStatus && !blockedByPayment ? (
           <Button
             type="button"
-            variant="rj"
+            variant="primary"
             size="rjSm"
             isLoading={isPending}
             onClick={() => advance(nextStatus)}
@@ -100,7 +100,7 @@ export function OrderStatusControl({
           <button
             type="button"
             ref={triggerRef}
-            className={cn(buttonVariants({ variant: "rjOutline", size: "rjSm" }))}
+            className={cn(buttonVariants({ variant: "outline", size: "rjSm" }))}
             onClick={() => setConfirmingCancel(true)}
           >
             Cancel order

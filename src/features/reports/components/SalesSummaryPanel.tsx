@@ -1,36 +1,11 @@
-import type { ReactNode } from "react";
-
 import { BarChart, type BarChartDatum } from "@/components/charts/BarChart";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { Card, CardContent } from "@/components/ui/card";
+import { StatCard } from "@/components/ui/stat-card";
 import { formatCurrency } from "@/lib/utils/currency";
 import { getSalesSummary } from "@/lib/supabase/queries";
 
 import type { ReportFilters } from "../types/report.types";
-
-function StatCard({
-  label,
-  value,
-  hint,
-}: {
-  label: string;
-  value: ReactNode;
-  hint?: string;
-}) {
-  return (
-    <Card className="border-rj-gray-100">
-      <CardContent className="flex flex-col gap-1 p-5">
-        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-rj-gray-400">
-          {label}
-        </p>
-        <p className="truncate font-serif text-2xl leading-tight tabular-nums text-rj-black sm:text-3xl">
-          {value}
-        </p>
-        {hint ? <p className="text-xs text-rj-gray-500">{hint}</p> : null}
-      </CardContent>
-    </Card>
-  );
-}
 
 /**
  * KPI grid + confirmed-payment method split for the selected range. Reads the
@@ -102,15 +77,15 @@ export async function SalesSummaryPanel({ filters }: { filters: ReportFilters })
         <StatCard label="Cancelled" value={summary.cancelledOrders} />
       </div>
 
-      <Card className="border-rj-gray-100">
+      <Card>
         <CardContent className="flex flex-col gap-4 p-5">
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-rj-gray-400">
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
             Payment method (paid orders)
           </p>
           {hasPaymentData ? (
             <BarChart data={paymentSplit} ariaLabel="Paid orders by payment method" />
           ) : (
-            <p className="text-sm text-rj-gray-500">
+            <p className="text-sm text-muted-foreground">
               No confirmed or pending payments in this range yet.
             </p>
           )}

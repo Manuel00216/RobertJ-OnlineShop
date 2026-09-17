@@ -19,9 +19,9 @@ export async function LowStockPanel({ showShop }: { showShop: boolean }) {
   }
 
   return (
-    <Card className="border-rj-gray-100">
+    <Card>
       <CardContent className="flex flex-col gap-4 p-5">
-        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-rj-gray-400">
+        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
           Low &amp; out of stock
         </p>
         {items.length > 0 ? (
@@ -29,13 +29,13 @@ export async function LowStockPanel({ showShop }: { showShop: boolean }) {
             {items.map((item) => (
               <li key={item.id} className="flex items-center justify-between gap-3 py-2.5">
                 <div className="min-w-0">
-                  <p className="truncate text-sm text-rj-black">{item.productTitle}</p>
+                  <p className="truncate text-sm text-foreground">{item.productTitle}</p>
                   {showShop && item.shopName ? (
-                    <p className="truncate text-xs text-rj-gray-500">{item.shopName}</p>
+                    <p className="truncate text-xs text-muted-foreground">{item.shopName}</p>
                   ) : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
-                  <span className="text-sm tabular-nums text-rj-gray-600">
+                  <span className="text-sm tabular-nums text-muted-foreground">
                     {item.quantity} left
                   </span>
                   <Badge tone={item.stockStatus === "out_of_stock" ? "danger" : "warning"}>

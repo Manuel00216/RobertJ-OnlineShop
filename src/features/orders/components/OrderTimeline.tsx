@@ -1,6 +1,6 @@
 import { Check } from "lucide-react";
 
-import { RJ_CARD } from "@/components/ui/card";
+import { RJ_CARD, THEMED_CARD } from "@/components/ui/card";
 import type { OrderStatus } from "@/constants/status";
 import { cn } from "@/lib/utils/cn";
 import {
@@ -16,34 +16,45 @@ const TERMINAL_STATUSES: ReadonlySet<OrderStatus> = new Set([
 /**
  * Forward fulfilment stepper (Pending → … → Delivered) with `aria-current="step"`
  * on the live step. Cancelled/Refunded are terminal and render a single marker
- * instead of the forward steps.
+ * instead of the forward steps. `themed`: see OrderHeader.
  */
-export function OrderTimeline({ status }: { status: OrderStatus }) {
+export function OrderTimeline({ status, themed = false }: { status: OrderStatus; themed?: boolean }) {
+  const ink = themed ? "text-foreground" : "text-rj-black";
+  const muted = themed ? "text-muted-foreground" : "text-rj-gray-600";
+
   if (TERMINAL_STATUSES.has(status)) {
+    const dotClass = themed
+      ? status === "cancelled"
+        ? "bg-danger text-danger-foreground"
+        : "bg-secondary text-secondary-foreground"
+      : status === "cancelled"
+        ? "bg-rj-red-dark text-rj-white"
+        : "bg-rj-gray-400 text-rj-white";
+
     return (
       <section
         aria-label={`Order status: ${getOrderStatusLabel(status)}`}
         role="status"
         aria-live="polite"
         className={cn(
-          RJ_CARD,
+          themed ? THEMED_CARD : RJ_CARD,
           "flex items-center gap-3 p-5",
-          status === "cancelled" ? "bg-danger/5" : "bg-rj-gray-50",
+          status === "cancelled" ? "bg-danger/5" : themed ? "bg-muted" : "bg-rj-gray-50",
         )}
       >
         <span
           className={cn(
-            "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-rj-white",
-            status === "cancelled" ? "bg-rj-red-dark" : "bg-rj-gray-400",
+            "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
+            dotClass,
           )}
         >
           <Check className="h-4 w-4" aria-hidden="true" />
         </span>
         <div>
-          <p className="text-sm font-bold text-rj-black">
+          <p className={cn("text-sm font-bold", ink)}>
             {getOrderStatusLabel(status)}
           </p>
-          <p className="mt-0.5 text-xs text-rj-gray-600">
+          <p className={cn("mt-0.5 text-xs", muted)}>
             {status === "cancelled"
               ? "This order was cancelled and will not be fulfilled."
               : "This order was refunded and is complete."}
@@ -58,13 +69,15 @@ export function OrderTimeline({ status }: { status: OrderStatus }) {
   return (
     <section
       aria-label="Order progress"
-      className={cn(RJ_CARD, "p-5")}
+      className={cn(themed ? THEMED_CARD : RJ_CARD, "p-5")}
     >
       <ol className="flex items-start">
         {ORDER_TIMELINE_STEPS.map((step, index) => {
           const isDone = index < currentIndex;
           const isCurrent = index === currentIndex;
           const isLast = index === ORDER_TIMELINE_STEPS.length - 1;
+          const doneTrack = themed ? "bg-primary" : "bg-rj-red";
+          const idleTrack = themed ? "bg-border" : "bg-rj-gray-200";
           return (
             <li
               key={step}
@@ -78,21 +91,26 @@ export function OrderTimeline({ status }: { status: OrderStatus }) {
                   aria-hidden="true"
                   className={cn(
                     "h-1 flex-1 rounded-full",
-                    index > 0
-                      ? index <= currentIndex
-                        ? "bg-rj-red"
-                        : "bg-rj-gray-200"
-                      : "bg-transparent",
+                    index > 0 ? (index <= currentIndex ? doneTrack : idleTrack) : "bg-transparent",
                   )}
                 />
                 <span
                   aria-current={isCurrent ? "step" : undefined}
                   className={cn(
                     "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-[1.5px] text-[10px] font-bold",
-                    isDone && "border-rj-red bg-rj-red text-white",
-                    isCurrent &&
-                      "border-rj-red bg-rj-red text-white ring-2 ring-rj-red/30",
-                    !isDone && !isCurrent && "border-rj-gray-200 bg-rj-white text-rj-gray-400",
+                    themed
+                      ? [
+                          isDone && "border-primary bg-primary text-primary-foreground",
+                          isCurrent &&
+                            "border-primary bg-primary text-primary-foreground ring-2 ring-primary/30",
+                          !isDone && !isCurrent && "border-border bg-card text-muted-foreground",
+                        ]
+                      : [
+                          isDone && "border-rj-red bg-rj-red text-white",
+                          isCurrent &&
+                            "border-rj-red bg-rj-red text-white ring-2 ring-rj-red/30",
+                          !isDone && !isCurrent && "border-rj-gray-200 bg-rj-white text-rj-gray-400",
+                        ],
                   )}
                 >
                   {isDone ? (
@@ -105,18 +123,14 @@ export function OrderTimeline({ status }: { status: OrderStatus }) {
                   aria-hidden="true"
                   className={cn(
                     "h-1 flex-1 rounded-full",
-                    isLast
-                      ? "bg-transparent"
-                      : index < currentIndex
-                        ? "bg-rj-red"
-                        : "bg-rj-gray-200",
+                    isLast ? "bg-transparent" : index < currentIndex ? doneTrack : idleTrack,
                   )}
                 />
               </div>
               <span
                 className={cn(
                   "text-center text-[10px] font-semibold leading-tight",
-                  isDone || isCurrent ? "text-rj-black" : "text-rj-gray-600",
+                  isDone || isCurrent ? ink : muted,
                 )}
               >
                 {getOrderStatusLabel(step)}

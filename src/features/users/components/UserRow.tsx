@@ -82,22 +82,22 @@ export function UserRow({ user, shops }: UserRowProps) {
   }
 
   return (
-    <Card className="border-rj-gray-100">
+    <Card>
       <CardContent className="flex flex-col gap-3 p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rj-gray-100 text-xs font-bold text-rj-black">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold text-foreground">
               {getInitials(user.fullName ?? user.email ?? "?")}
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <p className="truncate text-sm font-semibold text-rj-black">
+                <p className="truncate text-sm font-semibold text-foreground">
                   {user.fullName ?? user.username ?? "Unnamed user"}
                 </p>
                 <Badge tone={ROLE_TONE[user.role]}>{ROLE_LABELS[user.role]}</Badge>
                 {user.isActive ? null : <Badge tone="danger">Inactive</Badge>}
               </div>
-              <p className="mt-0.5 truncate text-xs text-rj-gray-600">
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">
                 {user.email ?? "No email"} · {user.shopName ?? "Unassigned"} · Joined{" "}
                 {formatDate(user.createdAt)}
               </p>
@@ -111,7 +111,7 @@ export function UserRow({ user, shops }: UserRowProps) {
                   Cancel
                 </Button>
               ) : (
-                <Button type="button" variant="rj" size="rjSm" onClick={() => setAssigning(true)}>
+                <Button type="button" variant="primary" size="rjSm" onClick={() => setAssigning(true)}>
                   {actionLabel}
                 </Button>
               )
@@ -135,7 +135,7 @@ export function UserRow({ user, shops }: UserRowProps) {
         {error ? <ErrorState title="Couldn't assign the shop" message={error} /> : null}
 
         {assigning ? (
-          <div className="rounded-2xl border border-rj-gray-100 bg-rj-gray-50 p-4">
+          <div className="rounded-2xl border border-border bg-muted p-4">
             <label htmlFor={`shop-select-${user.id}`} className="text-sm font-medium">
               Shop
             </label>
@@ -146,7 +146,7 @@ export function UserRow({ user, shops }: UserRowProps) {
                 setSelectedShopId(event.target.value);
                 setConfirming(false);
               }}
-              className="mt-1.5 h-10 w-full max-w-xs rounded-md border border-rj-gray-200 bg-rj-white px-3 text-sm text-rj-black outline-none transition-colors focus-visible:border-rj-black focus-visible:ring-2 focus-visible:ring-rj-red/30"
+              className="mt-1.5 h-10 w-full max-w-xs rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
             >
               <option value="">Select a shop…</option>
               {shops.map((shop) => (
@@ -159,7 +159,7 @@ export function UserRow({ user, shops }: UserRowProps) {
             {selectedShopId && !confirming ? (
               <Button
                 type="button"
-                variant="rj"
+                variant="primary"
                 size="rjSm"
                 className="mt-3"
                 onClick={() => setConfirming(true)}

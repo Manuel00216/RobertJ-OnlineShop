@@ -58,7 +58,7 @@ export function DashboardProductRow({
 
   if (mode === "edit") {
     return (
-      <Card className="border-rj-gray-100">
+      <Card>
         <CardContent className="p-5">
           <ProductForm categories={categories} product={product} onDone={() => setMode("view")} />
           <Button
@@ -107,16 +107,16 @@ export function DashboardProductRow({
   }
 
   return (
-    <Card className="border-rj-gray-100">
+    <Card>
       <CardContent className="flex flex-col gap-3 p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="truncate text-sm font-semibold text-rj-black">{product.title}</p>
+              <p className="truncate text-sm font-semibold text-foreground">{product.title}</p>
               <ProductStatusBadge status={product.status} />
               {product.shopId === null ? <Badge tone="warning">Unassigned</Badge> : null}
             </div>
-            <p className="mt-1 text-xs text-rj-gray-600">
+            <p className="mt-1 text-xs text-muted-foreground">
               {formatCurrency(product.priceCents, product.currency)} · Qty {product.quantity}
             </p>
             {error ? (
@@ -133,7 +133,7 @@ export function DashboardProductRow({
                   <select
                     value={selectedShopId}
                     onChange={(event) => setSelectedShopId(event.target.value)}
-                    className="h-9 rounded-md border border-rj-gray-200 bg-rj-white px-2 text-sm text-rj-black outline-none transition-colors focus-visible:border-rj-black focus-visible:ring-2 focus-visible:ring-rj-red/30"
+                    className="h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
                   >
                     <option value="">Select a shop…</option>
                     {shops.map((shop) => (
@@ -144,7 +144,7 @@ export function DashboardProductRow({
                   </select>
                   <Button
                     type="button"
-                    variant="rj"
+                    variant="primary"
                     size="rjSm"
                     isLoading={isPending}
                     disabled={!selectedShopId}
