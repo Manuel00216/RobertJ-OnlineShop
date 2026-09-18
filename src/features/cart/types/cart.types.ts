@@ -1,5 +1,16 @@
 export interface CartItem {
   productId: string;
+  /**
+   * Present only when this line is a specific color/size variant. A cart
+   * line's real identity is `productId` + `variantId` (see `getCartLineKey`),
+   * not `productId` alone — the same product can appear as several distinct
+   * lines, one per variant. Absent (not `null`) for a plain product, which
+   * also keeps every pre-Phase-3c localStorage cart working unchanged: an
+   * old line simply has no `variantId` key at all.
+   */
+  variantId?: string;
+  /** Snapshot display label for the selected variant (e.g. "Blue / M"), or omitted/null for a plain product. */
+  variantLabel?: string | null;
   slug: string;
   title: string;
   imageUrl: string | null;
@@ -24,20 +35,25 @@ export interface CartState {
   items: CartItem[];
 }
 
+/** Identifies one cart line — a plain product has no `variantId`. */
+export interface CartLineRef {
+  productId: string;
+  variantId?: string;
+}
+
 export type CartAction =
   | { type: "add"; item: CartItem }
-  | { type: "remove"; productId: string }
-  | { type: "removeMany"; productIds: string[] }
-  | { type: "setQuantity"; productId: string; quantity: number }
+  | ({ type: "remove" } & CartLineRef)
+  | { type: "removeMany"; lines: CartLineRef[] }
+  | ({ type: "setQuantity"; quantity: number } & CartLineRef)
   /**
    * Applies a server-confirmed price/stock correction to one line. Requires
    * an explicit user action (e.g. clicking "Update") — never dispatched
    * automatically just because a mismatch was detected.
    */
-  | {
+  | ({
       type: "updateItem";
-      productId: string;
       patch: Partial<Pick<CartItem, "unitPriceCents" | "maxQuantity">>;
-    }
+    } & CartLineRef)
   | { type: "clear" }
   | { type: "hydrate"; state: CartState };

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { useRef } from "react";
@@ -14,9 +15,10 @@ export interface FeaturedShopsCarouselProps {
 
 /**
  * Horizontally scrollable "top sellers" carousel. Presentational only — data
- * (real shops + a real active-product count, no fabricated rating/badge/cover
- * image) is fetched by the `FeaturedShops` server wrapper, same split as
- * `FeaturedProducts`/`FeaturedProductsGrid`.
+ * (real shops + a real active-product count, plus a real seller-uploaded
+ * logo when the shop has set one — the letter-avatar is a fallback, never a
+ * fabricated rating/badge/image) is fetched by the `FeaturedShops` server
+ * wrapper, same split as `FeaturedProducts`/`FeaturedProductsGrid`.
  */
 export function FeaturedShopsCarousel({ shops }: FeaturedShopsCarouselProps) {
   const { ref: headerRef, inView } = useReveal<HTMLDivElement>();
@@ -90,8 +92,20 @@ export function FeaturedShopsCarousel({ shops }: FeaturedShopsCarouselProps) {
                 animation: inView ? `fadeSlideIn 0.6s ease ${i * 80}ms both` : "none",
               }}
             >
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-rj-black text-xl font-bold text-rj-white">
-                {shop.name.slice(0, 1).toUpperCase()}
+              <div className="relative mx-auto mb-4 h-16 w-16 overflow-hidden rounded-full bg-rj-black">
+                {shop.logoUrl ? (
+                  <Image
+                    src={shop.logoUrl}
+                    alt={shop.name}
+                    fill
+                    className="object-cover"
+                    sizes="64px"
+                  />
+                ) : (
+                  <span className="flex h-full items-center justify-center text-xl font-bold text-rj-white">
+                    {shop.name.slice(0, 1).toUpperCase()}
+                  </span>
+                )}
               </div>
               <h3 className="mb-1 text-[15px] font-semibold text-rj-black">
                 {shop.name}

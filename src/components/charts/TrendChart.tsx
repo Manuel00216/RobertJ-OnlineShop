@@ -61,15 +61,15 @@ export function TrendChart({ points, ariaLabel, className }: TrendChartProps) {
           y1={PAD.top + innerH}
           x2={VIEW_W - PAD.right}
           y2={PAD.top + innerH}
-          className="stroke-rj-gray-200"
+          className="stroke-border"
           strokeWidth={1}
         />
-        {areaPath ? <path d={areaPath} className="fill-rj-red/10" /> : null}
+        {areaPath ? <path d={areaPath} className="fill-primary/10" /> : null}
         {linePath ? (
           <path
             d={linePath}
             fill="none"
-            className="stroke-rj-red-dark"
+            className="stroke-primary"
             strokeWidth={2}
             strokeLinejoin="round"
             strokeLinecap="round"
@@ -81,7 +81,7 @@ export function TrendChart({ points, ariaLabel, className }: TrendChartProps) {
             cx={x(i)}
             cy={y(p.value)}
             r={points.length > 40 ? 0 : 2.5}
-            className="fill-rj-red-dark"
+            className="fill-primary"
           />
         ))}
         {points.map((p, i) =>
@@ -91,7 +91,7 @@ export function TrendChart({ points, ariaLabel, className }: TrendChartProps) {
               x={x(i)}
               y={VIEW_H - 6}
               textAnchor="middle"
-              className="fill-rj-gray-400 text-[10px]"
+              className="fill-muted-foreground text-[10px]"
             >
               {p.label}
             </text>

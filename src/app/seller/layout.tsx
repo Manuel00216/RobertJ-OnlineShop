@@ -6,16 +6,14 @@ import { SellerLayout, type SellerNotification } from "@/features/seller";
 import {
   getDashboardOrderSummary,
   getLowStockReport,
-  listPendingPayments,
   requireRole,
 } from "@/lib/supabase/queries";
 
 /** Real pending-work signals surfaced as notifications — no mock data, no separate notifications table. */
 async function getSellerNotifications(): Promise<SellerNotification[]> {
-  const [orderSummary, lowStock, pendingPayments] = await Promise.all([
+  const [orderSummary, lowStock] = await Promise.all([
     getDashboardOrderSummary(),
     getLowStockReport(),
-    listPendingPayments(),
   ]);
 
   const notifications: SellerNotification[] = [];
@@ -38,16 +36,6 @@ async function getSellerNotifications(): Promise<SellerNotification[]> {
       tone: "danger",
     });
   }
-  if (pendingPayments.length > 0) {
-    notifications.push({
-      id: "pending-payments",
-      title: "Pending payments",
-      description: `${pendingPayments.length} payment${pendingPayments.length === 1 ? "" : "s"} awaiting verification`,
-      href: ROUTES.sellerPayments,
-      tone: "info",
-    });
-  }
-
   return notifications;
 }
 

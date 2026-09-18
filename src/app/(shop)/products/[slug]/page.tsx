@@ -11,8 +11,10 @@ import {
   getProductBySlug,
   getSessionUser,
   getShopNamesBySellerIds,
+  getVariantStock,
   isProductWishlisted,
   listProductReviews,
+  listProductVariants,
 } from "@/lib/supabase/queries";
 import { Breadcrumbs } from "@/features/products/components/Breadcrumbs";
 import { ProductGallery } from "@/features/products/components/ProductGallery";
@@ -61,6 +63,15 @@ export default async function ProductDetailPage({
     averageRating: null,
     reviewCount: 0,
   }));
+  const variants = await listProductVariants(product.id).catch(() => []);
+  const variantStockMap =
+    variants.length > 0
+      ? await getVariantStock(variants.map((variant) => variant.id)).catch(
+          () => new Map<string, number>(),
+        )
+      : new Map<string, number>();
+  const variantStock = Object.fromEntries(variantStockMap);
+  const hasVariants = variants.length > 0;
 
   const breadcrumbItems = [
     { label: "Home", href: ROUTES.home },
@@ -105,12 +116,14 @@ export default async function ProductDetailPage({
             ) : null}
           </div>
 
-          <p className="text-2xl font-bold text-rj-black">
-            {formatCurrency(product.priceCents, product.currency)}
-          </p>
+          {hasVariants ? null : (
+            <p className="text-2xl font-bold text-rj-black">
+              {formatCurrency(product.priceCents, product.currency)}
+            </p>
+          )}
 
           <div className="flex flex-wrap gap-2">
-            {product.quantity > 0 ? (
+            {hasVariants ? null : product.quantity > 0 ? (
               <span className="rounded-full bg-rj-green/10 px-3 py-1 text-[11px] font-bold text-rj-green">
                 {product.quantity} in stock
               </span>
@@ -143,6 +156,8 @@ export default async function ProductDetailPage({
               isAuthenticated: user !== null,
             }}
             shopName={shopName}
+            variants={variants}
+            variantStock={variantStock}
           />
         </div>
       </div>

@@ -2,11 +2,15 @@
 
 /*
  * Design tokens. Every colour used by components resolves through these.
- * UNCHANGED from the original generic values — Buyer/Marketing and the
- * Seller `/dashboard` both consume these (via Button/Badge/Card's default,
- * non-"rj" tone), so this block must stay exactly as it always was. Do not
- * "brand-align" these — that belongs in the `[data-theme-scope="admin"]`
- * block below, which only the Admin Portal's root layout renders.
+ * Consumed by Buyer/Marketing and the Seller `/dashboard` legacy redirect
+ * shell (via Button/Badge/Card's default, non-"rj" tone). `--primary`/`--ring`
+ * are intentionally brand-aligned to the Emerald Spring Whisper accent (same
+ * value as `rj-red` below, which now holds an emerald hex despite its name —
+ * see the `@theme` block) so the Buyer dashboard's default-tone components
+ * match the same accent as Marketing, Seller, and Admin instead of the
+ * previous unrelated blue. Everything else here stays neutral/generic;
+ * portal-specific surface colors belong in the `[data-theme-scope="admin"|
+ * "seller"]` block below, not here.
  */
 :root {
   --background: #ffffff;
@@ -16,17 +20,19 @@
   --muted: #f4f4f5;
   --muted-foreground: #6b7280;
   --border: #e4e4e7;
-  --ring: #2563eb;
-  --primary: #2563eb;
+  --ring: #135e4a;
+  --primary: #135e4a;
   --primary-foreground: #ffffff;
   --secondary: #f4f4f5;
   --secondary-foreground: #171717;
   --success: #16a34a;
   --warning: #b45309;
-  /* Matches rj-red-dark (#c8111e), not a separate red — every destructive
-     action in the app (dashboard Archive/Reject/Cancel/Deactivate as well as
-     brand CTAs) now shares one red family instead of two visibly different
-     ones on the same screen. */
+  /* Independently red on purpose: destructive actions (Archive/Reject/Cancel/
+     Deactivate) keep a red "danger" regardless of brand color, so the
+     "irreversible" signal reads the same whether the brand accent is red or,
+     as of the Emerald Spring Whisper re-theme, green. No longer tied to
+     rj-red-dark's value — the two are free to diverge now that the brand
+     accent isn't red. */
   --danger: #c8111e;
   --danger-foreground: #ffffff;
   --info: #0284c7;
@@ -46,21 +52,21 @@
  */
 [data-theme-scope="admin"],
 [data-theme-scope="seller"] {
-  --background: #f8f7f5; /* rj-white */
-  --foreground: #0d0d0d; /* rj-black */
+  --background: #f8faf9; /* rj-white */
+  --foreground: #09120f; /* rj-black */
   --card: #ffffff;
-  --card-foreground: #0d0d0d;
-  --muted: #ebebeb; /* rj-gray-100 */
-  --muted-foreground: #6b6b6b; /* rj-gray-600 */
-  --border: #d4d4d4; /* rj-gray-200 */
-  --ring: #e8192c; /* rj-red */
-  --primary: #e8192c; /* rj-red */
+  --card-foreground: #09120f;
+  --muted: #e2f0eb; /* rj-gray-100 */
+  --muted-foreground: #4a5c52; /* rj-gray-600 */
+  --border: #ccdcdc; /* rj-gray-200 / emerald-whisper */
+  --ring: #135e4a; /* rj-red (emerald brand accent) */
+  --primary: #135e4a; /* rj-red (emerald brand accent) */
   --primary-foreground: #ffffff;
-  --secondary: #ebebeb; /* rj-gray-100 */
-  --secondary-foreground: #0d0d0d;
+  --secondary: #e2f0eb; /* rj-gray-100 */
+  --secondary-foreground: #09120f;
   --success: #16a34a;
   --warning: #b45309;
-  --danger: #c8111e; /* rj-red-dark, same as :root */
+  --danger: #c8111e; /* independent red — see :root comment */
   --danger-foreground: #ffffff;
   --info: #0284c7;
 
@@ -69,11 +75,11 @@
      here; a near-black chrome against a lifted-black canvas in dark mode
      below) — same convention shadcn's Sidebar primitive uses. */
   --sidebar-background: #ffffff;
-  --sidebar-foreground: #0d0d0d;
-  --sidebar-muted-foreground: #6b6b6b;
-  --sidebar-border: #d4d4d4;
-  --sidebar-accent: rgba(232, 25, 44, 0.1);
-  --sidebar-accent-foreground: #e8192c;
+  --sidebar-foreground: #09120f;
+  --sidebar-muted-foreground: #4a5c52;
+  --sidebar-border: #ccdcdc;
+  --sidebar-accent: rgba(19, 94, 74, 0.1);
+  --sidebar-accent-foreground: #135e4a;
 }
 
 /*
@@ -85,17 +91,21 @@
  */
 .dark [data-theme-scope="admin"],
 .dark [data-theme-scope="seller"] {
-  --background: #121212;
+  --background: #101b17;
   --foreground: #f2f2f0;
-  --card: #1a1a1a;
+  --card: #172621;
   --card-foreground: #f2f2f0;
-  --muted: #232323;
-  --muted-foreground: #a3a3a3;
-  --border: #2d2d2d; /* rj-gray-800 */
-  --ring: #ff4d5e;
-  --primary: #ff4d5e; /* brightened rj-red for AA contrast on a near-black surface */
-  --primary-foreground: #ffffff;
-  --secondary: #232323;
+  --muted: #1f2d27;
+  --muted-foreground: #a2b9ad;
+  --border: #293831; /* rj-gray-800 family, dark surface */
+  --ring: #4cb571;
+  --primary: #4cb571; /* brightened emerald for visibility on a near-black surface */
+  /* Dark ink, not white: white text on this bright a green only reaches
+     ~2.6:1 (fails WCAG AA). Using the same near-black ink as rj-black
+     instead clears AA at ~7.4:1 while keeping the brightened-for-dark-mode
+     accent the way `--primary` was brightened here before. */
+  --primary-foreground: #09120f;
+  --secondary: #1f2d27;
   --secondary-foreground: #f2f2f0;
   --success: #22c55e; /* rj-green */
   --warning: #f4b942; /* rj-gold */
@@ -103,12 +113,41 @@
   --danger-foreground: #ffffff;
   --info: #38bdf8;
 
-  --sidebar-background: #0d0d0d; /* rj-black */
-  --sidebar-foreground: #f8f7f5; /* rj-white */
-  --sidebar-muted-foreground: #a3a3a3;
+  --sidebar-background: #0c1512; /* rj-black family, darkest surface */
+  --sidebar-foreground: #f8faf9; /* rj-white */
+  --sidebar-muted-foreground: #a2b9ad;
   --sidebar-border: rgba(255, 255, 255, 0.08);
-  --sidebar-accent: rgba(255, 77, 94, 0.18);
-  --sidebar-accent-foreground: #ff4d5e;
+  --sidebar-accent: rgba(76, 181, 113, 0.18);
+  --sidebar-accent-foreground: #4cb571;
+}
+
+/*
+ * Shared feedback primitives (EmptyState / ErrorState). They keep their fixed
+ * rj-* utility classes so the light-only Buyer/Marketing surface is untouched,
+ * but must repaint through the portal tokens when they render inside an
+ * Admin/Seller theme scope. Their rj-* light values already equal the portal's
+ * light token values (rj-black == --foreground, rj-gray-600 == --muted-foreground,
+ * rj-gray-200 == --border in the light [data-theme-scope] block above), so this
+ * is a no-op in portal light mode and only visibly corrects dark mode — where
+ * text-rj-black would otherwise render near-black on a near-black card.
+ *
+ * Scoped here rather than threaded as a `themed` prop because these two
+ * components have ~78 combined call sites and no className escape hatch;
+ * unlayered rules like these also win over Tailwind's layered utilities without
+ * relying on specificity. Buyer routes render no [data-theme-scope], so the
+ * selectors never match there.
+ */
+[data-theme-scope] .empty-state {
+  border-color: var(--border);
+}
+[data-theme-scope] .empty-state__title {
+  color: var(--foreground);
+}
+[data-theme-scope] .empty-state__desc {
+  color: var(--muted-foreground);
+}
+[data-theme-scope] .error-state__message {
+  color: var(--muted-foreground);
 }
 
 @theme inline {
@@ -141,22 +180,41 @@
    * Landing-page ("RobertJ") design tokens. Fixed values — deliberately NOT in
    * the prefers-color-scheme:dark block, so the marketing surface renders in the
    * same editorial light palette regardless of the visitor's OS theme.
+   *
+   * Emerald Spring Whisper re-theme: `rj-red`/`rj-red-dark` now hold emerald
+   * values, not red — the token *names* are kept as-is (renaming would mean
+   * touching every one of the ~160 files that reference `bg-rj-red`,
+   * `text-rj-red`, `rj-red-dark`, `ring-rj-red/30`, etc., which is out of
+   * scope for a color-only change). Read `rj-red` as "brand accent", not
+   * literally red. `rj-gray-*` is tinted toward the same emerald hue
+   * (~150-160°) instead of pure neutral, so borders/muted text read as part
+   * of the same palette rather than a mismatched grayscale.
    */
-  --color-rj-black: #0d0d0d;
-  --color-rj-white: #f8f7f5;
-  --color-rj-red: #e8192c;
-  --color-rj-red-dark: #c8111e;
-  --color-rj-gray-50: #f5f4f2;
-  --color-rj-gray-100: #ebebeb;
-  --color-rj-gray-200: #d4d4d4;
+  --color-rj-black: #09120f;
+  --color-rj-white: #f8faf9;
+  --color-rj-red: #135e4a; /* brand accent (emerald-dark) */
+  --color-rj-red-dark: #0b3a2e; /* hover/active state (emerald-deep) */
+  --color-rj-gray-50: #f3f9f6;
+  --color-rj-gray-100: #e2f0eb;
+  --color-rj-gray-200: #ccdcdc; /* emerald-whisper */
+  --color-rj-gray-300: #a2b9af;
   /* #9b9b9b measured ~2.8:1 on rj-white — fails WCAG AA (4.5:1) for the many
      real-content uses (eyebrow labels, footer nav, body copy) that reach for
-     this token, not just its placeholder/disabled uses. #707070 clears AA
-     (~4.6:1 on rj-white, ~4.9:1 on pure white) with the smallest possible
-     darkening, while a single token keeps every consumer consistent. */
-  --color-rj-gray-400: #707070;
-  --color-rj-gray-600: #6b6b6b;
-  --color-rj-gray-800: #2d2d2d;
+     this token, not just its placeholder/disabled uses. #5e7268 clears AA
+     (~4.9:1 on rj-white, ~5.1:1 on pure white) — same fix as before, re-tinted
+     onto the emerald-gray ramp. */
+  --color-rj-gray-400: #5e7268;
+  --color-rj-gray-500: #52665c;
+  --color-rj-gray-600: #4a5c52;
+  --color-rj-gray-700: #33483d;
+  --color-rj-gray-800: #1e3a30;
+  /* 300/500/700/900 added in the same pass: they were already referenced by
+     ~25 component files (address forms, cart, checkout, reports, account
+     sidebar, the Guided Selection preview…) but were never defined, so
+     Tailwind silently emitted no rule for them and those elements fell back
+     to whatever color they inherited. Filling the full ramp fixes that
+     pre-existing gap instead of carrying it forward. */
+  --color-rj-gray-900: #13231c;
   --color-rj-gold: #f4b942;
   --color-rj-green: #22c55e;
 

@@ -80,7 +80,7 @@ export function ReportsFilters({ filters, isAdmin, shops }: ReportsFiltersProps)
               type="button"
               onClick={() => commit(resolvePreset(preset.id as DatePresetId))}
               className={cn(
-                "rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
+                "rounded-full border px-3 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30",
                 isActive
                   ? "border-rj-black bg-rj-black text-rj-white"
                   : "border-rj-gray-200 text-rj-gray-600 hover:border-rj-black",

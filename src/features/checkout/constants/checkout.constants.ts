@@ -15,18 +15,48 @@ export const CHECKOUT_CONSTANTS = {
    * (`checkout.schema.ts`) and the form's default/locked value.
    */
   shippingCountry: "Philippines",
+  /**
+   * Single source of truth for the checkout delivery-method display
+   * (`ShippingMethodCard`). There's only one method today — no courier API,
+   * no live tracking (SAD Out of Scope) — so this is a static estimate, not
+   * data sourced from a real logistics integration.
+   */
+  standardDeliveryLabel: "Standard Delivery",
+  standardDeliveryEstimate: "Estimated delivery: 3–5 business days",
 } as const;
 
 export const CHECKOUT_COPY = {
   placeOrder: "Place order",
   placingOrder: "Placing order…",
   codLabel: "Cash on Delivery",
-  codDescription: "Pay when your order arrives. Verification happens on delivery.",
-  qrLabel: "QR Transfer",
-  qrDescription: "Scan the seller's QR code and upload your receipt after placing your order.",
-  qrNote: "You'll get payment instructions and can upload your receipt once your order is placed.",
+  codDescription: "Pay when your order arrives. The seller marks it collected once received.",
+  onlineLabel: "Online Payment",
+  onlineDescription:
+    "Pay securely via GCash, Maya, or Card — completed from your order page after checkout.",
+  orderSectionTitle: "Your Order",
+  deliveryAddressSectionTitle: "Delivery Address",
   paymentSectionTitle: "Payment",
+  shippingSectionTitle: "Shipping",
+  shippingFreeLabel: "Free",
+  notesSectionTitle: "Order Notes",
+  notesPlaceholder: "Optional message to the seller (e.g. delivery instructions)…",
   emptyTitle: "Your cart is empty",
   emptyDescription: "Add items to your cart before checking out.",
-  agreeNote: "By placing this order you agree to pay on delivery.",
+  nothingSelectedTitle: "Nothing selected",
+  nothingSelectedDescription:
+    "Go back to your cart and check the items you'd like to order.",
+  agreeNote:
+    "Cash on Delivery needs no action — pay online (GCash, Maya, or Card) from your order page after checkout.",
+  multiShopNoticePrefix: "This will be placed as",
+  multiShopNoticeSuffix: "separate orders — one per shop.",
+  /** Shown instead of multiShopNotice* when Online Payment is selected for a multi-seller cart — orders are still one per shop, but paid for together in one combined Xendit payment. */
+  multiShopOnlinePaymentNotice:
+    "One combined online payment will cover all shops in this checkout.",
+  addressPrefilledNote:
+    "Using the address from your last order — edit any field if this delivery is going somewhere else.",
+  defaultAddressNote:
+    "Using your default saved address — edit any field, or tap Change to pick another.",
+  changeAddressLabel: "Change",
+  addNewAddressNote: "Enter a delivery address below.",
+  saveAddressLabel: "Save this address to my account",
 } as const;

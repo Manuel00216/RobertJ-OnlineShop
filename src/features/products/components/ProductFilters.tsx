@@ -4,6 +4,7 @@ import { LayoutGrid, List, SlidersHorizontal, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { FILTER_CHIP_ACTIVE as CHIP_ACTIVE, FILTER_CHIP_IDLE as CHIP_IDLE } from "@/components/ui/filter-chip";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import type { Category } from "@/features/categories/types/category.types";
 import type { ProductSort } from "@/features/products/types/product.types";
@@ -25,11 +26,6 @@ const SORT_OPTIONS: Array<{ value: ProductSort; label: string }> = [
   { value: "price-desc", label: "Price: High to Low" },
   { value: "title-asc", label: "Title: A to Z" },
 ];
-
-const CHIP_ACTIVE =
-  "rounded-full border-[1.5px] border-rj-black bg-rj-black px-4 py-1.5 text-[11px] font-bold text-rj-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30";
-const CHIP_IDLE =
-  "rounded-full border-[1.5px] border-rj-gray-200 bg-transparent px-4 py-1.5 text-[11px] font-bold text-rj-gray-600 transition-all hover:border-rj-black hover:text-rj-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30";
 
 /** Category chips + shop + price range + sort control for the product listing. */
 export function ProductFilters({ categories = [], shops = [] }: ProductFiltersProps) {

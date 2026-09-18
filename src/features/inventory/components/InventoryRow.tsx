@@ -21,18 +21,22 @@ export function InventoryRow({ item, isAdmin }: InventoryRowProps) {
   const [mode, setMode] = useState<"view" | "adjust" | "history">("view");
 
   return (
-    <Card className="border-rj-gray-100">
+    <Card>
       <CardContent className="flex flex-col gap-3 p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="truncate text-sm font-semibold text-rj-black">
+              <p className="truncate text-sm font-semibold text-foreground">
                 {item.productTitle}
+                {item.variantLabel ? (
+                  <span className="font-normal text-muted-foreground"> — {item.variantLabel}</span>
+                ) : null}
               </p>
+              {item.variantId ? <Badge tone="info">Variant</Badge> : null}
               <StockStatusBadge status={item.stockStatus} />
               {isAdmin && item.shopName ? <Badge tone="neutral">{item.shopName}</Badge> : null}
             </div>
-            <p className="mt-1 text-xs text-rj-gray-600">
+            <p className="mt-1 text-xs text-muted-foreground">
               {item.quantity} in stock · low-stock threshold {item.lowStockThreshold}
             </p>
           </div>
@@ -48,7 +52,7 @@ export function InventoryRow({ item, isAdmin }: InventoryRowProps) {
             </Button>
             <Button
               type="button"
-              variant="rj"
+              variant="primary"
               size="rjSm"
               onClick={() => setMode(mode === "adjust" ? "view" : "adjust")}
             >
@@ -58,14 +62,14 @@ export function InventoryRow({ item, isAdmin }: InventoryRowProps) {
         </div>
 
         {mode === "adjust" ? (
-          <div className="rounded-2xl border border-rj-gray-100 bg-rj-gray-50 p-4">
+          <div className="rounded-2xl border border-border bg-muted p-4">
             <StockAdjustmentForm item={item} onDone={() => setMode("view")} />
           </div>
         ) : null}
 
         {mode === "history" ? (
-          <div className="rounded-2xl border border-rj-gray-100 bg-rj-gray-50 p-4">
-            <StockHistoryPanel productId={item.productId} />
+          <div className="rounded-2xl border border-border bg-muted p-4">
+            <StockHistoryPanel productId={item.productId} variantId={item.variantId} />
           </div>
         ) : null}
       </CardContent>

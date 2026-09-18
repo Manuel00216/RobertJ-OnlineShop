@@ -19,12 +19,12 @@ export function AdminShopsPanel({ shops }: AdminShopsPanelProps) {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-rj-gray-600">
+        <p className="text-sm text-muted-foreground">
           {shops.length} shop{shops.length === 1 ? "" : "s"}
         </p>
         <Button
           type="button"
-          variant="rj"
+          variant="primary"
           size="rjSm"
           onClick={() => setShowCreateForm((value) => !value)}
         >
@@ -33,7 +33,7 @@ export function AdminShopsPanel({ shops }: AdminShopsPanelProps) {
       </div>
 
       {showCreateForm ? (
-        <div className="rounded-2xl border border-rj-gray-100 bg-rj-gray-50 p-5">
+        <div className="rounded-2xl border border-border bg-muted p-5">
           <ShopForm onDone={() => setShowCreateForm(false)} />
         </div>
       ) : null}

@@ -12,6 +12,7 @@ import {
   PAYMENT_STATUS,
   PRODUCT_STATUS,
   type OrderStatus,
+  type PaymentStatus,
   type ProductCondition,
   type ProductStatus,
   type ReturnStatus,
@@ -22,6 +23,7 @@ import {
   createSupabaseServerClient,
 } from "@/lib/supabase/server";
 import { mapPostgresError } from "@/lib/supabase/postgres-errors";
+import { queryError, rpcError } from "@/lib/supabase/query-error";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { slugify } from "@/lib/utils/format";
 import { toCents } from "@/lib/utils/currency";
@@ -35,9 +37,15 @@ import type {
   Product,
   ProductImage,
   ProductListParams,
+  ProductVariant,
 } from "@/features/products/types/product.types";
 import type { Category } from "@/features/categories/types/category.types";
 import type { LandingStat } from "@/features/landing/types/landing.types";
+import type {
+  GuidedSelectionMatch,
+  RecommendationOccasion,
+  RecommendationRule,
+} from "@/features/assistant/types/assistant.types";
 import {
   CANCELLABLE_ORDER_STATUSES,
   ORDER_STATUS_FLOW,
@@ -52,11 +60,13 @@ import type {
 } from "@/features/orders/types/order.types";
 import type { UpdateProfileInput } from "@/features/account/schemas/account.schema";
 import type { OAuthProvider } from "@/features/auth/schemas/auth.schema";
-import type { Profile } from "@/features/account/types/account.types";
-import type { Payment, PaymentDecision } from "@/features/payments/types/payment.types";
+import type { BuyerPreferences, Profile } from "@/features/account/types/account.types";
+import type { Payment, PaymentAttempt } from "@/features/payments/types/payment.types";
 import type { Shop, ShopWithMember } from "@/features/shops/types/shop.types";
 import type { AdminUser } from "@/features/users/types/user.types";
 import type { AdjustStockInput } from "@/features/inventory/schemas/inventory.schema";
+import type { AddressInput } from "@/features/addresses/schemas/address.schema";
+import type { Address } from "@/features/addresses/types/address.types";
 import {
   getStockStatus,
   type InventoryItem,
@@ -76,6 +86,7 @@ import type {
 import type { BuyerActivityEvent } from "@/features/notifications/types/notification.types";
 import type {
   AdminReturnDecision,
+  PendingXenditRefund,
   ReturnRequest,
   SellerReturnDecision,
 } from "@/features/returns/types/return.types";
@@ -262,7 +273,7 @@ export async function listProducts(
   const { data, error, count } = await query.range(from, to);
 
   if (error) {
-    throw new Error(`Failed to load products: ${error.message}`);
+    throw queryError("Failed to load products", error);
   }
 
   const total = count ?? 0;
@@ -292,7 +303,7 @@ export async function listFeaturedProducts(limit = 8): Promise<Product[]> {
     .limit(limit);
 
   if (error) {
-    throw new Error(`Failed to load featured products: ${error.message}`);
+    throw queryError("Failed to load featured products", error);
   }
 
   return (data ?? []).map((row) => toProduct(row as ProductRowWithImages));
@@ -313,7 +324,7 @@ export const getProductBySlug = cache(
       .maybeSingle();
 
     if (error) {
-      throw new Error(`Failed to load product: ${error.message}`);
+      throw queryError("Failed to load product", error);
     }
 
     return data ? toProduct(data as ProductRowWithImages) : null;
@@ -341,10 +352,70 @@ export async function listRelatedProducts(
     .limit(limit);
 
   if (error) {
-    throw new Error(`Failed to load related products: ${error.message}`);
+    throw queryError("Failed to load related products", error);
   }
 
   return (data ?? []).map((row) => toProduct(row as ProductRowWithImages));
+}
+
+/**
+ * Same-category, active, newest-first products for `anchorProductId`,
+ * excluding every id in `excludeIds` — the shared rule behind both
+ * `listCartRecommendations` and `listSimilarProducts` (same rule
+ * `listRelatedProducts` uses on the PDP; not a personalized engine).
+ * Returns `[]` when the anchor has no category or no longer exists (e.g. it
+ * sold out/was archived after being added to the cart).
+ */
+async function listSameCategoryProducts(
+  anchorProductId: string,
+  excludeIds: string[],
+  limit: number,
+): Promise<Product[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data: anchor, error: anchorError } = await supabase
+    .from(DATABASE_TABLES.PRODUCTS)
+    .select("category_id")
+    .eq("id", anchorProductId)
+    .maybeSingle();
+
+  if (anchorError) {
+    throw queryError("Failed to load similar products", anchorError);
+  }
+  if (!anchor?.category_id) return [];
+
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PRODUCTS)
+    .select(PRODUCT_COLUMNS)
+    .eq("status", PRODUCT_STATUS.active)
+    .eq("category_id", anchor.category_id)
+    .not("id", "in", `(${excludeIds.join(",")})`)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    throw queryError("Failed to load similar products", error);
+  }
+
+  return (data ?? []).map((row) => toProduct(row as ProductRowWithImages));
+}
+
+/** Cart-page "You may also like" — anchored on the first item in the cart,
+ * excluding every product already in it, not just the anchor. */
+export async function listCartRecommendations(
+  cartProductIds: string[],
+  limit = 4,
+): Promise<Product[]> {
+  if (cartProductIds.length === 0) return [];
+  return listSameCategoryProducts(cartProductIds[0], cartProductIds, limit);
+}
+
+/** Cart-row "Find Similar" — same-category matches for one specific line,
+ * excluding only that product itself. */
+export async function listSimilarProducts(
+  productId: string,
+  limit = 6,
+): Promise<Product[]> {
+  return listSameCategoryProducts(productId, [productId], limit);
 }
 
 export interface ProductSuggestion {
@@ -377,7 +448,7 @@ export async function searchProductSuggestions(
     .limit(limit);
 
   if (error) {
-    throw new Error(`Failed to search products: ${error.message}`);
+    throw queryError("Failed to search products", error);
   }
   return data ?? [];
 }
@@ -414,7 +485,7 @@ export async function getProductsPriceAndStock(
     .in("id", ids);
 
   if (error) {
-    throw new Error(`Failed to check product availability: ${error.message}`);
+    throw queryError("Failed to check product availability", error);
   }
 
   return (data ?? []).map((row) => ({
@@ -423,6 +494,163 @@ export async function getProductsPriceAndStock(
     quantity: row.quantity,
     status: row.status as ProductStatus,
   }));
+}
+
+/** Live price/stock snapshot for one variant, resolved against its parent product. */
+export interface VariantPriceAndStock {
+  id: string;
+  productId: string;
+  /** The variant's own price override, or the parent product's price when it has none. */
+  priceCents: number;
+  quantity: number;
+  status: ProductStatus;
+}
+
+/**
+ * Batch stock lookup for variants — the counterpart to `products.quantity`
+ * for a variant-level line, since `inventory` itself is not publicly
+ * readable (see `get_variant_stock`'s migration comment). Returns 0 for any
+ * id the RPC didn't return a row for (not found, inactive, or its parent
+ * product inactive) rather than throwing — mirrors `getProductsPriceAndStock`'s
+ * "missing = unavailable" convention.
+ */
+export async function getVariantStock(
+  variantIds: string[],
+): Promise<Map<string, number>> {
+  if (variantIds.length === 0) return new Map();
+
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("get_variant_stock", {
+    p_variant_ids: variantIds,
+  });
+
+  if (error) {
+    throw queryError("Failed to check variant stock", error);
+  }
+
+  return new Map((data ?? []).map((row) => [row.variant_id, row.quantity]));
+}
+
+/**
+ * Batch re-check of current price/stock/status for a set of variant ids — the
+ * variant-level counterpart to `getProductsPriceAndStock`. Public (no auth):
+ * same guest-cart reasoning as the product version. A variant missing from
+ * the result (inactive, deleted, or its parent product no longer active) must
+ * be treated as "no longer available" by the caller, same convention as the
+ * product version.
+ */
+export async function getVariantsPriceAndStock(
+  variantIds: string[],
+): Promise<VariantPriceAndStock[]> {
+  if (variantIds.length === 0) return [];
+
+  const supabase = await createSupabaseServerClient();
+  const { data: variants, error } = await supabase
+    .from(DATABASE_TABLES.PRODUCT_VARIANTS)
+    .select("id, product_id, price_cents")
+    .in("id", variantIds);
+
+  if (error) {
+    throw queryError("Failed to check variant availability", error);
+  }
+  if (!variants || variants.length === 0) return [];
+
+  const productIds = [...new Set(variants.map((row) => row.product_id))];
+  const [products, stock] = await Promise.all([
+    getProductsPriceAndStock(productIds),
+    getVariantStock(variantIds),
+  ]);
+  const productById = new Map(products.map((product) => [product.id, product]));
+
+  return variants.flatMap((row) => {
+    const product = productById.get(row.product_id);
+    // The parent product isn't in the (active-only) result — treat the
+    // variant as unavailable too, rather than fabricating a price.
+    if (!product) return [];
+    return [
+      {
+        id: row.id,
+        productId: row.product_id,
+        priceCents: row.price_cents ?? product.priceCents,
+        quantity: stock.get(row.id) ?? 0,
+        status: product.status,
+      },
+    ];
+  });
+}
+
+/** One cart line to revalidate: a plain product, or a specific variant of one. */
+export interface CartAvailabilityQuery {
+  productId: string;
+  variantId?: string;
+}
+
+/** Live price/stock snapshot for one cart line — product- or variant-level. */
+export interface CartAvailabilityEntry {
+  productId: string;
+  variantId: string | null;
+  priceCents: number;
+  quantity: number;
+  status: ProductStatus;
+}
+
+/**
+ * Revalidates a client-side cart against the live database — the merged,
+ * variant-aware counterpart to calling `getProductsPriceAndStock` alone.
+ * Non-variant lines are checked against `products`; variant lines are
+ * checked against `product_variants` + variant-level `inventory` (via
+ * `getVariantsPriceAndStock`). A line missing from the result means "no
+ * longer available" — same convention both underlying functions already use.
+ */
+export async function checkCartAvailability(
+  lines: CartAvailabilityQuery[],
+): Promise<CartAvailabilityEntry[]> {
+  const productIds = [
+    ...new Set(lines.filter((line) => !line.variantId).map((line) => line.productId)),
+  ];
+  const variantIds = [
+    ...new Set(
+      lines
+        .filter((line): line is CartAvailabilityQuery & { variantId: string } =>
+          Boolean(line.variantId),
+        )
+        .map((line) => line.variantId),
+    ),
+  ];
+
+  const [products, variants] = await Promise.all([
+    getProductsPriceAndStock(productIds),
+    getVariantsPriceAndStock(variantIds),
+  ]);
+  const productById = new Map(products.map((product) => [product.id, product]));
+  const variantById = new Map(variants.map((variant) => [variant.id, variant]));
+
+  return lines.flatMap((line): CartAvailabilityEntry[] => {
+    if (line.variantId) {
+      const variant = variantById.get(line.variantId);
+      if (!variant) return [];
+      return [
+        {
+          productId: line.productId,
+          variantId: line.variantId,
+          priceCents: variant.priceCents,
+          quantity: variant.quantity,
+          status: variant.status,
+        },
+      ];
+    }
+    const product = productById.get(line.productId);
+    if (!product) return [];
+    return [
+      {
+        productId: line.productId,
+        variantId: null,
+        priceCents: product.priceCents,
+        quantity: product.quantity,
+        status: product.status,
+      },
+    ];
+  });
 }
 
 /**
@@ -441,7 +669,7 @@ export async function listActiveProductSlugsForSitemap(): Promise<
     .eq("status", PRODUCT_STATUS.active);
 
   if (error) {
-    throw new Error(`Failed to load product slugs: ${error.message}`);
+    throw queryError("Failed to load product slugs", error);
   }
 
   return (data ?? []).map((row) => ({
@@ -484,7 +712,7 @@ export async function createProduct(
     .single();
 
   if (error) {
-    throw new Error(`Failed to create product: ${error.message}`);
+    throw queryError("Failed to create product", error);
   }
 
   return toProduct(data as ProductRowWithImages);
@@ -557,7 +785,7 @@ export async function updateProduct(
     .single();
 
   if (error) {
-    throw new Error(`Failed to update product: ${error.message}`);
+    throw queryError("Failed to update product", error);
   }
 
   return toProduct(data as ProductRowWithImages);
@@ -600,7 +828,7 @@ export async function archiveProduct(
     .eq("id", id);
 
   if (error) {
-    throw new Error(`Failed to archive product: ${error.message}`);
+    throw queryError("Failed to archive product", error);
   }
 }
 
@@ -628,14 +856,48 @@ export async function productBelongsToOwner(
     .maybeSingle();
 
   if (error) {
-    throw new Error(`Failed to verify product ownership: ${error.message}`);
+    throw queryError("Failed to verify product ownership", error);
   }
   return Boolean(data);
 }
 
 /**
+ * Resolves a product's own `seller_id`/`shop_id` — used when creating a
+ * variant, so the variant is attributed to the product's *actual* owner
+ * (never the acting admin's own id) while still verifying the caller
+ * (owner = null for admin) is authorized to touch this product at all.
+ */
+export async function getProductOwnerInfo(
+  productId: string,
+  owner: { sellerId: string; shopId: string | null } | null,
+): Promise<{ sellerId: string; shopId: string | null }> {
+  const supabase = await createSupabaseServerClient();
+  let query = supabase
+    .from(DATABASE_TABLES.PRODUCTS)
+    .select("seller_id, shop_id")
+    .eq("id", productId);
+
+  if (owner) {
+    const ownerFilter = owner.shopId
+      ? `seller_id.eq.${owner.sellerId},shop_id.eq.${owner.shopId}`
+      : `seller_id.eq.${owner.sellerId}`;
+    query = query.or(ownerFilter);
+  }
+
+  const { data, error } = await query.maybeSingle();
+
+  if (error) {
+    throw queryError("Failed to load product", error);
+  }
+  if (!data) {
+    throw new Error("Product not found.");
+  }
+  return { sellerId: data.seller_id, shopId: data.shop_id };
+}
+
+/**
  * Uploads one product photo to the public `product-images` bucket and
- * returns its public URL — mirrors `uploadPaymentReceipt`'s path convention
+ * returns its public URL — mirrors `uploadReturnEvidence`'s path convention
  * (`{parent_id}/{uuid}.{ext}`), except this bucket is public (product photos
  * must be visible to guests) so the URL, not a private path, is what
  * `product_images.url` stores (see the `product_images_url_scheme` check
@@ -654,7 +916,7 @@ export async function uploadProductImage(
     .upload(path, file, { contentType: file.type });
 
   if (error) {
-    throw new Error(`Failed to upload image: ${error.message}`);
+    throw queryError("Failed to upload image", error);
   }
 
   const { data } = supabase.storage.from("product-images").getPublicUrl(path);
@@ -694,7 +956,7 @@ export async function addProductImage(
     .single();
 
   if (error) {
-    throw new Error(`Failed to save image: ${error.message}`);
+    throw queryError("Failed to save image", error);
   }
 
   return {
@@ -772,7 +1034,7 @@ export async function listWishlistProductIds(userId: string): Promise<string[]> 
     .eq("user_id", userId);
 
   if (error) {
-    throw new Error(`Failed to load wishlist: ${error.message}`);
+    throw queryError("Failed to load wishlist", error);
   }
   return (data ?? []).map((row) => row.product_id);
 }
@@ -791,7 +1053,7 @@ export async function isProductWishlisted(
     .maybeSingle();
 
   if (error) {
-    throw new Error(`Failed to check wishlist: ${error.message}`);
+    throw queryError("Failed to check wishlist", error);
   }
   return data !== null;
 }
@@ -916,7 +1178,7 @@ export async function listProductReviews(
     .order("created_at", { ascending: false });
 
   if (error) {
-    throw new Error(`Failed to load reviews: ${error.message}`);
+    throw queryError("Failed to load reviews", error);
   }
 
   const reviews = (data ?? []).map((row) => toReview(row as ReviewRow));
@@ -971,7 +1233,7 @@ export async function listReviewedOrderItemIds(
     .in("order_item_id", orderItemIds);
 
   if (error) {
-    throw new Error(`Failed to check existing reviews: ${error.message}`);
+    throw queryError("Failed to check existing reviews", error);
   }
   return new Set((data ?? []).map((row) => row.order_item_id));
 }
@@ -996,7 +1258,7 @@ export async function getBuyerActivityFeed(
   });
 
   if (error) {
-    throw new Error(`Failed to load activity: ${error.message}`);
+    throw queryError("Failed to load activity", error);
   }
 
   return (data ?? []).map((row) => ({
@@ -1066,7 +1328,7 @@ export async function listActiveCategories(limit?: number): Promise<Category[]> 
   const { data, error } = await query;
 
   if (error) {
-    throw new Error(`Failed to load categories: ${error.message}`);
+    throw queryError("Failed to load categories", error);
   }
 
   return (data ?? []).map((row) => toCategory(row as CategoryRowWithCount));
@@ -1090,7 +1352,7 @@ export async function getCategoryBySlug(slug: string): Promise<Category | null> 
     .maybeSingle();
 
   if (error) {
-    throw new Error(`Failed to load category: ${error.message}`);
+    throw queryError("Failed to load category", error);
   }
 
   return data
@@ -1120,7 +1382,7 @@ export async function listActiveCategorySlugsForSitemap(): Promise<
     .eq("active", true);
 
   if (error) {
-    throw new Error(`Failed to load category slugs: ${error.message}`);
+    throw queryError("Failed to load category slugs", error);
   }
 
   return (data ?? []).map((row) => ({
@@ -1211,11 +1473,12 @@ type OrderItemRow = Database["public"]["Tables"]["order_items"]["Row"];
 const ORDER_COLUMNS = `
   id, order_number, buyer_id, seller_id, subtotal_cents, shipping_fee_cents,
   total_cents, currency, payment_status, order_status, shipping_address, notes,
-  placed_at, paid_at, shipped_at, delivered_at, cancelled_at,
+  placed_at, paid_at, shipped_at, delivered_at, cancelled_at, checkout_group_id,
   buyer:profiles!orders_buyer_id_fkey ( full_name, username ),
-  seller:profiles!orders_seller_id_fkey ( full_name, username, payment_qr_url, role ),
+  seller:profiles!orders_seller_id_fkey ( full_name, username, role ),
   order_items (
     id, product_id, product_title, quantity, unit_price_cents, subtotal_cents,
+    variant_id, variant_label,
     product:products!order_items_product_id_fkey ( slug, product_images ( url ) )
   )
 `;
@@ -1223,7 +1486,7 @@ const ORDER_COLUMNS = `
 type OrderRowWithItems = Omit<OrderRow, "shipping_address"> & {
   shipping_address: Json;
   buyer: Pick<ProfileRow, "full_name" | "username"> | null;
-  seller: Pick<ProfileRow, "full_name" | "username" | "payment_qr_url" | "role"> | null;
+  seller: Pick<ProfileRow, "full_name" | "username" | "role"> | null;
   order_items: Array<
     OrderItemRow & {
       product: { slug: string; product_images: { url: string }[] } | null;
@@ -1244,7 +1507,10 @@ function toShippingAddress(value: Json): ShippingAddress | null {
     fullName: record.full_name,
     line1: str("line1") ?? "",
     line2: str("line2"),
+    barangay: str("barangay"),
     city: str("city") ?? "",
+    province: str("province"),
+    region: str("region"),
     postalCode: str("postal_code") ?? "",
     country: str("country") ?? "",
     phone: str("phone"),
@@ -1269,7 +1535,6 @@ function toOrder(row: OrderRowWithItems): Order {
     sellerId: row.seller_id,
     sellerName: row.seller?.full_name ?? row.seller?.username ?? null,
     sellerRole: (row.seller?.role as UserRole | undefined) ?? null,
-    sellerPaymentQrUrl: row.seller?.payment_qr_url ?? null,
     items: (row.order_items ?? []).map((item) => ({
       id: item.id,
       productId: item.product_id,
@@ -1279,6 +1544,8 @@ function toOrder(row: OrderRowWithItems): Order {
       subtotalCents: item.subtotal_cents,
       productSlug: item.product?.slug ?? null,
       imageUrl: item.product?.product_images?.[0]?.url ?? null,
+      variantId: item.variant_id,
+      variantLabel: item.variant_label,
     })),
     placedAt: row.placed_at,
     paidAt: row.paid_at,
@@ -1286,6 +1553,7 @@ function toOrder(row: OrderRowWithItems): Order {
     deliveredAt: row.delivered_at,
     cancelledAt: row.cancelled_at,
     cancellable: CANCELLABLE_ORDER_STATUSES.includes(row.order_status),
+    checkoutGroupId: row.checkout_group_id,
   };
 }
 
@@ -1318,7 +1586,7 @@ export async function listBuyerOrders(
   const { data, error, count } = await query.range(from, to);
 
   if (error) {
-    throw new Error(`Failed to load orders: ${error.message}`);
+    throw queryError("Failed to load orders", error);
   }
 
   const total = count ?? 0;
@@ -1347,7 +1615,7 @@ export const getBuyerOrder = cache(
       .maybeSingle();
 
     if (error) {
-      throw new Error(`Failed to load order: ${error.message}`);
+      throw queryError("Failed to load order", error);
     }
 
     return data ? toOrder(data as OrderRowWithItems) : null;
@@ -1446,7 +1714,7 @@ export async function cancelBuyerOrder(
     .eq("buyer_id", buyerId);
 
   if (error) {
-    throw new Error(`Failed to cancel order: ${error.message}`);
+    throw queryError("Failed to cancel order", error);
   }
 }
 
@@ -1480,7 +1748,7 @@ export async function listDashboardOrders(
   const { data, error, count } = await query.range(from, to);
 
   if (error) {
-    throw new Error(`Failed to load orders: ${error.message}`);
+    throw queryError("Failed to load orders", error);
   }
 
   const total = count ?? 0;
@@ -1523,7 +1791,7 @@ export const getDashboardOrder = cache(
     const { data, error } = await query.maybeSingle();
 
     if (error) {
-      throw new Error(`Failed to load order: ${error.message}`);
+      throw queryError("Failed to load order", error);
     }
 
     return data ? toOrder(data as OrderRowWithItems) : null;
@@ -1542,6 +1810,14 @@ export const getDashboardOrder = cache(
  * silent no-op. Cancelling an order (newStatus = 'cancelled') restocks
  * automatically via the `orders_restock_on_cancel` trigger — no extra code
  * needed here.
+ *
+ * Forward transitions (anything but 'cancelled') additionally require the
+ * order to actually be paid if it's a Xendit order — see the unpaid-Xendit
+ * guard below. `orders.payment_status` starts 'pending' for COD orders too
+ * (COD is settled on delivery via `mark_cod_payment_collected`), so `<> paid`
+ * alone can't distinguish "COD, pay on delivery" from "Xendit attempt still
+ * unresolved" — the guard only fires when a `payments` row for this order is
+ * actually `payment_method_type = 'xendit'`.
  */
 /**
  * `sellerId`: the caller's own id for a non-admin request (`null` = admin,
@@ -1558,7 +1834,7 @@ export async function advanceOrderStatus(
 
   let readQuery = supabase
     .from(DATABASE_TABLES.ORDERS)
-    .select("order_status")
+    .select("order_status, payment_status")
     .eq("id", orderId);
   if (sellerId) readQuery = readQuery.eq("seller_id", sellerId);
 
@@ -1579,6 +1855,29 @@ export async function advanceOrderStatus(
     );
   }
 
+  // Unpaid-Xendit guard: cancellation is exempt (unaffected by this fix), and
+  // an already-paid order never needs the extra lookup. Only a forward step
+  // on a not-yet-paid order pays the cost of checking whether it's a Xendit
+  // order at all.
+  if (newStatus !== "cancelled" && existing.payment_status !== "paid") {
+    const { data: xenditPayment, error: xenditCheckError } = await supabase
+      .from(DATABASE_TABLES.PAYMENTS)
+      .select("id")
+      .eq("order_id", orderId)
+      .eq("payment_method_type", "xendit")
+      .limit(1)
+      .maybeSingle();
+
+    if (xenditCheckError) {
+      throw queryError("Failed to verify payment status", xenditCheckError);
+    }
+    if (xenditPayment) {
+      throw new Error(
+        "This order's online payment hasn't been completed yet. It can't be moved forward until the payment succeeds.",
+      );
+    }
+  }
+
   let writeQuery = supabase
     .from(DATABASE_TABLES.ORDERS)
     .update({ order_status: newStatus })
@@ -1589,7 +1888,7 @@ export async function advanceOrderStatus(
   const { data, error } = await writeQuery.select(ORDER_COLUMNS).maybeSingle();
 
   if (error) {
-    throw new Error(`Failed to update order status: ${error.message}`);
+    throw queryError("Failed to update order status", error);
   }
   if (!data) {
     throw new Error(
@@ -1603,7 +1902,7 @@ export async function advanceOrderStatus(
 /** One seller-order to create. `shippingAddress` uses the DB's snake_case keys. */
 export interface CreateOrderInput {
   sellerId: string;
-  items: { productId: string; quantity: number }[];
+  items: { productId: string; quantity: number; variantId?: string }[];
   shippingAddress: Json;
   shippingFeeCents: number;
   notes?: string | null;
@@ -1626,6 +1925,7 @@ export async function createOrder(
     p_items: input.items.map((item) => ({
       product_id: item.productId,
       quantity: item.quantity,
+      variant_id: item.variantId ?? undefined,
     })),
     p_shipping_address: input.shippingAddress,
     p_shipping_fee_cents: input.shippingFeeCents,
@@ -1633,7 +1933,9 @@ export async function createOrder(
   });
 
   if (error) {
-    throw new Error(error.message);
+    // create_order RAISEs curated, user-facing messages ("Only 2 left of …",
+    // "Product X is not available") — preserve them; log the raw error.
+    throw rpcError("Could not place this order.", error);
   }
   if (!data) {
     throw new Error("Could not create the order.");
@@ -1644,6 +1946,83 @@ export async function createOrder(
     orderNumber: data.order_number,
     sellerId: data.seller_id,
   };
+}
+
+/** One seller's slice of a multi-seller checkout group. */
+export interface CreateOrderGroupInput {
+  groups: {
+    sellerId: string;
+    items: { productId: string; quantity: number; variantId?: string }[];
+  }[];
+  shippingAddress: Json;
+  shippingFeeCents: number;
+  notes?: string | null;
+}
+
+/**
+ * Creates every seller's order for one multi-seller, one-combined-payment
+ * checkout via the `create_order_group` RPC. The `checkout_group_id` is
+ * minted by the database inside that RPC — never generated here or sent by
+ * the client. All-or-nothing: any per-seller failure (stock, pricing) rolls
+ * back every order in the batch, unlike the single-seller `createOrder` loop
+ * in `placeOrderAction`, which stays partial-success and untouched.
+ */
+export async function createOrderGroup(
+  input: CreateOrderGroupInput,
+): Promise<{
+  checkoutGroupId: string;
+  orders: { orderId: string; orderNumber: string; sellerId: string }[];
+}> {
+  const supabase = await createSupabaseServerClient();
+
+  const { data, error } = await supabase.rpc("create_order_group", {
+    p_groups: input.groups.map((group) => ({
+      seller_id: group.sellerId,
+      items: group.items.map((item) => ({
+        product_id: item.productId,
+        quantity: item.quantity,
+        variant_id: item.variantId ?? undefined,
+      })),
+    })),
+    p_shipping_address: input.shippingAddress,
+    p_shipping_fee_cents: input.shippingFeeCents,
+    p_notes: input.notes ?? undefined,
+  });
+
+  if (error) {
+    throw rpcError("Could not place this order.", error);
+  }
+  if (!data || data.length === 0 || !data[0].checkout_group_id) {
+    throw new Error("Could not create the order.");
+  }
+
+  return {
+    checkoutGroupId: data[0].checkout_group_id,
+    orders: data.map((order) => ({
+      orderId: order.id,
+      orderNumber: order.order_number,
+      sellerId: order.seller_id,
+    })),
+  };
+}
+
+/**
+ * Order ids for a checkout group, RLS-scoped to the buyer's own orders —
+ * used only to build the post-payment redirect URL back to the confirmation
+ * page; ownership for any actual mutation is always re-verified inside the
+ * relevant RPC regardless of this list.
+ */
+export async function getOrderIdsForCheckoutGroup(checkoutGroupId: string): Promise<string[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.ORDERS)
+    .select("id")
+    .eq("checkout_group_id", checkoutGroupId);
+
+  if (error) {
+    throw queryError("Failed to load checkout group orders", error);
+  }
+  return (data ?? []).map((row) => row.id);
 }
 
 // ============================================================================
@@ -1657,8 +2036,11 @@ function toProfile(
     | "id"
     | "full_name"
     | "username"
+    | "username_changed_at"
     | "avatar_url"
     | "phone"
+    | "gender"
+    | "date_of_birth"
     | "bio"
     | "payment_qr_url"
     | "role"
@@ -1668,8 +2050,11 @@ function toProfile(
     id: row.id,
     fullName: row.full_name,
     username: row.username,
+    usernameChangedAt: row.username_changed_at,
     avatarUrl: row.avatar_url,
     phone: row.phone,
+    gender: row.gender,
+    dateOfBirth: row.date_of_birth,
     bio: row.bio,
     paymentQrUrl: row.payment_qr_url,
     role: row.role,
@@ -1686,7 +2071,7 @@ export async function getMyProfile(): Promise<Profile | null> {
   const { data, error } = await supabase.rpc("get_my_profile");
 
   if (error) {
-    throw new Error(`Failed to load profile: ${error.message}`);
+    throw queryError("Failed to load profile", error);
   }
 
   return data ? toProfile(data) : null;
@@ -1707,10 +2092,10 @@ export async function updateMyProfile(
     .update({
       full_name: input.fullName || null,
       username: input.username || null,
-      avatar_url: input.avatarUrl || null,
       phone: input.phone || null,
+      gender: input.gender || null,
+      date_of_birth: input.dateOfBirth || null,
       bio: input.bio || null,
-      payment_qr_url: input.paymentQrUrl || null,
     })
     .eq("id", userId);
 
@@ -1731,21 +2116,375 @@ export async function updateMyProfile(
   return profile;
 }
 
+function avatarPathFromUrl(url: string): string | undefined {
+  return new URL(url).pathname.split("/avatars/")[1];
+}
+
+/**
+ * Uploads a new avatar to the `avatars` bucket and makes it the caller's
+ * `profiles.avatar_url`, then removes the previous file — same
+ * upload-first-then-persist-then-cleanup ordering as `replaceShopImage`, so
+ * a failure at any step never leaves the profile pointing at a file that
+ * was never persisted, or an orphaned file nothing points to.
+ */
+export async function uploadAvatar(userId: string, file: File): Promise<string> {
+  const supabase = await createSupabaseServerClient();
+
+  const { data: current } = await supabase
+    .from(DATABASE_TABLES.PROFILES)
+    .select("avatar_url")
+    .eq("id", userId)
+    .maybeSingle();
+  const previousUrl = current?.avatar_url ?? null;
+
+  const ext = file.name.split(".").pop() ?? "jpg";
+  const path = `${userId}/${crypto.randomUUID()}.${ext}`;
+  const { error: uploadError } = await supabase.storage
+    .from("avatars")
+    .upload(path, file, { contentType: file.type });
+  if (uploadError) {
+    throw queryError("Failed to upload image", uploadError);
+  }
+
+  const { data: publicUrlData } = supabase.storage.from("avatars").getPublicUrl(path);
+  const newUrl = publicUrlData.publicUrl;
+
+  const { error: updateError } = await supabase
+    .from(DATABASE_TABLES.PROFILES)
+    .update({ avatar_url: newUrl })
+    .eq("id", userId);
+  if (updateError) {
+    await supabase.storage.from("avatars").remove([path]).catch(() => undefined);
+    throw queryError("Failed to update your profile", updateError);
+  }
+
+  if (previousUrl) {
+    const oldPath = avatarPathFromUrl(previousUrl);
+    if (oldPath) {
+      await supabase.storage.from("avatars").remove([oldPath]).catch(() => undefined);
+    }
+  }
+
+  return newUrl;
+}
+
+/** Clears the caller's avatar and removes the file from Storage. */
+export async function removeAvatar(userId: string): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+
+  const { data: current } = await supabase
+    .from(DATABASE_TABLES.PROFILES)
+    .select("avatar_url")
+    .eq("id", userId)
+    .maybeSingle();
+  const previousUrl = current?.avatar_url ?? null;
+
+  const { error } = await supabase
+    .from(DATABASE_TABLES.PROFILES)
+    .update({ avatar_url: null })
+    .eq("id", userId);
+  if (error) {
+    throw queryError("Failed to update your profile", error);
+  }
+
+  if (previousUrl) {
+    const oldPath = avatarPathFromUrl(previousUrl);
+    if (oldPath) {
+      await supabase.storage.from("avatars").remove([oldPath]).catch(() => undefined);
+    }
+  }
+}
+
 // ============================================================================
-// Payments (QR receipt upload + manual verification — ADR-008)
+// Addresses (buyer saved shipping addresses — Phase 2 checkout improvement)
+// ============================================================================
+
+type AddressRow = Database["public"]["Tables"]["addresses"]["Row"];
+
+function toAddress(row: AddressRow): Address {
+  return {
+    id: row.id,
+    label: row.label,
+    recipientName: row.recipient_name,
+    phone: row.phone,
+    region: row.region,
+    province: row.province,
+    city: row.city,
+    barangay: row.barangay,
+    streetDetails: row.street_details,
+    postalCode: row.postal_code,
+    country: row.country,
+    isDefault: row.is_default,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+const ADDRESS_COLUMNS =
+  "id, label, recipient_name, phone, region, province, city, barangay, street_details, postal_code, country, is_default, created_at, updated_at";
+
+/**
+ * The signed-in buyer's saved addresses, default first then newest. `userId`
+ * is passed explicitly by the caller (already resolved via
+ * `requireSessionUser()`), matching the rest of this file's buyer-scoped
+ * reads (e.g. `listBuyerOrders`) — RLS (`user_id = auth.uid()`) is still the
+ * actual enforcement, this is defense in depth, not the boundary itself.
+ */
+export async function listMyAddresses(userId: string): Promise<Address[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.ADDRESSES)
+    .select(ADDRESS_COLUMNS)
+    .eq("user_id", userId)
+    .order("is_default", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw queryError("Failed to load your addresses", error);
+  }
+  return (data ?? []).map((row) => toAddress(row as AddressRow));
+}
+
+/**
+ * Creates a new saved address for the signed-in buyer. A buyer's very first
+ * address becomes their default automatically (nothing else to default to);
+ * every address after that starts non-default — the buyer must explicitly
+ * use `setDefaultAddress` to change it, never an implicit side effect of
+ * adding a new one.
+ */
+export async function createAddress(
+  userId: string,
+  input: AddressInput,
+): Promise<Address> {
+  const supabase = await createSupabaseServerClient();
+
+  const { count, error: countError } = await supabase
+    .from(DATABASE_TABLES.ADDRESSES)
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId);
+
+  if (countError) {
+    throw queryError("Failed to save address", countError);
+  }
+
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.ADDRESSES)
+    .insert({
+      user_id: userId,
+      label: input.label,
+      recipient_name: input.recipientName,
+      phone: input.phone,
+      region: input.region || null,
+      province: input.province || null,
+      city: input.city,
+      barangay: input.barangay || null,
+      street_details: input.streetDetails,
+      postal_code: input.postalCode,
+      is_default: (count ?? 0) === 0,
+    })
+    .select(ADDRESS_COLUMNS)
+    .single();
+
+  if (error) {
+    throw queryError("Failed to save address", error);
+  }
+  return toAddress(data as AddressRow);
+}
+
+/**
+ * Updates one of the signed-in buyer's own addresses. Never touches
+ * `is_default` — editing an address must never silently change which one is
+ * the default; `setDefaultAddress` is the only path for that. RLS scopes the
+ * row to `auth.uid()`; the explicit `user_id` filter is defense in depth.
+ */
+export async function updateAddress(
+  userId: string,
+  addressId: string,
+  input: AddressInput,
+): Promise<Address> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.ADDRESSES)
+    .update({
+      label: input.label,
+      recipient_name: input.recipientName,
+      phone: input.phone,
+      region: input.region || null,
+      province: input.province || null,
+      city: input.city,
+      barangay: input.barangay || null,
+      street_details: input.streetDetails,
+      postal_code: input.postalCode,
+    })
+    .eq("id", addressId)
+    .eq("user_id", userId)
+    .select(ADDRESS_COLUMNS)
+    .single();
+
+  if (error) {
+    throw queryError("Failed to update address", error);
+  }
+  return toAddress(data as AddressRow);
+}
+
+/** Deletes one of the signed-in buyer's own addresses. */
+export async function deleteAddress(userId: string, addressId: string): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from(DATABASE_TABLES.ADDRESSES)
+    .delete()
+    .eq("id", addressId)
+    .eq("user_id", userId);
+
+  if (error) {
+    throw queryError("Failed to delete address", error);
+  }
+}
+
+/**
+ * Marks one address as the buyer's default. The `addresses_single_default`
+ * trigger atomically unsets any other default for this user in the same
+ * statement — no client-side "unset old, then set new" race.
+ */
+export async function setDefaultAddress(
+  userId: string,
+  addressId: string,
+): Promise<Address> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.ADDRESSES)
+    .update({ is_default: true })
+    .eq("id", addressId)
+    .eq("user_id", userId)
+    .select(ADDRESS_COLUMNS)
+    .single();
+
+  if (error) {
+    throw queryError("Failed to set default address", error);
+  }
+  return toAddress(data as AddressRow);
+}
+
+// ============================================================================
+// Buyer Preferences (Privacy & Settings: notifications + default payment method)
+// ============================================================================
+
+type BuyerPreferencesRow = Database["public"]["Tables"]["buyer_preferences"]["Row"];
+
+const BUYER_PREFERENCES_COLUMNS =
+  "order_updates, promotions, push_enabled, email_enabled, sms_enabled, default_payment_method";
+
+function defaultBuyerPreferences(): BuyerPreferences {
+  return {
+    orderUpdates: true,
+    promotions: true,
+    pushEnabled: false,
+    emailEnabled: true,
+    smsEnabled: false,
+    defaultPaymentMethod: null,
+  };
+}
+
+function toBuyerPreferences(row: BuyerPreferencesRow): BuyerPreferences {
+  return {
+    orderUpdates: row.order_updates,
+    promotions: row.promotions,
+    pushEnabled: row.push_enabled,
+    emailEnabled: row.email_enabled,
+    smsEnabled: row.sms_enabled,
+    defaultPaymentMethod: (row.default_payment_method as "cod" | "xendit" | null) ?? null,
+  };
+}
+
+/**
+ * The signed-in buyer's notification/payment-method preferences. A buyer who
+ * has never saved a preference has no row yet — that's "use defaults", not
+ * an error, so a missing row resolves to `defaultBuyerPreferences()` rather
+ * than throwing or auto-creating a row on read.
+ */
+export async function getMyBuyerPreferences(userId: string): Promise<BuyerPreferences> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.BUYER_PREFERENCES)
+    .select(BUYER_PREFERENCES_COLUMNS)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    throw queryError("Failed to load your preferences", error);
+  }
+  return data ? toBuyerPreferences(data as BuyerPreferencesRow) : defaultBuyerPreferences();
+}
+
+/**
+ * Saves one or more of the signed-in buyer's preferences. `upsert` with a
+ * partial payload is safe on both branches: the INSERT branch (first save)
+ * fills any omitted column from the table's own DEFAULT, and the UPDATE
+ * branch (`on conflict (user_id)`) only overwrites the columns present in
+ * `input` — an omitted field is never reset to its default on an existing row.
+ */
+export async function updateMyBuyerPreferences(
+  userId: string,
+  input: Partial<BuyerPreferences>,
+): Promise<BuyerPreferences> {
+  const supabase = await createSupabaseServerClient();
+  const payload: Database["public"]["Tables"]["buyer_preferences"]["Insert"] = {
+    user_id: userId,
+  };
+  if (input.orderUpdates !== undefined) payload.order_updates = input.orderUpdates;
+  if (input.promotions !== undefined) payload.promotions = input.promotions;
+  if (input.pushEnabled !== undefined) payload.push_enabled = input.pushEnabled;
+  if (input.emailEnabled !== undefined) payload.email_enabled = input.emailEnabled;
+  if (input.smsEnabled !== undefined) payload.sms_enabled = input.smsEnabled;
+  if (input.defaultPaymentMethod !== undefined) {
+    payload.default_payment_method = input.defaultPaymentMethod;
+  }
+
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.BUYER_PREFERENCES)
+    .upsert(payload, { onConflict: "user_id" })
+    .select(BUYER_PREFERENCES_COLUMNS)
+    .single();
+
+  if (error) {
+    throw queryError("Failed to save your preferences", error);
+  }
+  return toBuyerPreferences(data as BuyerPreferencesRow);
+}
+
+/**
+ * Deactivates the signed-in buyer's own account via the
+ * `self_deactivate_account` RPC (the sole write path; see that function's
+ * comment for why a plain client update can't do this). The RPC itself
+ * rejects non-buyer callers and an already-inactive account, so those cases
+ * surface as a friendly error here rather than needing a duplicate check.
+ */
+export async function selfDeactivateAccount(): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("self_deactivate_account");
+
+  if (error) {
+    throw rpcError("Could not deactivate your account.", error);
+  }
+}
+
+// ============================================================================
+// Payments (COD collection + Xendit Online Payment)
 // ============================================================================
 
 type PaymentRow = Database["public"]["Tables"]["payments"]["Row"];
 
 /**
- * Payment columns plus the parent order's number and buyer name, for the
- * seller/admin verification queue. Literal for the same reason as
+ * Payment columns plus the parent order's number and buyer name, for
+ * payment-history views. Literal for the same reason as
  * `PRODUCT_COLUMNS`/`ORDER_COLUMNS` — parsed at the type level, must not be
  * interpolated.
  */
 const PAYMENT_COLUMNS = `
-  id, order_id, receipt_path, failure_reason, payment_method_type, amount_cents,
+  id, order_id, receipt_path, failure_reason, payment_method_type,
+  payment_channel, checkout_url, expires_at, amount_cents,
   currency, status, verified_by, verified_at, created_at,
+  xendit_payment_request_id, checkout_group_id,
   order:orders!payments_order_id_fkey (
     order_number,
     buyer:profiles!orders_buyer_id_fkey ( full_name, username )
@@ -1768,88 +2507,440 @@ function toPayment(row: PaymentRowWithOrder): Payment {
     amountCents: row.amount_cents,
     currency: row.currency,
     status: row.status,
+    paymentMethodType: row.payment_method_type,
+    paymentChannel: row.payment_channel,
+    checkoutUrl: row.checkout_url,
+    expiresAt: row.expires_at,
     receiptPath: row.receipt_path,
     failureReason: row.failure_reason,
     verifiedBy: row.verified_by,
     verifiedAt: row.verified_at,
+    xenditPaymentRequestId: row.xendit_payment_request_id,
+    checkoutGroupId: row.checkout_group_id,
+    createdAt: row.created_at,
+  };
+}
+
+function toPaymentAttempt(row: PaymentRow): PaymentAttempt {
+  return {
+    id: row.id,
+    orderId: row.order_id,
+    status: row.status,
+    paymentMethodType: row.payment_method_type,
+    paymentChannel: row.payment_channel,
+    amountCents: row.amount_cents,
+    currency: row.currency,
+    checkoutUrl: row.checkout_url,
+    expiresAt: row.expires_at,
+    xenditPaymentRequestId: row.xendit_payment_request_id,
+    failureReason: row.failure_reason,
+    checkoutGroupId: row.checkout_group_id,
     createdAt: row.created_at,
   };
 }
 
 /**
- * Uploads a QR payment receipt image to the private `payment-receipts`
- * bucket. Path is `{orderId}/{uuid}.{ext}` — RLS on `storage.objects` (see
- * the storage migration) authorizes via the order, not the path alone.
- * Returns the storage path (not a URL — the bucket is private).
+ * Idempotently reserves (or reuses) a Xendit payment attempt for an order via
+ * the `begin_xendit_payment_attempt` RPC — the sole INSERT path into
+ * `payments` for buyers. Re-prices from the order's own total; ownership and
+ * pending-status checks happen inside the RPC.
  */
-export async function uploadPaymentReceipt(
+export async function beginXenditPaymentAttempt(
   orderId: string,
-  file: File,
-): Promise<string> {
+  channelCode: "GCASH" | "PAYMAYA" | "CARD",
+): Promise<PaymentAttempt> {
   const supabase = await createSupabaseServerClient();
-  const ext = file.name.split(".").pop() ?? "jpg";
-  const path = `${orderId}/${crypto.randomUUID()}.${ext}`;
-
-  const { error } = await supabase.storage
-    .from("payment-receipts")
-    .upload(path, file, { contentType: file.type });
-
-  if (error) {
-    throw new Error(`Failed to upload receipt: ${error.message}`);
-  }
-  return path;
-}
-
-/**
- * Records a buyer's QR payment submission via the `submit_qr_payment` RPC —
- * the sole write path into `payments` for buyers (no direct INSERT grant
- * exists). Re-prices from the order's own total; ownership and
- * already-pending checks happen inside the RPC.
- */
-export async function submitQrPayment(
-  orderId: string,
-  receiptPath: string,
-): Promise<void> {
-  const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.rpc("submit_qr_payment", {
+  const { data, error } = await supabase.rpc("begin_xendit_payment_attempt", {
     p_order_id: orderId,
-    p_receipt_path: receiptPath,
+    p_channel_code: channelCode,
   });
 
-  if (error) {
-    throw new Error(
-      mapPostgresError(error, "Could not submit your payment receipt."),
-    );
+  if (error || !data) {
+    throw rpcError("Could not start this payment. Please try again.", error);
   }
+  return toPaymentAttempt(data as PaymentRow);
 }
 
 /**
- * Seller (of the order) or admin marks a pending payment paid/failed via the
- * `verify_payment` RPC — the sole write path for verification (no direct
- * UPDATE grant exists). Also flips the parent order's `payment_status` in the
- * same RPC transaction. `reason` is required by the RPC itself (and stored
- * on `payments.failure_reason`) when `decision === 'failed'`; ignored for `'paid'`.
+ * Records Xendit's synchronous response against the exact payment attempt
+ * `beginXenditPaymentAttempt` just reserved, via `finalize_xendit_payment_request`
+ * — narrowly scoped to that one row (no direct UPDATE grant exists).
  */
-export async function verifyPayment(
-  paymentId: string,
-  decision: PaymentDecision,
-  reason: string | null = null,
-): Promise<void> {
+export async function finalizeXenditPaymentRequest(input: {
+  paymentId: string;
+  xenditPaymentRequestId: string;
+  checkoutUrl: string;
+  expiresAt: string | null;
+  status?: "pending" | "failed";
+}): Promise<PaymentAttempt> {
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.rpc("verify_payment", {
-    p_payment_id: paymentId,
-    p_decision: decision,
-    p_reason: reason ?? undefined,
+  const { data, error } = await supabase.rpc("finalize_xendit_payment_request", {
+    p_payment_id: input.paymentId,
+    p_xendit_payment_request_id: input.xenditPaymentRequestId,
+    p_checkout_url: input.checkoutUrl,
+    p_expires_at: input.expiresAt ?? undefined,
+    p_status: input.status ?? "pending",
   });
 
-  if (error) {
-    throw new Error(mapPostgresError(error, "Could not verify this payment."));
+  if (error || !data) {
+    throw rpcError("Could not confirm this payment request.", error);
   }
+  return toPaymentAttempt(data as PaymentRow);
 }
 
 /**
- * Short-lived signed URL for a receipt image — the bucket is private, so
- * there is no public URL to store or render directly.
+ * Idempotently reserves (or reuses) a combined Xendit payment attempt for
+ * every order in a multi-seller checkout group, via
+ * `begin_xendit_group_payment_attempt` — takes only the server-issued
+ * `checkoutGroupId`; order ownership and membership are resolved and
+ * re-validated entirely inside the RPC, never trusted from the caller.
+ */
+export async function beginXenditGroupPaymentAttempt(
+  checkoutGroupId: string,
+  channelCode: "GCASH" | "PAYMAYA" | "CARD",
+): Promise<PaymentAttempt> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("begin_xendit_group_payment_attempt", {
+    p_checkout_group_id: checkoutGroupId,
+    p_channel_code: channelCode,
+  });
+
+  if (error || !data) {
+    throw rpcError("Could not start this payment. Please try again.", error);
+  }
+  return toPaymentAttempt(data as PaymentRow);
+}
+
+/**
+ * Records Xendit's synchronous response against the payment rows sharing
+ * `checkoutGroupId` for one specific `channelCode`, via
+ * `finalize_xendit_group_payment_request` — scoped so finalizing a Card
+ * attempt never touches an abandoned GCash/Maya attempt's rows (or vice
+ * versa) when the buyer switched channels without finishing the first one.
+ */
+export async function finalizeXenditGroupPaymentRequest(input: {
+  checkoutGroupId: string;
+  channelCode: "GCASH" | "PAYMAYA" | "CARD";
+  xenditPaymentRequestId: string;
+  checkoutUrl: string;
+  expiresAt: string | null;
+  status?: "pending" | "failed";
+}): Promise<PaymentAttempt> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("finalize_xendit_group_payment_request", {
+    p_checkout_group_id: input.checkoutGroupId,
+    p_channel_code: input.channelCode,
+    p_xendit_payment_request_id: input.xenditPaymentRequestId,
+    p_checkout_url: input.checkoutUrl,
+    p_expires_at: input.expiresAt ?? undefined,
+    p_status: input.status ?? "pending",
+  });
+
+  if (error || !data) {
+    throw rpcError("Could not confirm this payment request.", error);
+  }
+  return toPaymentAttempt(data as PaymentRow);
+}
+
+/**
+ * The authoritative combined amount for a checkout group's specific payment
+ * attempt — summed server-side from only that `channelCode`'s payment rows
+ * (RLS-scoped to the caller's own orders), never accepted from the client.
+ * Scoped by channel so an abandoned attempt on a different channel (the
+ * buyer started GCash, then switched to Card without finishing) is never
+ * folded into the amount charged. Used immediately before calling Xendit to
+ * create the combined payment request/session.
+ */
+export async function getXenditGroupPaymentTotal(
+  checkoutGroupId: string,
+  channelCode: "GCASH" | "PAYMAYA" | "CARD",
+): Promise<{ amountCents: number; currency: string }> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PAYMENTS)
+    .select("amount_cents, currency")
+    .eq("checkout_group_id", checkoutGroupId)
+    .eq("payment_channel", channelCode);
+
+  if (error) {
+    throw queryError("Failed to load payment group total", error);
+  }
+  if (!data || data.length === 0) {
+    throw new Error("Payment group not found.");
+  }
+
+  return {
+    amountCents: data.reduce((sum, row) => sum + row.amount_cents, 0),
+    currency: data[0].currency,
+  };
+}
+
+/**
+ * The most recent finalized-but-unresolved Xendit attempt for this order and
+ * channel, if any — regardless of whether it's still within the fix #4
+ * staleness window. `hasXenditPaymentAttempt`'s caller (the retry/reconcile
+ * flow) decides what "stale" means; this just returns the raw candidate so
+ * the action layer can check it with Xendit before letting
+ * `beginXenditPaymentAttempt` decide to fabricate a fresh attempt.
+ */
+export async function getFinalizedPendingXenditPayment(
+  orderId: string,
+  channelCode: "GCASH" | "PAYMAYA" | "CARD",
+): Promise<PaymentAttempt | null> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PAYMENTS)
+    .select("*")
+    .eq("order_id", orderId)
+    .eq("payment_method_type", "xendit")
+    .eq("payment_channel", channelCode)
+    .eq("status", "pending")
+    .not("xendit_payment_request_id", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw queryError("Failed to check for an existing payment attempt", error);
+  }
+  return data ? toPaymentAttempt(data as PaymentRow) : null;
+}
+
+/** Group counterpart of `getFinalizedPendingXenditPayment` — every member row shares one `xendit_payment_request_id`, so any one row represents the whole group's attempt. */
+export async function getFinalizedPendingXenditGroupPayment(
+  checkoutGroupId: string,
+  channelCode: "GCASH" | "PAYMAYA" | "CARD",
+): Promise<PaymentAttempt | null> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PAYMENTS)
+    .select("*")
+    .eq("checkout_group_id", checkoutGroupId)
+    .eq("payment_method_type", "xendit")
+    .eq("payment_channel", channelCode)
+    .eq("status", "pending")
+    .not("xendit_payment_request_id", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw queryError("Failed to check for an existing payment attempt", error);
+  }
+  return data ? toPaymentAttempt(data as PaymentRow) : null;
+}
+
+/**
+ * Applies a Xendit status fetched via a synchronous reconciliation check
+ * (fix #5A) through the exact same `process_xendit_webhook` RPC the real
+ * webhook uses — never duplicates its terminal-state, reference, or amount
+ * validation. Uses the admin client because the RPC is service_role-only,
+ * same as the webhook route itself; called only from the narrow
+ * reconcile-before-replace path in `xendit.actions.ts`, never exposed
+ * directly to a client component.
+ */
+export async function reconcileXenditWebhookStatus(input: {
+  referenceId: string;
+  xenditPaymentRequestId: string;
+  xenditPaymentId: string;
+  status: string;
+  channelCode: string;
+  amountCents: number;
+  currency: string;
+}): Promise<PaymentAttempt | null> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin.rpc("process_xendit_webhook", {
+    p_reference_id: input.referenceId,
+    p_xendit_payment_request_id: input.xenditPaymentRequestId,
+    p_xendit_payment_id: input.xenditPaymentId,
+    p_status: input.status,
+    p_channel_code: input.channelCode,
+    p_amount_cents: input.amountCents,
+    p_currency: input.currency,
+    p_raw_payload: { source: "reconciliation_check", status: input.status } as Json,
+  });
+
+  if (error) {
+    throw rpcError("Could not confirm the status of your previous payment attempt.", error);
+  }
+  return data ? toPaymentAttempt(data as PaymentRow) : null;
+}
+
+/** One candidate found by `getFinalizedPendingXenditAttemptsForCancellation` — pairs a payment attempt with the exact id that must be used as `process_xendit_webhook`'s reference (see that function's docs for why single vs. group differ). */
+export interface XenditCancellationCandidate {
+  referenceId: string;
+  channelCode: "GCASH" | "PAYMAYA" | "CARD";
+  attempt: PaymentAttempt;
+}
+
+/**
+ * Fix #5B: every finalized-pending Xendit payment relevant to a possible
+ * cancellation of this order — its own rows if single-seller, or every
+ * distinct channel's row sharing its `checkout_group_id` if part of a
+ * multi-seller group. Staleness is NOT filtered here (this file must not
+ * depend on the feature-level `isStaleXenditAttempt` helper — see
+ * `src/features/payments/lib/xendit-reconciliation.ts`); the caller decides
+ * which candidates are actually stale before reconciling them.
+ *
+ * `referenceId` matters and differs by shape: a single-order attempt's
+ * `reference_id` sent to Xendit was the payment row's own id
+ * (`beginXenditPaymentAttempt`'s caller uses `attempt.id`), so each row here
+ * carries its own id. A group attempt's `reference_id` was the shared
+ * `checkout_group_id` — every member row for one channel represents the
+ * *same* combined charge, so they're collapsed to one candidate per channel
+ * rather than reconciling the same Xendit payment request multiple times.
+ */
+export async function getFinalizedPendingXenditAttemptsForCancellation(
+  orderId: string,
+): Promise<XenditCancellationCandidate[]> {
+  const supabase = await createSupabaseServerClient();
+
+  const { data: order, error: orderError } = await supabase
+    .from(DATABASE_TABLES.ORDERS)
+    .select("checkout_group_id")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (orderError) {
+    throw queryError("Failed to load order", orderError);
+  }
+  if (!order) return [];
+
+  const baseQuery = supabase
+    .from(DATABASE_TABLES.PAYMENTS)
+    .select("*")
+    .eq("payment_method_type", "xendit")
+    .eq("status", "pending")
+    .not("xendit_payment_request_id", "is", null);
+
+  const { data, error } = order.checkout_group_id
+    ? await baseQuery.eq("checkout_group_id", order.checkout_group_id)
+    : await baseQuery.eq("order_id", orderId);
+
+  if (error) {
+    throw queryError("Failed to check for existing payment attempts", error);
+  }
+
+  const rows = (data ?? []) as PaymentRow[];
+
+  if (!order.checkout_group_id) {
+    return rows
+      .filter((row): row is PaymentRow & { payment_channel: string } => row.payment_channel !== null)
+      .map((row) => ({
+        referenceId: row.id,
+        channelCode: row.payment_channel as "GCASH" | "PAYMAYA" | "CARD",
+        attempt: toPaymentAttempt(row),
+      }));
+  }
+
+  const oneRowPerChannel = new Map<string, PaymentRow>();
+  for (const row of rows) {
+    if (row.payment_channel && !oneRowPerChannel.has(row.payment_channel)) {
+      oneRowPerChannel.set(row.payment_channel, row);
+    }
+  }
+  return [...oneRowPerChannel.entries()].map(([channelCode, row]) => ({
+    referenceId: order.checkout_group_id as string,
+    channelCode: channelCode as "GCASH" | "PAYMAYA" | "CARD",
+    attempt: toPaymentAttempt(row),
+  }));
+}
+
+/** Same shape as `XenditCancellationCandidate` — named separately because it's produced system-wide for the passive reconciliation sweep (phase #4A), not for one specific order/group's cancellation check. */
+export interface XenditReconciliationCandidate {
+  referenceId: string;
+  channelCode: "GCASH" | "PAYMAYA" | "CARD";
+  attempt: PaymentAttempt;
+}
+
+/**
+ * Phase #4A: every finalized-pending Xendit payment across the whole system,
+ * for the passive reconciliation sweep's cron route — NOT scoped to any one
+ * user, so (unlike `getFinalizedPendingXenditAttemptsForCancellation`) this
+ * must use the admin client; there is no authenticated caller whose RLS
+ * scope would otherwise limit the read. `fetchLimit` bounds the raw row
+ * fetch (oldest first, most likely stale); the caller is still responsible
+ * for filtering by `isStaleXenditAttempt` and capping the batch it actually
+ * reconciles — this function only avoids scanning the whole table.
+ *
+ * Same single-vs-group `referenceId` rule as the cancellation candidate
+ * function: a single order's own payment row id, or the shared
+ * `checkout_group_id` for a combined multi-seller payment (deduplicated to
+ * one candidate per group+channel, since every member row represents the
+ * same underlying Xendit charge).
+ */
+export async function getStaleXenditPaymentsForReconciliationSweep(
+  fetchLimit: number,
+): Promise<XenditReconciliationCandidate[]> {
+  const admin = createSupabaseAdminClient();
+
+  const { data, error } = await admin
+    .from(DATABASE_TABLES.PAYMENTS)
+    .select("*")
+    .eq("payment_method_type", "xendit")
+    .eq("status", "pending")
+    .not("xendit_payment_request_id", "is", null)
+    .order("created_at", { ascending: true })
+    .limit(fetchLimit);
+
+  if (error) {
+    throw queryError("Failed to load pending payments for reconciliation sweep", error);
+  }
+
+  const rows = (data ?? []) as PaymentRow[];
+  const singleRows = rows.filter((row) => !row.checkout_group_id);
+  const groupRows = rows.filter((row) => row.checkout_group_id);
+
+  const candidates: XenditReconciliationCandidate[] = singleRows
+    .filter((row): row is PaymentRow & { payment_channel: string } => row.payment_channel !== null)
+    .map((row) => ({
+      referenceId: row.id,
+      channelCode: row.payment_channel as "GCASH" | "PAYMAYA" | "CARD",
+      attempt: toPaymentAttempt(row),
+    }));
+
+  const oneRowPerGroupChannel = new Map<string, PaymentRow>();
+  for (const row of groupRows) {
+    if (!row.payment_channel || !row.checkout_group_id) continue;
+    const key = `${row.checkout_group_id}:${row.payment_channel}`;
+    if (!oneRowPerGroupChannel.has(key)) {
+      oneRowPerGroupChannel.set(key, row);
+    }
+  }
+  for (const row of oneRowPerGroupChannel.values()) {
+    candidates.push({
+      referenceId: row.checkout_group_id as string,
+      channelCode: row.payment_channel as "GCASH" | "PAYMAYA" | "CARD",
+      attempt: toPaymentAttempt(row),
+    });
+  }
+
+  return candidates;
+}
+
+/**
+ * Seller (of the order) or admin marks a COD order's cash as collected via
+ * the `mark_cod_payment_collected` RPC — the sole path by which a COD
+ * `orders.payment_status` ever becomes `paid` (never at order creation).
+ * Writes a real `payments` row so COD collections appear in the same ledger
+ * as Xendit payments.
+ */
+export async function markCodPaymentCollected(orderId: string): Promise<PaymentAttempt> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("mark_cod_payment_collected", {
+    p_order_id: orderId,
+  });
+
+  if (error || !data) {
+    throw rpcError("Could not mark this payment as collected.", error);
+  }
+  return toPaymentAttempt(data as PaymentRow);
+}
+
+/**
+ * Short-lived signed URL for a legacy QR receipt image — the bucket is
+ * private, so there is no public URL to store or render directly. Read-only:
+ * no new receipts are ever created; this only serves historical orders.
  */
 export async function getPaymentReceiptSignedUrl(path: string): Promise<string> {
   const supabase = await createSupabaseServerClient();
@@ -1864,21 +2955,33 @@ export async function getPaymentReceiptSignedUrl(path: string): Promise<string> 
 }
 
 /**
- * Pending payments for the verification queue. No manual `seller_id`
- * filtering here — RLS alone restricts visible rows to the caller's own
- * orders-as-seller, or all rows for an admin (same "RLS is the primary
- * boundary" pattern as everywhere else in this file).
+ * Recent payments for the read-only payment history view. No manual
+ * `seller_id` filtering here — RLS alone restricts visible rows to the
+ * caller's own orders-as-seller, or all rows for an admin (same "RLS is the
+ * primary boundary" pattern as everywhere else in this file). Xendit
+ * payments settle themselves via webhook — nothing here requires manual
+ * action, unlike the retired QR verification queue.
+ *
+ * Phase 4B: optional `status` filter (same "no manual scoping, just an
+ * optional `.eq`" shape as `listReturnRequests`) — lets the Admin payments
+ * view narrow to e.g. `pending` without any new query function.
  */
-export async function listPendingPayments(): Promise<Payment[]> {
+export async function listPaymentHistory(limit = 50, status?: PaymentStatus): Promise<Payment[]> {
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from(DATABASE_TABLES.PAYMENTS)
     .select(PAYMENT_COLUMNS)
-    .eq("status", PAYMENT_STATUS.pending)
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (status) {
+    query = query.eq("status", status);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
-    throw new Error(`Failed to load pending payments: ${error.message}`);
+    throw queryError("Failed to load payment history", error);
   }
 
   return (data ?? []).map((row) => toPayment(row as PaymentRowWithOrder));
@@ -1954,7 +3057,7 @@ export async function uploadReturnEvidence(
     .upload(path, file, { contentType: file.type });
 
   if (error) {
-    throw new Error(`Failed to upload evidence photo: ${error.message}`);
+    throw queryError("Failed to upload evidence photo", error);
   }
   return path;
 }
@@ -2020,10 +3123,13 @@ export async function respondToReturn(
 }
 
 /**
- * Admin-only: approves (executes the refund) or rejects a return request
- * via the `decide_return` RPC — the sole path that can ever move a payment
- * to `refunded`. State-transition and duplicate-refund checks happen
- * inside the RPC.
+ * Admin-only: approves or rejects a return request via the `decide_return`
+ * RPC. For a COD (or retired legacy) payment this immediately finalizes to
+ * `refunded`/`partially_refunded`, exactly as before. For a Xendit payment,
+ * approving only submits a pending refund attempt (row in `xendit_refunds`)
+ * — the caller must follow up with `getPendingXenditRefundForReturn` to
+ * check whether one was created and needs to actually be sent to Xendit.
+ * State-transition and duplicate-refund checks happen inside the RPC.
  */
 export async function decideReturn(
   returnId: string,
@@ -2039,6 +3145,90 @@ export async function decideReturn(
 
   if (error) {
     throw new Error(mapPostgresError(error, "Could not decide this return request."));
+  }
+}
+
+/**
+ * Phase 5B: the most recent still-`pending` Xendit refund attempt for a
+ * return request, or null. Two uses: (1) `decideReturnAction` calls this
+ * right after `decideReturn` to find out whether a refund now needs to be
+ * submitted to Xendit; (2) the UI calls this to show "refund submitted,
+ * awaiting confirmation" instead of silently looking like nothing happened
+ * — `return_requests.status` deliberately doesn't change until the webhook
+ * confirms, so this is the explicit "still pending" signal.
+ */
+export async function getPendingXenditRefundForReturn(
+  returnRequestId: string,
+): Promise<PendingXenditRefund | null> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.XENDIT_REFUNDS)
+    .select("id, xendit_payment_request_id, amount_cents, currency")
+    .eq("return_request_id", returnRequestId)
+    .eq("status", "pending")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw queryError("Failed to check for a pending refund", error);
+  }
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    xenditPaymentRequestId: data.xendit_payment_request_id,
+    amountCents: data.amount_cents,
+    currency: data.currency,
+  };
+}
+
+/**
+ * Records Xendit's synchronous response to the refund submission (id + raw
+ * body) via the `record_xendit_refund_submission` RPC. Never changes the
+ * attempt's status away from `pending` — only `process_xendit_refund_webhook`
+ * (triggered by the real `refund.succeeded`/`refund.failed` webhook) does
+ * that, so a "SUCCEEDED" synchronous response is never trusted here.
+ */
+export async function recordXenditRefundSubmission(
+  refundId: string,
+  xenditRefundId: string,
+  rawResponse: Json,
+): Promise<void> {
+  // The admin's own authenticated session, not the service-role client —
+  // record_xendit_refund_submission re-derives is_admin() from auth.uid(),
+  // which is null under the admin client (no session context at all).
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("record_xendit_refund_submission", {
+    p_refund_id: refundId,
+    p_xendit_refund_id: xenditRefundId,
+    p_raw_response: rawResponse,
+  });
+
+  if (error) {
+    throw rpcError("Could not record the refund submission.", error);
+  }
+}
+
+/**
+ * The outbound call to Xendit itself failed (no refund id was ever
+ * returned) — marks the attempt `failed` immediately via
+ * `fail_xendit_refund_submission` so the admin can safely retry. Nothing on
+ * `return_requests`/`payments`/`orders` needs reverting: `decide_return`
+ * never moved them in the first place.
+ */
+export async function failXenditRefundSubmission(
+  refundId: string,
+  errorNote: string,
+): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("fail_xendit_refund_submission", {
+    p_refund_id: refundId,
+    p_error_note: errorNote,
+  });
+
+  if (error) {
+    throw rpcError("Could not record the refund failure.", error);
   }
 }
 
@@ -2067,7 +3257,7 @@ export async function getReturnRequestForOrder(
   const { data, error } = await query.maybeSingle();
 
   if (error) {
-    throw new Error(`Failed to load return request: ${error.message}`);
+    throw queryError("Failed to load return request", error);
   }
   return data ? toReturnRequest(data as ReturnRequestRowWithJoins) : null;
 }
@@ -2077,7 +3267,7 @@ export async function getReturnRequestForOrder(
  * filtered by status — powers the admin Returns & Refunds queue. No manual
  * `seller_id`/`buyer_id` filtering: RLS alone scopes visible rows (buyer's
  * own, seller's own-shop's, or all for admin), the same "RLS is the primary
- * boundary" pattern as `listPendingPayments`/`listDashboardOrders`.
+ * boundary" pattern as `listPaymentHistory`/`listDashboardOrders`.
  */
 export async function listReturnRequests(status?: ReturnStatus): Promise<ReturnRequest[]> {
   const supabase = await createSupabaseServerClient();
@@ -2093,7 +3283,7 @@ export async function listReturnRequests(status?: ReturnStatus): Promise<ReturnR
   const { data, error } = await query;
 
   if (error) {
-    throw new Error(`Failed to load return requests: ${error.message}`);
+    throw queryError("Failed to load return requests", error);
   }
   return (data ?? []).map((row) => toReturnRequest(row as ReturnRequestRowWithJoins));
 }
@@ -2147,7 +3337,7 @@ export async function listAdminActionLog(): Promise<AdminActionLogEntry[]> {
     .order("created_at", { ascending: false });
 
   if (error) {
-    throw new Error(`Failed to load audit log: ${error.message}`);
+    throw queryError("Failed to load audit log", error);
   }
   return (data ?? []).map((row) => toAdminActionLogEntry(row as AdminActionLogRowWithJoins));
 }
@@ -2158,6 +3348,12 @@ export async function listAdminActionLog(): Promise<AdminActionLogEntry[]> {
 
 type ShopRow = Database["public"]["Tables"]["shops"]["Row"];
 
+/** Full column list for every read that maps through `toShop` — keeping this
+ * in one place means widening `Shop` (e.g. adding a branding field) can never
+ * silently omit a column from an individual `.select()` call. */
+const SHOP_COLUMNS =
+  "id, name, slug, active, created_at, updated_at, logo_url, banner_url, description";
+
 function toShop(row: ShopRow): Shop {
   return {
     id: row.id,
@@ -2166,6 +3362,9 @@ function toShop(row: ShopRow): Shop {
     active: row.active,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    logoUrl: row.logo_url,
+    bannerUrl: row.banner_url,
+    description: row.description,
   };
 }
 
@@ -2173,20 +3372,37 @@ function toShop(row: ShopRow): Shop {
  * Shops visible to the caller. No manual membership filtering here — RLS
  * alone restricts visible rows to the caller's own shop(s) via
  * `is_shop_member()`, or every shop for an admin (same "RLS is the primary
- * boundary" pattern as `listPendingPayments`).
+ * boundary" pattern as `listPaymentHistory`).
  */
 export async function listShops(): Promise<Shop[]> {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from(DATABASE_TABLES.SHOPS)
-    .select("id, name, slug, active, created_at, updated_at")
+    .select(SHOP_COLUMNS)
     .order("name", { ascending: true });
 
   if (error) {
-    throw new Error(`Failed to load shops: ${error.message}`);
+    throw queryError("Failed to load shops", error);
   }
 
   return (data ?? []).map((row) => toShop(row as ShopRow));
+}
+
+/** Single shop by id, or null if it doesn't exist / isn't visible to the
+ * caller under RLS (e.g. an inactive shop to a guest). Used by the buyer
+ * catalog's shop-branding header and the seller "My Shop" page. */
+export async function getShopById(shopId: string): Promise<Shop | null> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.SHOPS)
+    .select(SHOP_COLUMNS)
+    .eq("id", shopId)
+    .maybeSingle();
+
+  if (error) {
+    throw queryError("Failed to load shop", error);
+  }
+  return data ? toShop(data as ShopRow) : null;
 }
 
 type ShopMembershipRow = {
@@ -2213,7 +3429,7 @@ export async function getShopNamesBySellerIds(
   });
 
   if (error) {
-    throw new Error(`Failed to resolve shop names: ${error.message}`);
+    throw queryError("Failed to resolve shop names", error);
   }
   return new Map(
     ((data ?? []) as ShopMembershipRow[]).map((row) => [
@@ -2231,7 +3447,7 @@ export async function getShopSellerIds(shopId: string): Promise<string[]> {
   });
 
   if (error) {
-    throw new Error(`Failed to resolve shop members: ${error.message}`);
+    throw queryError("Failed to resolve shop members", error);
   }
   return ((data ?? []) as ShopMembershipRow[]).map((row) => row.seller_id);
 }
@@ -2241,14 +3457,18 @@ export interface FeaturedShopView {
   name: string;
   slug: string;
   productCount: number;
+  /** Real, seller-uploaded logo — null renders the existing letter-avatar
+   * fallback. Never fabricated. */
+  logoUrl: string | null;
 }
 
 /**
  * Active shops with a real active-product count, for the homepage's Featured
  * Shops carousel. Composed from two already-public reads (`listShops`,
  * `resolve_shop_membership`) plus one lightweight `products` read — no new
- * RPC beyond `resolve_shop_membership`, and no fabricated rating/badge/image
- * fields (there is no data source for any of those).
+ * RPC beyond `resolve_shop_membership`. Ranking (by active-product count) is
+ * unchanged by shop branding — a shop's logo/banner/description never affects
+ * its Featured placement, only real product activity does.
  */
 export async function getFeaturedShops(limit = 4): Promise<FeaturedShopView[]> {
   const shops = await listShops();
@@ -2299,6 +3519,7 @@ export async function getFeaturedShops(limit = 4): Promise<FeaturedShopView[]> {
       name: shop.name,
       slug: shop.slug,
       productCount: countsByShop.get(shop.id) ?? 0,
+      logoUrl: shop.logoUrl,
     }))
     .sort((a, b) => b.productCount - a.productCount)
     .slice(0, limit);
@@ -2318,7 +3539,7 @@ export async function createShop(input: CreateShopInput): Promise<Shop> {
       name: input.name,
       slug: `${slugify(input.name)}-${Date.now().toString(36)}`,
     })
-    .select("id, name, slug, active, created_at, updated_at")
+    .select(SHOP_COLUMNS)
     .single();
 
   if (error) {
@@ -2344,11 +3565,155 @@ export async function updateShop(input: UpdateShopInput): Promise<Shop> {
     .from(DATABASE_TABLES.SHOPS)
     .update(rest)
     .eq("id", id)
-    .select("id, name, slug, active, created_at, updated_at")
+    .select(SHOP_COLUMNS)
     .single();
 
   if (error) {
-    throw new Error(`Failed to update shop: ${error.message}`);
+    throw queryError("Failed to update shop", error);
+  }
+
+  return toShop(data as ShopRow);
+}
+
+/**
+ * Seller-scoped: writes ONLY `description`. Never touches `name`/`active`/
+ * `slug`/image columns — the RLS policy ("shop members update own shop
+ * profile") is row-level and would technically permit more, so this
+ * function, not RLS, is what keeps the actual write surface narrow. `shopId`
+ * must come from `requireOwnShopId()`, never a client-submitted value.
+ */
+export async function updateOwnShopDescription(
+  shopId: string,
+  description: string | null,
+): Promise<Shop> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.SHOPS)
+    .update({ description })
+    .eq("id", shopId)
+    .select(SHOP_COLUMNS)
+    .single();
+
+  if (error) {
+    throw queryError("Failed to update your shop", error);
+  }
+
+  return toShop(data as ShopRow);
+}
+
+type ShopImageKind = "logo" | "banner";
+
+/** Extracts the Storage object path out of a public `shop-images` URL, the
+ * same way `deleteProductImage` does for `product-images`. */
+function shopImagePathFromUrl(url: string): string | undefined {
+  return new URL(url).pathname.split("/shop-images/")[1];
+}
+
+/**
+ * Uploads a new shop logo/banner, persists it, and only then removes the
+ * previous one — never any other order:
+ *
+ * 1. Upload the new file. If this fails, nothing else has happened yet — the
+ *    previous DB value and previous file are both untouched.
+ * 2. Only once the upload succeeds, update `shops.{kind}_url` to the new
+ *    file's URL. If THIS fails, the just-uploaded file is removed
+ *    (best-effort) and the previous DB value is left exactly as it was —
+ *    the shop is never left pointing at a file that was never persisted.
+ * 3. Only once the DB write succeeds — the new image is now the shop's
+ *    source of truth — the previous file is removed from Storage
+ *    (best-effort; a cleanup failure here must never surface as an error,
+ *    since the shop is already in a fully correct, consistent state).
+ *
+ * `shopId` must come from `requireOwnShopId()`, never a client-submitted
+ * value. The uploaded path is always `{shopId}/{kind}/{uuid}.{ext}` —
+ * server-controlled, never derived from client input beyond the file itself.
+ */
+export async function replaceShopImage(
+  shopId: string,
+  kind: ShopImageKind,
+  file: File,
+): Promise<Shop> {
+  const supabase = await createSupabaseServerClient();
+
+  const { data: current, error: readError } = await supabase
+    .from(DATABASE_TABLES.SHOPS)
+    .select("logo_url, banner_url")
+    .eq("id", shopId)
+    .single();
+  if (readError) {
+    throw queryError("Failed to load your shop", readError);
+  }
+  const previousUrl = kind === "logo" ? current.logo_url : current.banner_url;
+
+  const ext = file.name.split(".").pop() ?? "jpg";
+  const path = `${shopId}/${kind}/${crypto.randomUUID()}.${ext}`;
+  const { error: uploadError } = await supabase.storage
+    .from("shop-images")
+    .upload(path, file, { contentType: file.type });
+  if (uploadError) {
+    throw queryError("Failed to upload image", uploadError);
+  }
+
+  const { data: publicUrlData } = supabase.storage.from("shop-images").getPublicUrl(path);
+  const newUrl = publicUrlData.publicUrl;
+
+  const { data, error: updateError } = await supabase
+    .from(DATABASE_TABLES.SHOPS)
+    .update(kind === "logo" ? { logo_url: newUrl } : { banner_url: newUrl })
+    .eq("id", shopId)
+    .select(SHOP_COLUMNS)
+    .single();
+
+  if (updateError) {
+    // The new file was never made the shop's source of truth — remove the
+    // orphan and leave the previous, still-valid image/DB value untouched.
+    await supabase.storage.from("shop-images").remove([path]).catch(() => undefined);
+    throw queryError("Failed to update your shop", updateError);
+  }
+
+  if (previousUrl) {
+    const oldPath = shopImagePathFromUrl(previousUrl);
+    if (oldPath) {
+      await supabase.storage.from("shop-images").remove([oldPath]).catch(() => undefined);
+    }
+  }
+
+  return toShop(data as ShopRow);
+}
+
+/**
+ * Nulls the column and removes its Storage object — same DB-write-first
+ * ordering as `replaceShopImage`: if the DB write fails, the previous file is
+ * left in place and the shop keeps its previous, still-valid image.
+ */
+export async function removeShopImage(shopId: string, kind: ShopImageKind): Promise<Shop> {
+  const supabase = await createSupabaseServerClient();
+
+  const { data: current, error: readError } = await supabase
+    .from(DATABASE_TABLES.SHOPS)
+    .select("logo_url, banner_url")
+    .eq("id", shopId)
+    .single();
+  if (readError) {
+    throw queryError("Failed to load your shop", readError);
+  }
+  const previousUrl = kind === "logo" ? current.logo_url : current.banner_url;
+
+  const { data, error: updateError } = await supabase
+    .from(DATABASE_TABLES.SHOPS)
+    .update(kind === "logo" ? { logo_url: null } : { banner_url: null })
+    .eq("id", shopId)
+    .select(SHOP_COLUMNS)
+    .single();
+  if (updateError) {
+    throw queryError("Failed to update your shop", updateError);
+  }
+
+  if (previousUrl) {
+    const oldPath = shopImagePathFromUrl(previousUrl);
+    if (oldPath) {
+      await supabase.storage.from("shop-images").remove([oldPath]).catch(() => undefined);
+    }
   }
 
   return toShop(data as ShopRow);
@@ -2370,6 +3735,9 @@ function toShopWithMember(row: ShopRowWithMembers): ShopWithMember {
     active: row.active,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    logoUrl: row.logo_url,
+    bannerUrl: row.banner_url,
+    description: row.description,
     memberId: membership?.user_id ?? null,
     memberName: membership?.member?.full_name ?? membership?.member?.username ?? null,
   };
@@ -2386,13 +3754,13 @@ export async function listShopsWithMembers(): Promise<ShopWithMember[]> {
   const { data, error } = await supabase
     .from(DATABASE_TABLES.SHOPS)
     .select(`
-      id, name, slug, active, created_at, updated_at,
+      ${SHOP_COLUMNS},
       shop_users ( user_id, member:profiles!shop_users_user_id_fkey ( full_name, username ) )
     `)
     .order("name", { ascending: true });
 
   if (error) {
-    throw new Error(`Failed to load shops: ${error.message}`);
+    throw queryError("Failed to load shops", error);
   }
 
   return (data ?? []).map((row) => toShopWithMember(row as ShopRowWithMembers));
@@ -2414,7 +3782,7 @@ export async function listAdminUsers(): Promise<AdminUser[]> {
   const { data, error } = await supabase.rpc("admin_list_users");
 
   if (error) {
-    throw new Error(error.message);
+    throw rpcError("Could not load users.", error);
   }
 
   return (data ?? []).map((row) => ({
@@ -2449,7 +3817,7 @@ export async function assignSellerShop(
   });
 
   if (error) {
-    throw new Error(error.message);
+    throw rpcError("Could not assign the seller to a shop.", error);
   }
 }
 
@@ -2471,7 +3839,9 @@ export async function setUserActive(
   });
 
   if (error) {
-    throw new Error(error.message);
+    // admin_set_user_active RAISEs curated messages ("Cannot deactivate an
+    // admin", "You cannot deactivate your own account") — preserve them.
+    throw rpcError("Could not update the user's status.", error);
   }
 }
 
@@ -2508,7 +3878,7 @@ export async function listDashboardProducts(
   const { data, error } = await query.order("created_at", { ascending: false });
 
   if (error) {
-    throw new Error(`Failed to load products: ${error.message}`);
+    throw queryError("Failed to load products", error);
   }
 
   return (data ?? []).map((row) => toProduct(row as ProductRowWithImages));
@@ -2532,7 +3902,7 @@ export async function assignProductShop(
     .single();
 
   if (error) {
-    throw new Error(`Failed to assign shop: ${error.message}`);
+    throw queryError("Failed to assign shop", error);
   }
 
   return toProduct(data as ProductRowWithImages);
@@ -2540,9 +3910,9 @@ export async function assignProductShop(
 
 /**
  * The most recent non-refunded payment attempt for one of the buyer's own
- * orders, or null if none has been submitted yet. Used by the order detail
- * page to decide whether to show the receipt-upload prompt, a "submitted"
- * status, or — for `failed` — the seller/admin's rejection reason.
+ * orders, or null if none exists yet. Used by the order detail page to
+ * decide whether to show Xendit payment options, a "confirming your
+ * payment" state, or — for `failed` — the failure reason.
  */
 export async function getActivePaymentForOrder(
   orderId: string,
@@ -2558,9 +3928,59 @@ export async function getActivePaymentForOrder(
     .maybeSingle();
 
   if (error) {
-    throw new Error(`Failed to load payment: ${error.message}`);
+    throw queryError("Failed to load payment", error);
   }
   return data ? toPayment(data as PaymentRowWithOrder) : null;
+}
+
+/**
+ * Mirrors `getActivePaymentForOrder` for a checkout group — the confirmation
+ * page uses this to detect an already-in-flight combined payment (a prior
+ * click, a page refresh, or another tab) and show a resume link instead of
+ * starting a second one. RLS-scoped to the buyer's own orders, same as
+ * `getActivePaymentForOrder`.
+ */
+export async function getActivePaymentForGroup(
+  checkoutGroupId: string,
+): Promise<Payment | null> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PAYMENTS)
+    .select(PAYMENT_COLUMNS)
+    .eq("checkout_group_id", checkoutGroupId)
+    .in("status", [PAYMENT_STATUS.pending, PAYMENT_STATUS.paid, PAYMENT_STATUS.failed])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw queryError("Failed to load payment", error);
+  }
+  return data ? toPayment(data as PaymentRowWithOrder) : null;
+}
+
+/**
+ * Whether an order has ever had a Xendit payment attempt (any status) — the
+ * same signal `advanceOrderStatus` uses to distinguish "Xendit order not yet
+ * paid" (fulfilment blocked) from a COD order sitting at `payment_status =
+ * 'pending'` until delivery (fulfilment unaffected). Used by the seller/admin
+ * order-detail pages to decide whether `OrderStatusControl` should show the
+ * payment-required message instead of the advance button.
+ */
+export async function hasXenditPaymentAttempt(orderId: string): Promise<boolean> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PAYMENTS)
+    .select("id")
+    .eq("order_id", orderId)
+    .eq("payment_method_type", "xendit")
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw queryError("Failed to check payment attempts", error);
+  }
+  return data !== null;
 }
 
 // ============================================================================
@@ -2569,21 +3989,26 @@ export async function getActivePaymentForOrder(
 
 type InventoryRow = Database["public"]["Tables"]["inventory"]["Row"];
 type StockAdjustmentRow = Database["public"]["Tables"]["stock_adjustments"]["Row"];
+type ProductVariantRow = Database["public"]["Tables"]["product_variants"]["Row"];
 
 /**
- * Inventory columns plus the parent product's title/slug/status and the
- * owning shop's name — everything the dashboard list needs in one round
- * trip. Literal for the same reason as `PRODUCT_COLUMNS`/`PAYMENT_COLUMNS`.
+ * Inventory columns plus the parent product's title/slug/status, the owning
+ * shop's name, and — when this row is variant-level — the variant's own
+ * sku/color/size, so the dashboard list can label it distinctly from the
+ * product's own row. Literal for the same reason as
+ * `PRODUCT_COLUMNS`/`PAYMENT_COLUMNS`.
  */
 const INVENTORY_COLUMNS = `
-  id, product_id, shop_id, quantity, low_stock_threshold, created_at, updated_at,
+  id, product_id, variant_id, shop_id, quantity, low_stock_threshold, created_at, updated_at,
   product:products!inventory_product_id_fkey ( title, slug, status ),
-  shop:shops!inventory_shop_id_fkey ( name )
+  shop:shops!inventory_shop_id_fkey ( name ),
+  variant:product_variants!inventory_variant_id_fkey ( sku, color, size )
 `;
 
 type InventoryRowWithJoins = InventoryRow & {
   product: Pick<ProductRow, "title" | "slug" | "status"> | null;
   shop: { name: string } | null;
+  variant: Pick<ProductVariantRow, "sku" | "color" | "size"> | null;
 };
 
 function toInventoryItem(row: InventoryRowWithJoins): InventoryItem {
@@ -2595,6 +4020,10 @@ function toInventoryItem(row: InventoryRowWithJoins): InventoryItem {
     productStatus: (row.product?.status ?? PRODUCT_STATUS.draft) as ProductStatus,
     shopId: row.shop_id,
     shopName: row.shop?.name ?? null,
+    variantId: row.variant_id,
+    variantLabel: row.variant
+      ? [row.variant.color, row.variant.size].filter(Boolean).join(" / ") || null
+      : null,
     quantity: row.quantity,
     lowStockThreshold: row.low_stock_threshold,
     stockStatus: getStockStatus(row.quantity, row.low_stock_threshold),
@@ -2618,13 +4047,19 @@ export async function listDashboardInventory(): Promise<InventoryItem[]> {
     .order("updated_at", { ascending: false });
 
   if (error) {
-    throw new Error(`Failed to load inventory: ${error.message}`);
+    throw queryError("Failed to load inventory", error);
   }
 
   return (data ?? []).map((row) => toInventoryItem(row as InventoryRowWithJoins));
 }
 
-/** Single inventory row for one product, or null if none exists yet. */
+/**
+ * Single product-level inventory row, or null if none exists yet. Explicitly
+ * scoped to `variant_id is null` — since Phase 3a, a product with variants
+ * has one inventory row *per variant* sharing the same `product_id`, so a
+ * plain `.eq("product_id", ...)` would ambiguously match more than one row
+ * (and `.maybeSingle()` would throw) the moment that product gets a variant.
+ */
 export async function getInventoryForProduct(
   productId: string,
 ): Promise<InventoryItem | null> {
@@ -2633,10 +4068,28 @@ export async function getInventoryForProduct(
     .from(DATABASE_TABLES.INVENTORY)
     .select(INVENTORY_COLUMNS)
     .eq("product_id", productId)
+    .is("variant_id", null)
     .maybeSingle();
 
   if (error) {
-    throw new Error(`Failed to load inventory: ${error.message}`);
+    throw queryError("Failed to load inventory", error);
+  }
+  return data ? toInventoryItem(data as InventoryRowWithJoins) : null;
+}
+
+/** Single variant-level inventory row, or null if none exists yet. */
+export async function getVariantInventory(
+  variantId: string,
+): Promise<InventoryItem | null> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.INVENTORY)
+    .select(INVENTORY_COLUMNS)
+    .eq("variant_id", variantId)
+    .maybeSingle();
+
+  if (error) {
+    throw queryError("Failed to load inventory", error);
   }
   return data ? toInventoryItem(data as InventoryRowWithJoins) : null;
 }
@@ -2656,13 +4109,18 @@ export async function adjustStock(input: AdjustStockInput): Promise<InventoryIte
     p_delta: input.delta,
     p_reason: input.reason,
     p_note: input.note ?? undefined,
+    p_variant_id: input.variantId ?? undefined,
   });
 
   if (error) {
-    throw new Error(error.message);
+    // adjust_stock RAISEs curated messages ("Cannot reduce stock below zero
+    // (currently N)") — preserve them; log the raw error.
+    throw rpcError("Could not adjust stock.", error);
   }
 
-  const item = await getInventoryForProduct(input.productId);
+  const item = input.variantId
+    ? await getVariantInventory(input.variantId)
+    : await getInventoryForProduct(input.productId);
   if (!item) {
     throw new Error("Could not load the updated inventory record.");
   }
@@ -2701,26 +4159,237 @@ function toStockAdjustment(row: StockAdjustmentRowWithActor): StockAdjustment {
   };
 }
 
-/** Recent stock movement history for one product, newest first. RLS scopes it identically to `inventory`. */
+/**
+ * Recent stock movement history, newest first. RLS scopes it identically to
+ * `inventory`. Scoped to exactly one row's worth of history: pass
+ * `variantId` for a variant's own history, omit it for the product-level
+ * row's history only (`variant_id is null`) — never a mix of both, so a
+ * product with variants doesn't get its own history panel polluted with
+ * every variant's movements. For a product with no variants this filter is
+ * a no-op (no variant rows exist to exclude), preserving today's exact
+ * behavior.
+ */
 export async function listStockAdjustments(
   productId: string,
+  variantId?: string | null,
   limit = 20,
 ): Promise<StockAdjustment[]> {
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from(DATABASE_TABLES.STOCK_ADJUSTMENTS)
     .select(STOCK_ADJUSTMENT_COLUMNS)
-    .eq("product_id", productId)
+    .eq("product_id", productId);
+  query = variantId ? query.eq("variant_id", variantId) : query.is("variant_id", null);
+
+  const { data, error } = await query
     .order("created_at", { ascending: false })
     .limit(limit);
 
   if (error) {
-    throw new Error(`Failed to load stock history: ${error.message}`);
+    throw queryError("Failed to load stock history", error);
   }
 
   return (data ?? []).map((row) =>
     toStockAdjustment(row as StockAdjustmentRowWithActor),
   );
+}
+
+// ============================================================================
+// Product Variants (Phase 3b — optional color/size variants of a product)
+// ============================================================================
+
+const PRODUCT_VARIANT_COLUMNS = `
+  id, product_id, seller_id, shop_id, sku, color, size, price_cents, status,
+  created_at, updated_at
+`;
+
+function toProductVariant(row: ProductVariantRow): ProductVariant {
+  return {
+    id: row.id,
+    productId: row.product_id,
+    sellerId: row.seller_id,
+    shopId: row.shop_id,
+    sku: row.sku,
+    color: row.color,
+    size: row.size,
+    priceCents: row.price_cents,
+    status: row.status as ProductStatus,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+/** A product's own variants, oldest first (creation order). */
+export async function listProductVariants(
+  productId: string,
+): Promise<ProductVariant[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PRODUCT_VARIANTS)
+    .select(PRODUCT_VARIANT_COLUMNS)
+    .eq("product_id", productId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw queryError("Failed to load variants", error);
+  }
+  return (data ?? []).map((row) => toProductVariant(row as ProductVariantRow));
+}
+
+/**
+ * Every variant visible to the caller — no manual filter, mirrors
+ * `listDashboardInventory()`/`listDashboardProducts()`'s "RLS alone is the
+ * boundary" pattern. Fetched once by the dashboard page and grouped by
+ * `productId` client-side, avoiding one query per listed product.
+ */
+export async function listDashboardProductVariants(): Promise<ProductVariant[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PRODUCT_VARIANTS)
+    .select(PRODUCT_VARIANT_COLUMNS)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw queryError("Failed to load variants", error);
+  }
+  return (data ?? []).map((row) => toProductVariant(row as ProductVariantRow));
+}
+
+export interface ProductVariantInput {
+  sku?: string;
+  color?: string;
+  size?: string;
+  /** Major-unit pesos; omitted/undefined = inherit the parent product's price. */
+  price?: number;
+}
+
+/** Creates a variant for a product the caller owns. Starts with 0 stock — see `product_variants_seed_inventory`; bring it up via `adjustStock`. */
+export async function createProductVariant(
+  productId: string,
+  sellerId: string,
+  shopId: string | null,
+  input: ProductVariantInput,
+): Promise<ProductVariant> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PRODUCT_VARIANTS)
+    .insert({
+      product_id: productId,
+      seller_id: sellerId,
+      shop_id: shopId,
+      sku: input.sku || null,
+      color: input.color || null,
+      size: input.size || null,
+      price_cents: input.price !== undefined ? toCents(input.price) : null,
+    })
+    .select(PRODUCT_VARIANT_COLUMNS)
+    .single();
+
+  if (error) {
+    if (error.code === "23505") {
+      throw new Error("This color/size combination already exists for this product.");
+    }
+    throw queryError("Failed to create variant", error);
+  }
+  return toProductVariant(data as ProductVariantRow);
+}
+
+/**
+ * Updates a variant's catalog attributes. Never touches stock (see
+ * `adjustStock`) or, when `owner` is set, a variant outside the caller's own
+ * scope — same defense-in-depth pattern as `updateProduct`.
+ */
+export async function updateProductVariant(
+  id: string,
+  owner: { sellerId: string; shopId: string | null } | null,
+  input: ProductVariantInput & { status?: ProductStatus },
+): Promise<ProductVariant> {
+  const supabase = await createSupabaseServerClient();
+
+  if (owner) {
+    const ownerFilter = owner.shopId
+      ? `seller_id.eq.${owner.sellerId},shop_id.eq.${owner.shopId}`
+      : `seller_id.eq.${owner.sellerId}`;
+    const { data: existing, error: readError } = await supabase
+      .from(DATABASE_TABLES.PRODUCT_VARIANTS)
+      .select("id")
+      .eq("id", id)
+      .or(ownerFilter)
+      .maybeSingle();
+    if (readError) {
+      throw new Error(`Failed to load variant: ${readError.message}`);
+    }
+    if (!existing) {
+      throw new Error("Variant not found.");
+    }
+  }
+
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PRODUCT_VARIANTS)
+    .update({
+      sku: input.sku || null,
+      color: input.color || null,
+      size: input.size || null,
+      price_cents: input.price !== undefined ? toCents(input.price) : null,
+      ...(input.status !== undefined ? { status: input.status } : {}),
+    })
+    .eq("id", id)
+    .select(PRODUCT_VARIANT_COLUMNS)
+    .single();
+
+  if (error) {
+    if (error.code === "23505") {
+      throw new Error("This color/size combination already exists for this product.");
+    }
+    throw queryError("Failed to update variant", error);
+  }
+  return toProductVariant(data as ProductVariantRow);
+}
+
+/**
+ * Deletes a variant. `order_items.variant_id` is `ON DELETE RESTRICT`
+ * (20260912010000_product_variants.sql) — a variant that has ever been
+ * ordered cannot be deleted, by design, to protect historical order data.
+ * That Postgres error (23503) is caught here and turned into a clear,
+ * actionable message instead of a raw constraint error.
+ */
+export async function deleteProductVariant(
+  id: string,
+  owner: { sellerId: string; shopId: string | null } | null,
+): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+
+  if (owner) {
+    const ownerFilter = owner.shopId
+      ? `seller_id.eq.${owner.sellerId},shop_id.eq.${owner.shopId}`
+      : `seller_id.eq.${owner.sellerId}`;
+    const { data: existing, error: readError } = await supabase
+      .from(DATABASE_TABLES.PRODUCT_VARIANTS)
+      .select("id")
+      .eq("id", id)
+      .or(ownerFilter)
+      .maybeSingle();
+    if (readError) {
+      throw new Error(`Failed to load variant: ${readError.message}`);
+    }
+    if (!existing) {
+      throw new Error("Variant not found.");
+    }
+  }
+
+  const { error } = await supabase
+    .from(DATABASE_TABLES.PRODUCT_VARIANTS)
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    if (error.code === "23503") {
+      throw new Error(
+        "This variant has already been ordered and can't be deleted — set it to Archived instead.",
+      );
+    }
+    throw queryError("Failed to delete variant", error);
+  }
 }
 
 // ============================================================================
@@ -2742,6 +4411,7 @@ const EMPTY_SALES_SUMMARY: SalesSummary = {
   avgOrderValueCents: 0,
   codPaidOrders: 0,
   qrPaidOrders: 0,
+  xenditPaidOrders: 0,
   pendingPaymentOrders: 0,
 };
 
@@ -2759,7 +4429,7 @@ export const getSalesSummary = cache(async function getSalesSummary(
   });
 
   if (error) {
-    throw new Error(`Failed to load sales summary: ${error.message}`);
+    throw queryError("Failed to load sales summary", error);
   }
 
   const row = data?.[0];
@@ -2773,6 +4443,7 @@ export const getSalesSummary = cache(async function getSalesSummary(
     avgOrderValueCents: row.avg_order_value_cents,
     codPaidOrders: row.cod_paid_orders,
     qrPaidOrders: row.qr_paid_orders,
+    xenditPaidOrders: row.xendit_paid_orders,
     pendingPaymentOrders: row.pending_payment_orders,
   };
 });
@@ -2793,7 +4464,7 @@ export const getSalesTimeseries = cache(async function getSalesTimeseries(
   });
 
   if (error) {
-    throw new Error(`Failed to load sales trend: ${error.message}`);
+    throw queryError("Failed to load sales trend", error);
   }
 
   return (data ?? []).map((row) => ({
@@ -2817,7 +4488,7 @@ export const getOrderStatusBreakdown = cache(
     );
 
     if (error) {
-      throw new Error(`Failed to load status breakdown: ${error.message}`);
+      throw queryError("Failed to load status breakdown", error);
     }
 
     return (data ?? []).map((row) => ({
@@ -2843,7 +4514,7 @@ export const getTopProducts = cache(async function getTopProducts(
   });
 
   if (error) {
-    throw new Error(`Failed to load top products: ${error.message}`);
+    throw queryError("Failed to load top products", error);
   }
 
   return (data ?? []).map((row) => ({
@@ -2988,7 +4659,7 @@ export async function getOwnShopId(userId: string): Promise<string | null> {
     .maybeSingle();
 
   if (error) {
-    throw new Error(`Failed to resolve your shop: ${error.message}`);
+    throw queryError("Failed to resolve your shop", error);
   }
   return data?.shop_id ?? null;
 }
@@ -3042,6 +4713,25 @@ export async function signInWithPassword(
     password,
     options: { captchaToken },
   });
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Verifies a password for the *already-authenticated* caller (Change
+ * Password's "confirm your current password" step) — there is no separate
+ * "verify password" API, so this re-runs the same sign-in grant Supabase
+ * uses to prove identity. No captcha token, unlike the public
+ * `signInWithPassword` above: the caller here is already a rate-limited,
+ * signed-in session (see `changePasswordAction`), not the anonymous public
+ * sign-in surface captcha protects — same proportionate, rate-limit-only
+ * posture already used by `updatePasswordAction`'s recovery-session path.
+ */
+export async function reauthenticateWithPassword(
+  email: string,
+  password: string,
+): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw new Error(error.message);
 }
 
@@ -3192,4 +4882,676 @@ export async function unlinkOAuthIdentity(identity: UserIdentity): Promise<void>
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.auth.unlinkIdentity(identity);
   if (error) throw new Error(error.message);
+}
+
+// ============================================================================
+// Cart (authenticated — Phase 2B). Guest carts stay entirely client-side
+// (CartProvider/localStorage, untouched); this is the server-persisted cart
+// for signed-in users only, so the same account sees the same cart across
+// browsers/devices. No price/stock is ever stored on a cart line or trusted
+// from a caller — `quantity` is the only writable field, and every display
+// field below is resolved live via join (checkCartAvailability, unchanged
+// since Phase 3c, remains the sanctioned re-validation path before checkout).
+//
+// Every function here takes `userId` as an explicit parameter, always
+// resolved by the caller via `requireSessionUser()` — never accept a
+// client-supplied id for authorization. RLS (`carts`/`cart_items`, Phase 2A)
+// is the real boundary; scoping every query through `getOrCreateCart(userId)`
+// is defense-in-depth on top of it, same double-layer pattern as
+// `updateProduct`'s `owner` filter.
+// ============================================================================
+
+type CartItemRow = Database["public"]["Tables"]["cart_items"]["Row"];
+
+const CART_ITEM_COLUMNS = `
+  id, cart_id, product_id, variant_id, quantity, created_at, updated_at,
+  product:products!cart_items_product_id_fkey (
+    title, slug, price_cents, currency, seller_id,
+    product_images ( url ),
+    seller:profiles!products_seller_id_fkey ( full_name, username, role )
+  ),
+  variant:product_variants!cart_items_variant_id_fkey ( color, size, price_cents )
+`;
+
+type CartItemRowWithJoins = CartItemRow & {
+  product: {
+    title: string;
+    slug: string;
+    price_cents: number;
+    currency: string;
+    seller_id: string;
+    product_images: { url: string }[];
+    seller: Pick<ProfileRow, "full_name" | "username" | "role"> | null;
+  } | null;
+  variant: {
+    color: string | null;
+    size: string | null;
+    price_cents: number | null;
+  } | null;
+};
+
+/** One line in an authenticated user's persistent cart, with live-joined display data. */
+export interface CartLineItem {
+  id: string;
+  productId: string;
+  variantId: string | null;
+  quantity: number;
+  productTitle: string;
+  productSlug: string;
+  imageUrl: string | null;
+  /** Variant price override, else the product's own price — always live, never stored. */
+  unitPriceCents: number;
+  currency: string;
+  sellerId: string;
+  sellerName: string | null;
+  sellerRole: UserRole | null;
+  variantLabel: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * `null` when the joined product no longer resolves (sold/archived beyond
+ * RLS's public visibility, or hard-deleted) — mirrors `getBuyerOrder`'s "a
+ * sold/archived product resolves to null" note. Callers should treat a
+ * `null` line the same way `checkCartAvailability` treats a missing id: no
+ * longer available.
+ */
+function toCartLineItem(row: CartItemRowWithJoins): CartLineItem | null {
+  if (!row.product) return null;
+  return {
+    id: row.id,
+    productId: row.product_id,
+    variantId: row.variant_id,
+    quantity: row.quantity,
+    productTitle: row.product.title,
+    productSlug: row.product.slug,
+    imageUrl: row.product.product_images?.[0]?.url ?? null,
+    unitPriceCents: row.variant?.price_cents ?? row.product.price_cents,
+    currency: row.product.currency,
+    sellerId: row.product.seller_id,
+    sellerName: row.product.seller?.full_name ?? row.product.seller?.username ?? null,
+    sellerRole: (row.product.seller?.role as UserRole | undefined) ?? null,
+    variantLabel: row.variant
+      ? [row.variant.color, row.variant.size].filter(Boolean).join(" / ") || null
+      : null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+/**
+ * Returns the signed-in user's cart, creating it on first use (`carts` has
+ * no other write path). `userId` must already be `requireSessionUser()`-
+ * resolved. Races two concurrent first-time callers safely: the loser's
+ * INSERT hits `carts_one_per_user` (23505) and re-reads the winner's row
+ * instead of erroring.
+ */
+export async function getOrCreateCart(userId: string): Promise<{ id: string }> {
+  const supabase = await createSupabaseServerClient();
+
+  const { data: existing, error: readError } = await supabase
+    .from(DATABASE_TABLES.CARTS)
+    .select("id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (readError) {
+    throw queryError("Failed to load cart", readError);
+  }
+  if (existing) return existing;
+
+  const { data: created, error: insertError } = await supabase
+    .from(DATABASE_TABLES.CARTS)
+    .insert({ user_id: userId })
+    .select("id")
+    .single();
+
+  if (!insertError) return created;
+
+  if (insertError.code === "23505") {
+    const { data: raceWinner, error: raceReadError } = await supabase
+      .from(DATABASE_TABLES.CARTS)
+      .select("id")
+      .eq("user_id", userId)
+      .single();
+    if (raceReadError) {
+      throw queryError("Failed to load cart", raceReadError);
+    }
+    return raceWinner;
+  }
+  throw queryError("Failed to create cart", insertError);
+}
+
+/** The signed-in user's cart lines, oldest first, with live display data. */
+export async function listCartItems(userId: string): Promise<CartLineItem[]> {
+  const supabase = await createSupabaseServerClient();
+  const cart = await getOrCreateCart(userId);
+
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.CART_ITEMS)
+    .select(CART_ITEM_COLUMNS)
+    .eq("cart_id", cart.id)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw queryError("Failed to load cart items", error);
+  }
+
+  return (data ?? [])
+    .map((row) => toCartLineItem(row as CartItemRowWithJoins))
+    .filter((item): item is CartLineItem => item !== null);
+}
+
+export interface AddCartItemInput {
+  productId: string;
+  variantId?: string;
+  quantity: number;
+}
+
+/**
+ * Adds a line, or increments an existing one — same product+variant merges,
+ * a different variant stays a separate line; `cart_items`'s partial unique
+ * indexes (Phase 2A) are the real guarantee, not this function's control
+ * flow. PostgREST's upsert can't target a *partial* unique index, so this
+ * does the insert-or-increment dance explicitly: try the insert, and on the
+ * expected unique-violation, increment the existing row instead. The unique
+ * indexes make this race-safe regardless of which caller "wins" the insert —
+ * two concurrent adds can never create a duplicate row, at worst one retries
+ * once as an update.
+ */
+export async function addCartItem(
+  userId: string,
+  input: AddCartItemInput,
+): Promise<CartLineItem> {
+  const supabase = await createSupabaseServerClient();
+  const cart = await getOrCreateCart(userId);
+
+  const { data: inserted, error: insertError } = await supabase
+    .from(DATABASE_TABLES.CART_ITEMS)
+    .insert({
+      cart_id: cart.id,
+      product_id: input.productId,
+      variant_id: input.variantId ?? null,
+      quantity: input.quantity,
+    })
+    .select(CART_ITEM_COLUMNS)
+    .single();
+
+  if (!insertError) {
+    const item = toCartLineItem(inserted as CartItemRowWithJoins);
+    if (!item) throw new Error("This product is no longer available.");
+    return item;
+  }
+
+  if (insertError.code !== "23505") {
+    // Covers 23503 (product/variant FK no longer exists) and the
+    // cart_items_validate_variant trigger's 23514 (variant belongs to a
+    // different product) via mapPostgresError's existing rules, same
+    // pattern as updateMyProfile.
+    throw new Error(mapPostgresError(insertError, "Could not add this item to your cart."));
+  }
+
+  // Line already exists — increment it instead, scoped by the exact same
+  // key the unique index protects, so this can never touch a sibling line.
+  let existingQuery = supabase
+    .from(DATABASE_TABLES.CART_ITEMS)
+    .select("id, quantity")
+    .eq("cart_id", cart.id)
+    .eq("product_id", input.productId);
+  existingQuery = input.variantId
+    ? existingQuery.eq("variant_id", input.variantId)
+    : existingQuery.is("variant_id", null);
+
+  const { data: existing, error: readError } = await existingQuery.single();
+  if (readError) {
+    throw queryError("Failed to add item to cart", readError);
+  }
+
+  const { data: updated, error: updateError } = await supabase
+    .from(DATABASE_TABLES.CART_ITEMS)
+    .update({ quantity: existing.quantity + input.quantity })
+    .eq("id", existing.id)
+    .select(CART_ITEM_COLUMNS)
+    .single();
+
+  if (updateError) {
+    throw queryError("Failed to add item to cart", updateError);
+  }
+  const item = toCartLineItem(updated as CartItemRowWithJoins);
+  if (!item) throw new Error("This product is no longer available.");
+  return item;
+}
+
+/**
+ * Sets one line's quantity outright (not a delta). `cartItemId` is
+ * client-supplied — the `.eq("cart_id", cart.id)` filter is what makes this
+ * safe: `cart.id` is always resolved server-side from `userId`, never from
+ * the caller, so a foreign cart's item id structurally cannot match, on top
+ * of RLS already blocking it.
+ */
+export async function updateCartItemQuantity(
+  userId: string,
+  cartItemId: string,
+  quantity: number,
+): Promise<CartLineItem> {
+  const supabase = await createSupabaseServerClient();
+  const cart = await getOrCreateCart(userId);
+
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.CART_ITEMS)
+    .update({ quantity })
+    .eq("id", cartItemId)
+    .eq("cart_id", cart.id)
+    .select(CART_ITEM_COLUMNS)
+    .maybeSingle();
+
+  if (error) {
+    throw queryError("Failed to update cart item", error);
+  }
+  if (!data) {
+    throw new Error("Cart item not found.");
+  }
+  const item = toCartLineItem(data as CartItemRowWithJoins);
+  if (!item) throw new Error("This product is no longer available.");
+  return item;
+}
+
+/** Removes one line. Same `cart_id` defense-in-depth as `updateCartItemQuantity`. */
+export async function removeCartItem(userId: string, cartItemId: string): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const cart = await getOrCreateCart(userId);
+
+  const { error, count } = await supabase
+    .from(DATABASE_TABLES.CART_ITEMS)
+    .delete({ count: "exact" })
+    .eq("id", cartItemId)
+    .eq("cart_id", cart.id);
+
+  if (error) {
+    throw queryError("Failed to remove cart item", error);
+  }
+  if (!count) {
+    throw new Error("Cart item not found.");
+  }
+}
+
+/**
+ * Removes several lines at once — e.g. clearing exactly the items a
+ * checkout just placed. Silently ignores ids that don't exist or don't
+ * belong to this cart, rather than erroring, matching the client
+ * `removeMany` reducer action's own "best effort" semantics.
+ */
+export async function removeManyCartItems(
+  userId: string,
+  cartItemIds: string[],
+): Promise<void> {
+  if (cartItemIds.length === 0) return;
+  const supabase = await createSupabaseServerClient();
+  const cart = await getOrCreateCart(userId);
+
+  const { error } = await supabase
+    .from(DATABASE_TABLES.CART_ITEMS)
+    .delete()
+    .eq("cart_id", cart.id)
+    .in("id", cartItemIds);
+
+  if (error) {
+    throw queryError("Failed to remove cart items", error);
+  }
+}
+
+/** Empties the signed-in user's cart entirely. */
+export async function clearCart(userId: string): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const cart = await getOrCreateCart(userId);
+
+  const { error } = await supabase
+    .from(DATABASE_TABLES.CART_ITEMS)
+    .delete()
+    .eq("cart_id", cart.id);
+
+  if (error) {
+    throw queryError("Failed to clear cart", error);
+  }
+}
+
+export interface MergeGuestCartResult {
+  mergedCount: number;
+  failedCount: number;
+}
+
+/**
+ * Folds a just-authenticated guest cart into the signed-in user's persistent
+ * cart — one call to the existing `addCartItem` per line, so the same
+ * product+variant merges into an existing line (summed) exactly the way a
+ * normal "add to cart" already does; a new variant becomes a new line the
+ * same way too. Deliberately does **not** re-check stock/availability here:
+ * a line that's gone stale (archived product, insufficient stock) is already
+ * handled, uniformly, by the existing `checkCartAvailability` + `CartSummary`
+ * "no longer available" / "only N left" banners the moment the merged cart
+ * is displayed — duplicating that check here would just be the same logic
+ * twice. A single bad line (e.g. a hard-deleted product, which `addCartItem`
+ * surfaces as a friendly error) is caught and counted, not allowed to abort
+ * the rest of the merge.
+ */
+export async function mergeGuestCart(
+  userId: string,
+  items: AddCartItemInput[],
+): Promise<MergeGuestCartResult> {
+  let mergedCount = 0;
+  let failedCount = 0;
+
+  for (const item of items) {
+    try {
+      await addCartItem(userId, item);
+      mergedCount++;
+    } catch {
+      failedCount++;
+    }
+  }
+
+  return { mergedCount, failedCount };
+}
+
+// ============================================================================
+// Guided Product Selection — recommendation rules (schema + admin/seller
+// authoring only; the buyer-facing matching query is a separate, later
+// phase). Rule-based per DECISIONS.md ADR-009 — never AI/ML. A rule never
+// stores budget — see the migration's header comment; budget is matched
+// against a product's/variant's live price, not duplicated here.
+// ============================================================================
+
+type RecommendationRuleRow = Database["public"]["Tables"]["recommendation_rules"]["Row"];
+
+const RECOMMENDATION_RULE_COLUMNS = `
+  id, product_id, variant_id, seller_id, shop_id, occasion, size, active,
+  created_at, updated_at,
+  product:products!recommendation_rules_product_id_fkey ( title, slug ),
+  variant:product_variants!recommendation_rules_variant_id_fkey ( color, size )
+`;
+
+type RecommendationRuleRowWithJoins = RecommendationRuleRow & {
+  product: { title: string; slug: string } | null;
+  variant: { color: string | null; size: string | null } | null;
+};
+
+function toRecommendationRule(row: RecommendationRuleRowWithJoins): RecommendationRule {
+  return {
+    id: row.id,
+    productId: row.product_id,
+    variantId: row.variant_id,
+    sellerId: row.seller_id,
+    shopId: row.shop_id,
+    occasion: row.occasion as RecommendationOccasion | null,
+    size: row.size,
+    active: row.active,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    productTitle: row.product?.title ?? "",
+    productSlug: row.product?.slug ?? "",
+    variantLabel: row.variant
+      ? [row.variant.color, row.variant.size].filter(Boolean).join(" / ") || null
+      : null,
+  };
+}
+
+/** A product's own Guided Selection rules, oldest first. */
+export async function listProductRecommendationRules(
+  productId: string,
+): Promise<RecommendationRule[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.RECOMMENDATION_RULES)
+    .select(RECOMMENDATION_RULE_COLUMNS)
+    .eq("product_id", productId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw queryError("Failed to load recommendation rules", error);
+  }
+  return (data ?? []).map((row) => toRecommendationRule(row as RecommendationRuleRowWithJoins));
+}
+
+/**
+ * Every rule visible to the caller — no manual filter, mirrors
+ * `listDashboardProductVariants()`'s "RLS alone is the boundary" pattern.
+ * Fetched once by the dashboard page and grouped by `productId` client-side.
+ */
+export async function listDashboardRecommendationRules(): Promise<RecommendationRule[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.RECOMMENDATION_RULES)
+    .select(RECOMMENDATION_RULE_COLUMNS)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw queryError("Failed to load recommendation rules", error);
+  }
+  return (data ?? []).map((row) => toRecommendationRule(row as RecommendationRuleRowWithJoins));
+}
+
+export interface RecommendationRuleInput {
+  variantId?: string;
+  occasion?: RecommendationOccasion;
+  size?: string;
+}
+
+/** Creates a rule for a product the caller owns (or, for admin, any product — moderation, not ownership). */
+export async function createRecommendationRule(
+  productId: string,
+  sellerId: string,
+  shopId: string | null,
+  input: RecommendationRuleInput,
+): Promise<RecommendationRule> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.RECOMMENDATION_RULES)
+    .insert({
+      product_id: productId,
+      seller_id: sellerId,
+      shop_id: shopId,
+      variant_id: input.variantId ?? null,
+      occasion: input.occasion ?? null,
+      size: input.size || null,
+    })
+    .select(RECOMMENDATION_RULE_COLUMNS)
+    .single();
+
+  if (error) {
+    throw new Error(mapPostgresError(error, "Failed to create recommendation rule."));
+  }
+  return toRecommendationRule(data as RecommendationRuleRowWithJoins);
+}
+
+/** Updates a rule's match criteria/active flag. Ownership re-checked beyond RLS, same pattern as `updateProductVariant`. */
+export async function updateRecommendationRule(
+  id: string,
+  owner: { sellerId: string; shopId: string | null } | null,
+  input: RecommendationRuleInput & { active?: boolean },
+): Promise<RecommendationRule> {
+  const supabase = await createSupabaseServerClient();
+
+  if (owner) {
+    const ownerFilter = owner.shopId
+      ? `seller_id.eq.${owner.sellerId},shop_id.eq.${owner.shopId}`
+      : `seller_id.eq.${owner.sellerId}`;
+    const { data: existing, error: readError } = await supabase
+      .from(DATABASE_TABLES.RECOMMENDATION_RULES)
+      .select("id")
+      .eq("id", id)
+      .or(ownerFilter)
+      .maybeSingle();
+    if (readError) {
+      throw new Error(`Failed to load recommendation rule: ${readError.message}`);
+    }
+    if (!existing) {
+      throw new Error("Recommendation rule not found.");
+    }
+  }
+
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.RECOMMENDATION_RULES)
+    .update({
+      variant_id: input.variantId ?? null,
+      occasion: input.occasion ?? null,
+      size: input.size || null,
+      ...(input.active !== undefined ? { active: input.active } : {}),
+    })
+    .eq("id", id)
+    .select(RECOMMENDATION_RULE_COLUMNS)
+    .single();
+
+  if (error) {
+    throw new Error(mapPostgresError(error, "Failed to update recommendation rule."));
+  }
+  return toRecommendationRule(data as RecommendationRuleRowWithJoins);
+}
+
+/** Deletes a rule. No historical/financial dependency (unlike a variant), so this never needs a friendly FK-restrict message. */
+export async function deleteRecommendationRule(
+  id: string,
+  owner: { sellerId: string; shopId: string | null } | null,
+): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+
+  if (owner) {
+    const ownerFilter = owner.shopId
+      ? `seller_id.eq.${owner.sellerId},shop_id.eq.${owner.shopId}`
+      : `seller_id.eq.${owner.sellerId}`;
+    const { data: existing, error: readError } = await supabase
+      .from(DATABASE_TABLES.RECOMMENDATION_RULES)
+      .select("id")
+      .eq("id", id)
+      .or(ownerFilter)
+      .maybeSingle();
+    if (readError) {
+      throw new Error(`Failed to load recommendation rule: ${readError.message}`);
+    }
+    if (!existing) {
+      throw new Error("Recommendation rule not found.");
+    }
+  }
+
+  const { error } = await supabase
+    .from(DATABASE_TABLES.RECOMMENDATION_RULES)
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    throw queryError("Failed to delete recommendation rule", error);
+  }
+}
+
+// ============================================================================
+// Guided Product Selection — buyer-facing matching query. Public (no
+// `requireSessionUser()`) — a guest can use Guided Selection with no
+// account, same as the rest of the catalog/cart reads (ADR-013's precedent).
+// ============================================================================
+
+// Literal for the same reason as `PRODUCT_COLUMNS`/`RECOMMENDATION_RULE_COLUMNS`
+// above: the embedded product select must repeat `PRODUCT_COLUMNS`' column
+// list as its own literal, not `${PRODUCT_COLUMNS}` — interpolating a
+// constant widens the string and Supabase's generated-type parser can no
+// longer infer the joined shape.
+const GUIDED_SELECTION_MATCH_COLUMNS = `
+  id, variant_id, size,
+  variant:product_variants!recommendation_rules_variant_id_fkey ( color, size, price_cents ),
+  product:products!recommendation_rules_product_id_fkey!inner (
+    id, slug, title, description, price_cents, currency, quantity, condition,
+    status, featured, location, tags, category_id, seller_id, shop_id, published_at,
+    created_at, updated_at,
+    product_images ( id, url, alt_text, sort_order ),
+    seller:profiles!products_seller_id_fkey ( full_name, username, role ),
+    category:categories!products_category_id_fkey ( name, slug )
+  )
+`;
+
+type GuidedSelectionMatchRow = {
+  variant_id: string | null;
+  size: string | null;
+  variant: { color: string | null; size: string | null; price_cents: number | null } | null;
+  product: ProductRowWithImages;
+};
+
+export interface GuidedSelectionMatchInput {
+  occasion?: RecommendationOccasion;
+  /** Free text, same convention as `product_variants.size`/`recommendation_rules.size`. */
+  size?: string;
+  /** Major-unit pesos (not cents) — converted to price_cents below. */
+  minPrice?: number;
+  maxPrice?: number;
+}
+
+/**
+ * Matches active rules of active products against the buyer's occasion/size
+ * answers (an unanswered criterion matches anything) and checks each match's
+ * *live* price — the variant's price when the rule targets one, else the
+ * product's own price — against the buyer's budget window. Budget is never
+ * compared to a stored value (see the `recommendation_rules` migration's
+ * header comment).
+ *
+ * Occasion is filtered in SQL (a fixed enum, safe to interpolate). Size and
+ * budget are applied in application code instead: size is free text — unsafe
+ * to interpolate into a PostgREST `.or()` filter string, the same concern
+ * `listProducts`'s `params.search` sanitizes for — and budget needs the
+ * per-row variant-or-product price resolution above, which SQL can't express
+ * as a single column filter here. The admin-authored rule table is small, so
+ * filtering the fetched rows in memory (rather than a second round trip) is
+ * the simplest correct option (KISS).
+ */
+export async function listGuidedSelectionMatches(
+  input: GuidedSelectionMatchInput,
+  limit = 24,
+): Promise<GuidedSelectionMatch[]> {
+  const supabase = await createSupabaseServerClient();
+
+  let query = supabase
+    .from(DATABASE_TABLES.RECOMMENDATION_RULES)
+    .select(GUIDED_SELECTION_MATCH_COLUMNS)
+    .eq("active", true)
+    .eq("product.status", PRODUCT_STATUS.active);
+
+  if (input.occasion) {
+    query = query.or(`occasion.is.null,occasion.eq.${input.occasion}`);
+  }
+
+  const { data, error } = await query.order("created_at", { ascending: false });
+
+  if (error) {
+    throw queryError("Failed to load Guided Selection matches", error);
+  }
+
+  const wantedSize = input.size?.trim().toLowerCase();
+  const minCents = input.minPrice !== undefined ? toCents(input.minPrice) : null;
+  const maxCents = input.maxPrice !== undefined ? toCents(input.maxPrice) : null;
+
+  const seen = new Set<string>();
+  const matches: GuidedSelectionMatch[] = [];
+
+  for (const row of (data ?? []) as unknown as GuidedSelectionMatchRow[]) {
+    if (!row.product) continue;
+    if (row.size && wantedSize && row.size.trim().toLowerCase() !== wantedSize) continue;
+
+    const matchedPriceCents = row.variant?.price_cents ?? row.product.price_cents;
+    if (minCents !== null && matchedPriceCents < minCents) continue;
+    if (maxCents !== null && matchedPriceCents > maxCents) continue;
+
+    const dedupeKey = `${row.product.id}:${row.variant_id ?? ""}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+
+    matches.push({
+      product: toProduct(row.product),
+      variantId: row.variant_id,
+      variantLabel: row.variant
+        ? [row.variant.color, row.variant.size].filter(Boolean).join(" / ") || null
+        : null,
+      matchedPriceCents,
+    });
+
+    if (matches.length >= limit) break;
+  }
+
+  return matches;
 }

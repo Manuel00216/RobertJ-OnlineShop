@@ -13,32 +13,35 @@ import { formatDateTime } from "@/lib/utils/date";
 
 export interface StockHistoryPanelProps {
   productId: string;
+  /** Scopes history to one variant's own movements; omit for the product-level row's history only. */
+  variantId?: string | null;
 }
 
 type Result =
   | { key: string; ok: true; data: StockAdjustment[] }
   | { key: string; ok: false; error: string };
 
-/** Recent stock movement history for one product, fetched on first expand. */
-export function StockHistoryPanel({ productId }: StockHistoryPanelProps) {
-  // Tagged with the productId it was fetched for, mirroring CartSummary's
+/** Recent stock movement history for one product (or one of its variants), fetched on first expand. */
+export function StockHistoryPanel({ productId, variantId }: StockHistoryPanelProps) {
+  // Tagged with the id set it was fetched for, mirroring CartSummary's
   // `availability` pattern — avoids setState-in-effect-body by never
   // resetting state synchronously; loading is just "no result for this id yet".
+  const key = `${productId}:${variantId ?? ""}`;
   const [result, setResult] = useState<Result | null>(null);
   const [, startFetch] = useTransition();
 
   useEffect(() => {
     startFetch(async () => {
-      const response = await getStockHistoryAction(productId);
+      const response = await getStockHistoryAction(productId, variantId);
       setResult(
         response.success
-          ? { key: productId, ok: true, data: response.data }
-          : { key: productId, ok: false, error: response.error },
+          ? { key, ok: true, data: response.data }
+          : { key, ok: false, error: response.error },
       );
     });
-  }, [productId, startFetch]);
+  }, [key, productId, variantId, startFetch]);
 
-  const current = result?.key === productId ? result : null;
+  const current = result?.key === key ? result : null;
 
   if (current && !current.ok) {
     return <ErrorState title="Couldn't load stock history" message={current.error} />;
@@ -61,7 +64,7 @@ export function StockHistoryPanel({ productId }: StockHistoryPanelProps) {
   }
 
   return (
-    <ul className="flex flex-col divide-y divide-rj-gray-100">
+    <ul className="flex flex-col divide-y divide-border">
       {current.data.map((entry) => (
         <li key={entry.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
           <div className="min-w-0">
@@ -69,15 +72,15 @@ export function StockHistoryPanel({ productId }: StockHistoryPanelProps) {
               <Badge tone={entry.delta > 0 ? "success" : "danger"}>
                 {entry.delta > 0 ? `+${entry.delta}` : entry.delta}
               </Badge>
-              <span className="font-medium text-rj-black">
+              <span className="font-medium text-foreground">
                 {STOCK_ADJUSTMENT_REASON_LABELS[entry.reason]}
               </span>
             </div>
             {entry.note ? (
-              <p className="mt-0.5 truncate text-xs text-rj-gray-600">{entry.note}</p>
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">{entry.note}</p>
             ) : null}
           </div>
-          <div className="shrink-0 text-right text-xs text-rj-gray-500">
+          <div className="shrink-0 text-right text-xs text-muted-foreground">
             <p>{entry.previousQuantity} → {entry.newQuantity}</p>
             <p>{formatDateTime(entry.createdAt)}</p>
             {entry.createdByName ? <p>{entry.createdByName}</p> : null}

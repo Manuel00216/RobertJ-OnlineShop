@@ -4,10 +4,11 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/feedback/EmptyState";
+import type { RecommendationRule } from "@/features/assistant";
 import { DashboardProductRow } from "@/features/products/components/DashboardProductRow";
 import { ProductForm } from "@/features/products/components/ProductForm";
 import type { Category } from "@/features/categories/types/category.types";
-import type { Product } from "@/features/products/types/product.types";
+import type { Product, ProductVariant } from "@/features/products/types/product.types";
 import type { Shop } from "@/features/shops/types/shop.types";
 
 export interface DashboardProductsPanelProps {
@@ -16,6 +17,10 @@ export interface DashboardProductsPanelProps {
   /** Populated only for an admin (from `listShops()`); empty for a seller. */
   shops: Shop[];
   isAdmin: boolean;
+  /** Every variant visible to the caller, one bulk fetch — filtered per row below, no N+1. */
+  variants: ProductVariant[];
+  /** Every Guided Selection rule visible to the caller, one bulk fetch — filtered per row below, no N+1. */
+  rules: RecommendationRule[];
 }
 
 /**
@@ -30,13 +35,15 @@ export function DashboardProductsPanel({
   categories,
   shops,
   isAdmin,
+  variants,
+  rules,
 }: DashboardProductsPanelProps) {
   const [showCreateForm, setShowCreateForm] = useState(false);
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-rj-gray-600">
+        <p className="text-sm text-muted-foreground">
           {products.length} product{products.length === 1 ? "" : "s"}
         </p>
         {/* Admin manages/moderates existing products only — never creates
@@ -44,7 +51,7 @@ export function DashboardProductsPanel({
         {!isAdmin ? (
           <Button
             type="button"
-            variant="rj"
+            variant="primary"
             size="rjSm"
             onClick={() => setShowCreateForm((value) => !value)}
           >
@@ -54,7 +61,7 @@ export function DashboardProductsPanel({
       </div>
 
       {!isAdmin && showCreateForm ? (
-        <div className="rounded-2xl border border-rj-gray-100 bg-rj-gray-50 p-5">
+        <div className="rounded-2xl border border-border bg-muted p-5">
           <ProductForm categories={categories} onDone={() => setShowCreateForm(false)} />
         </div>
       ) : null}
@@ -73,6 +80,8 @@ export function DashboardProductsPanel({
               categories={categories}
               shops={shops}
               isAdmin={isAdmin}
+              variants={variants.filter((variant) => variant.productId === product.id)}
+              rules={rules.filter((rule) => rule.productId === product.id)}
             />
           ))}
         </div>

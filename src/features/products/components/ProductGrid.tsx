@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 
 import { USER_ROLES } from "@/constants/roles";
 import { PRODUCT_CONDITION, PRODUCT_CONDITION_LABELS } from "@/constants/status";
@@ -22,6 +23,11 @@ export interface ProductGridProps {
   viewMode?: "grid" | "list";
   /** When set, the empty state names the search term instead of a generic message. */
   searchTerm?: string;
+  /** Real shop name when the listing is filtered by `?shopId=` (e.g. from the
+   * homepage's "Visit Shop"). Names the shop in the empty state instead of a
+   * generic "no products" message — never fabricated, always the caller's
+   * already-resolved shop. */
+  shopName?: string;
 }
 
 /** One row in the "list" view — same fields as `ProductTile`, laid out horizontally. */
@@ -116,14 +122,37 @@ export async function ProductGrid({
   products,
   viewMode = "grid",
   searchTerm,
+  shopName,
 }: ProductGridProps) {
   if (products.length === 0) {
-    return searchTerm ? (
-      <EmptyState
-        title={`No results for "${searchTerm}"`}
-        description="Check the spelling, try a shorter term, or browse by category instead."
-      />
-    ) : (
+    if (searchTerm) {
+      return (
+        <EmptyState
+          title={`No results for "${searchTerm}"`}
+          description="Check the spelling, try a shorter term, or browse by category instead."
+        />
+      );
+    }
+
+    if (shopName) {
+      return (
+        <EmptyState
+          title={`No products from ${shopName} yet`}
+          description="This shop hasn't listed anything yet. Check back soon, or browse the full catalog."
+          action={
+            <Link
+              href={ROUTES.products}
+              className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-rj-black px-8 py-3.5 text-[13px] font-bold text-rj-black transition-colors hover:bg-rj-black hover:text-rj-white"
+            >
+              Browse All Products
+              <ArrowRight className="h-[13px] w-[13px]" aria-hidden="true" />
+            </Link>
+          }
+        />
+      );
+    }
+
+    return (
       <EmptyState
         title="No products found"
         description="Try adjusting your filters or browse another category."

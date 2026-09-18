@@ -5,25 +5,21 @@ import { Badge } from "@/components/ui/badge";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ROUTES } from "@/constants/routes";
-import { getDashboardOrderSummary, listPendingPayments } from "@/lib/supabase/queries";
+import { getDashboardOrderSummary } from "@/lib/supabase/queries";
 
 /**
  * Shortcut tiles for the Seller Portal dashboard — structural twin of
  * `AdminQuickAccess`, swapping "Process Returns" (admin-only queue sellers
- * don't have) for "Pending Payments" (sellers already verify their own
- * shop's QR receipts at `/seller/payments`).
+ * don't have) for a plain "Payments" link. Payments no longer need a
+ * pending-count badge — Xendit payments settle themselves via webhook, and
+ * COD is marked collected from the order detail page, not a queue here.
  */
 export async function SellerQuickAccess() {
   let pendingOrders: number;
-  let pendingPayments: number;
 
   try {
-    const [orderSummary, payments] = await Promise.all([
-      getDashboardOrderSummary(),
-      listPendingPayments(),
-    ]);
+    const orderSummary = await getDashboardOrderSummary();
     pendingOrders = orderSummary.statusCounts.pending;
-    pendingPayments = payments.length;
   } catch {
     return <ErrorState message="We couldn't load quick actions right now." />;
   }
@@ -50,8 +46,7 @@ export async function SellerQuickAccess() {
           href={ROUTES.sellerPayments}
           className="flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-3 py-3 text-xs font-medium text-foreground transition-all hover:bg-muted"
         >
-          <span>Pending Payments</span>
-          {pendingPayments > 0 && <Badge tone="danger">{pendingPayments}</Badge>}
+          <span>Payments</span>
         </Link>
         <Link
           href={ROUTES.sellerReports}

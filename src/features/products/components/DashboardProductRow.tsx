@@ -7,14 +7,16 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ConfirmPanel } from "@/components/ui/confirm-panel";
 import { ErrorState } from "@/components/feedback/ErrorState";
+import { RecommendationRuleManager, type RecommendationRule } from "@/features/assistant";
 import {
   archiveProductAction,
   assignProductShopAction,
 } from "@/features/products/actions/product.actions";
 import { ProductForm } from "@/features/products/components/ProductForm";
 import { ProductStatusBadge } from "@/features/products/components/ProductStatusBadge";
+import { ProductVariantManager } from "@/features/products/components/ProductVariantManager";
 import type { Category } from "@/features/categories/types/category.types";
-import type { Product } from "@/features/products/types/product.types";
+import type { Product, ProductVariant } from "@/features/products/types/product.types";
 import type { Shop } from "@/features/shops/types/shop.types";
 import { formatCurrency } from "@/lib/utils/currency";
 import { cn } from "@/lib/utils/cn";
@@ -25,12 +27,16 @@ export interface DashboardProductRowProps {
   /** Populated only for an admin — powers the create-form picker and the unassigned-row assign control. */
   shops: Shop[];
   isAdmin: boolean;
+  /** This product's own variants (already filtered by the panel from one bulk fetch — no N+1). */
+  variants: ProductVariant[];
+  /** This product's own Guided Selection rules (already filtered by the panel from one bulk fetch — no N+1). */
+  rules: RecommendationRule[];
 }
 
 /**
  * One product in the dashboard management list. Edit swaps the row for an
  * inline `ProductForm`; archive uses the same inline-confirm shape as
- * `VerificationCard`. The "Unassigned" assign control is admin-only and only
+ * `MarkCodCollectedButton`. The "Unassigned" assign control is admin-only and only
  * shown for a legacy product with `shopId === null` (see the Phase 3 plan's
  * orphaned-product handling).
  */
@@ -39,6 +45,8 @@ export function DashboardProductRow({
   categories,
   shops,
   isAdmin,
+  variants,
+  rules,
 }: DashboardProductRowProps) {
   const [mode, setMode] = useState<"view" | "edit">("view");
   const [confirmingArchive, setConfirmingArchive] = useState(false);
@@ -50,7 +58,7 @@ export function DashboardProductRow({
 
   if (mode === "edit") {
     return (
-      <Card className="border-rj-gray-100">
+      <Card>
         <CardContent className="p-5">
           <ProductForm categories={categories} product={product} onDone={() => setMode("view")} />
           <Button
@@ -62,6 +70,12 @@ export function DashboardProductRow({
           >
             Cancel
           </Button>
+        </CardContent>
+        <CardContent className="border-t border-border p-5">
+          <ProductVariantManager product={product} variants={variants} />
+        </CardContent>
+        <CardContent className="border-t border-border p-5">
+          <RecommendationRuleManager product={product} rules={rules} variants={variants} />
         </CardContent>
       </Card>
     );
@@ -93,16 +107,16 @@ export function DashboardProductRow({
   }
 
   return (
-    <Card className="border-rj-gray-100">
+    <Card>
       <CardContent className="flex flex-col gap-3 p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="truncate text-sm font-semibold text-rj-black">{product.title}</p>
+              <p className="truncate text-sm font-semibold text-foreground">{product.title}</p>
               <ProductStatusBadge status={product.status} />
               {product.shopId === null ? <Badge tone="warning">Unassigned</Badge> : null}
             </div>
-            <p className="mt-1 text-xs text-rj-gray-600">
+            <p className="mt-1 text-xs text-muted-foreground">
               {formatCurrency(product.priceCents, product.currency)} · Qty {product.quantity}
             </p>
             {error ? (
@@ -119,7 +133,7 @@ export function DashboardProductRow({
                   <select
                     value={selectedShopId}
                     onChange={(event) => setSelectedShopId(event.target.value)}
-                    className="h-9 rounded-md border border-rj-gray-200 bg-rj-white px-2 text-sm text-rj-black outline-none transition-colors focus-visible:border-rj-black focus-visible:ring-2 focus-visible:ring-rj-red/30"
+                    className="h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
                   >
                     <option value="">Select a shop…</option>
                     {shops.map((shop) => (
@@ -130,7 +144,7 @@ export function DashboardProductRow({
                   </select>
                   <Button
                     type="button"
-                    variant="rj"
+                    variant="primary"
                     size="rjSm"
                     isLoading={isPending}
                     disabled={!selectedShopId}

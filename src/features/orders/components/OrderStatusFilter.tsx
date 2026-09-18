@@ -2,19 +2,27 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
+import {
+  FILTER_CHIP_ACTIVE,
+  FILTER_CHIP_ACTIVE_THEMED,
+  FILTER_CHIP_IDLE,
+  FILTER_CHIP_IDLE_THEMED,
+} from "@/components/ui/filter-chip";
 import type { OrderStatus } from "@/constants/status";
 import {
   getOrderStatusLabel,
   ORDER_STATUS_FLOW,
 } from "@/features/orders/constants/order.constants";
 
-const CHIP_ACTIVE =
-  "rounded-full border-[1.5px] border-rj-black bg-rj-black px-4 py-1.5 text-[11px] font-bold text-rj-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30";
-const CHIP_IDLE =
-  "rounded-full border-[1.5px] border-rj-gray-200 bg-transparent px-4 py-1.5 text-[11px] font-bold text-rj-gray-600 transition-all hover:border-rj-black hover:text-rj-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30";
-
-/** Status chips for the order history. Sets `status`, always clears `page`. */
-export function OrderStatusFilter() {
+/**
+ * Status chips for the order history. Sets `status`, always clears `page`.
+ * Renders identically on Buyer /orders and both portals' Orders list — pass
+ * `themed` from the portal pages only; Buyer omits it and keeps the fixed
+ * rj-* chip look.
+ */
+export function OrderStatusFilter({ themed = false }: { themed?: boolean }) {
+  const CHIP_ACTIVE = themed ? FILTER_CHIP_ACTIVE_THEMED : FILTER_CHIP_ACTIVE;
+  const CHIP_IDLE = themed ? FILTER_CHIP_IDLE_THEMED : FILTER_CHIP_IDLE;
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();

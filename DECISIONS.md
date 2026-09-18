@@ -39,6 +39,7 @@ Every decision is a numbered ADR with a fixed shape: **Context → Problem → O
 | [ADR-016](#adr-016-reports-as-security-definer-rpcs-over-existing-orders) | Reports as SECURITY DEFINER RPCs over existing orders | ✅ Accepted |
 | [ADR-017](#adr-017-oauth-account-linking-trusts-supabases-verified-email-matching-only) | OAuth account linking trusts Supabase's verified-email matching only | ✅ Accepted |
 | [ADR-018](#adr-018-wishlist-reviews-and-a-derived-buyer-activity-feed) | Wishlist, Reviews, and a Derived Buyer Activity Feed | ✅ Accepted |
+| [ADR-020](#adr-020-authenticated-cart-becomes-database-backed-with-guest-cart-merge-on-sign-in) | Authenticated cart becomes database-backed, with guest-cart merge on sign-in | ✅ Accepted |
 
 ---
 
@@ -212,7 +213,7 @@ Every decision is a numbered ADR with a fixed shape: **Context → Problem → O
 
 ## ADR-008: Manual payment verification (COD + QR receipt), no gateway
 
-**Status:** ✅ Accepted
+**Status:** ⛔ Superseded by **ADR-019** (Xendit Online Payment). QR/manual-verification is removed from the active checkout flow; every historical `qr_upload` payment row and receipt is preserved for audit — see ADR-019.
 
 **Context:** The SAD explicitly scopes payments to **Cash on Delivery** and **QR receipt upload**, verified manually — no payment gateway or courier API.
 
@@ -251,7 +252,7 @@ Every decision is a numbered ADR with a fixed shape: **Context → Problem → O
 
 **Consequences:**
 - Rules are deterministic, explainable, and testable without a model-evaluation harness.
-- The target schema includes a `recommendation_rules` table (see [ARCHITECTURE.md → Target Database Schema](./ARCHITECTURE.md#target-database-schema)); none exists yet — `features/assistant` is currently a stub, and the landing page's `SmartAssistantPreview` is a **visual preview only**, not a working engine.
+- The `recommendation_rules` table (see [ARCHITECTURE.md → Target Database Schema](./ARCHITECTURE.md#target-database-schema)) is implemented with explicit typed columns (`occasion`, `size`, optional `variant_id`), not the SAD's indicative `jsonb conditions` blob — same rationale as `products`/`orders` already preferring real columns. `features/assistant` now has admin/seller rule authoring and a buyer-facing quiz (`GuidedSelectorQuiz`); the landing page's `SmartAssistantPreview` opens the real quiz instead of showing a cosmetic chat demo.
 - Any AI/LLM approach is explicitly **out of scope** and must not be introduced without a new ADR superseding this one.
 
 **Future Revisit:** Only via explicit SAD amendment — this is a business-scope decision, not a technical preference.
@@ -350,7 +351,7 @@ Every decision is a numbered ADR with a fixed shape: **Context → Problem → O
 - Cart contents are lost if the user clears browser storage or switches devices before checkout — an accepted tradeoff, not a bug.
 - Checkout is the enforcement point: `PROTECTED_ROUTE_PREFIXES` includes `/checkout`, so committing a cart to an order always requires an authenticated Customer.
 
-**Future Revisit:** If cross-device cart persistence becomes a requirement, add a server-synced cart **for authenticated users only**, without changing the guest experience.
+**Future Revisit:** ~~If cross-device cart persistence becomes a requirement, add a server-synced cart for authenticated users only, without changing the guest experience.~~ **Acted on — see [ADR-020](#adr-020-authenticated-cart-becomes-database-backed-with-guest-cart-merge-on-sign-in).** The decision above still holds exactly as written for guests — nothing about the guest experience changed; ADR-020 only adds a database-backed cart for *authenticated* users.
 
 ---
 
@@ -485,3 +486,73 @@ Original decision: Option 2. The Stripe code stayed in the repo (real, working c
 - [README.md → Future Enhancements](./README.md#future-enhancements) is updated accordingly — "Product reviews and ratings" and "wishlists" are removed from the deferred list; "Realtime notifications" remains deferred, since what's built here is explicitly not that.
 
 **Future Revisit:** If review volume or spam becomes a problem, revisit rate-limiting `submit_review` via the existing `check_rate_limit` RPC/`rate_limit_hits` table (already used elsewhere), or a lightweight moderation flag — deliberately not built now. If buyers need an unread badge or push delivery for the activity feed, revisit the optional `profiles.activity_last_seen_at` column path raised during the improvement-phase audit — deliberately deferred to keep v1 a zero-schema-change feature. If `products.shop_id` is later fully backfilled (closing TD-1), the shop-identity joins added here should switch from the `shop_users` bridge to `products.shop_id` directly.
+
+---
+
+## ADR-019: Xendit Online Payment (GCash, Maya, Card), superseding ADR-008's "no gateway" stance
+
+**Status:** ✅ Accepted (sandbox/test-mode implementation)
+
+**Context:** ADR-008 committed to COD + manual QR-receipt verification, explicitly ruling out a payment gateway for the capstone. That decision is being revisited: the platform now needs real-time online payment (GCash, Maya, Card) alongside COD, with payment confirmation that isn't dependent on a human checking a receipt image.
+
+**Problem:** How to add a payment gateway without violating this codebase's existing non-negotiables — `orders.payment_status` must never be settable by the client or the frontend redirect alone; historical payment data must not be destroyed; the existing `payments`-table chokepoint pattern (`create_order`, `submit_qr_payment`/`verify_payment` before it) must be preserved; and the change must not introduce seller payouts, platform commission, or real-money settlement, since this is a sandbox/test-mode implementation.
+
+**Options Considered:**
+1. Xendit's hosted Invoices page (one redirect covering all channels) — simplest, but a full-page redirect to Xendit's own domain for every method, including Card.
+2. **Direct Xendit APIs**: `v3/payment_requests` for GCash/Maya (redirect-based, channel-specific), and a Xendit Payment Session (`mode=COMPONENTS`) + the `xendit-components-web` client package for Card (embedded, PCI-safe — raw card data never reaches this server).
+3. Full PCI-DSS Level 1 "raw PAN" integration (card details posted directly to our server) — rejected outright; disproportionate compliance burden for a sandbox capstone.
+
+**Decision:** Option 2. Confirmed against Xendit's own documentation across multiple verification passes (not assumed from training data) — see the implementation's own audit trail for the specific corrections made along the way (e.g., Card genuinely needs the Components/Session flow, not a plain tokenized `payment_requests` call).
+
+**Non-negotiables, enforced structurally, not just by convention:**
+- **The Xendit webhook (`POST /api/webhooks/xendit`) is the only path by which a payment can become `paid`.** It verifies `x-callback-token` before any DB write, then delegates to `process_xendit_webhook` — a `SECURITY DEFINER` RPC whose `EXECUTE` grant is `service_role`-only (confirmed absent from the `anon`/`authenticated`-executable advisor list after implementation). No Server Action, redirect handler, or return page ever writes `paid`.
+- **Idempotent by construction, not by convention**: `begin_xendit_payment_attempt` reuses an in-flight/still-valid attempt instead of creating a duplicate (double-click/retry safe at the DB layer, independent of Xendit's own `Idempotency-Key` header, also sent). `process_xendit_webhook` is a no-op once a payment is already `paid`/`failed` — this also correctly handles out-of-order webhook delivery. Every webhook delivery is logged to a new, RLS-locked-down `payment_webhook_events` audit table regardless of outcome.
+- **Every webhook is validated against our own database**, never trusted blindly: the resolved `payments` row's stored `xendit_payment_request_id` must match what the webhook claims to confirm; amount and currency must match what was recorded when the attempt was created (a mismatch marks the attempt `failed`, never `paid`).
+- **COD is unaffected by Xendit and still never auto-marks paid.** A new `mark_cod_payment_collected` RPC (seller of the order, or admin) is the only way a COD order's `payment_status` becomes `paid` — gated by the same transaction-local-flag pattern already used for refunds (`app.refund_in_progress` → new `app.cod_collection_in_progress`), closing the exact self-declare loophole that removing `verify_payment`'s seller carve-out would otherwise have reopened.
+- **No commission, no payouts, no xenPlatform.** `create_order` was not touched — there was never commission logic to add or remove. Shop attribution (`orders.seller_id` → `shop_users` → `shops`, one seller per shop) was already sufficient for the three-sibling-shop model (ADR-001) and needed no schema change.
+
+**Removed (Bank Transfer / QR manual verification), historical data preserved:**
+- `submit_qr_payment`/`verify_payment` RPCs dropped (guarded by a pre-flight check confirming zero `pending`+`qr_upload` payments existed before dropping). The buyer-facing checkout option and the seller/admin "verification queue" UI are gone — replaced by a read-only `PaymentsList` (no manual actions; Xendit settles itself, COD is settled via the RPC above).
+- The `payment-receipts` Storage bucket's buyer-INSERT policy is dropped (no new receipts); its SELECT policy, the bucket, and every existing object are untouched — historical receipts remain viewable.
+- Every historical `payments` row (`payment_method_type IN ('qr_upload', 'card')`) and `profiles.payment_qr_url` value is untouched. `qr_upload`/`card` join `payment_method_type`'s permanent-but-unused values (Postgres enum values cannot be cheaply dropped) — same accepted limitation ADR-014 already established for `card`.
+- `report_sales_summary`'s COD/QR revenue split was previously binary ("not QR = COD") — fixed to a proper three-way split (`cod_paid_orders`/`qr_paid_orders`/`xendit_paid_orders`) as part of this change, since the binary logic would have silently miscounted Xendit revenue as COD otherwise.
+
+**Consequences:**
+- New client-side dependency: `xendit-components-web` (Card only) — unavoidable for PCI-safe card collection without becoming a PCI-DSS Level 1 merchant.
+- New server-only env vars: `XENDIT_SECRET_KEY`, `XENDIT_WEBHOOK_TOKEN`.
+- New Route Handler: `/api/webhooks/xendit` (the second Route Handler in this codebase, after the PKCE `auth/callback` — anticipated by ADR-004's "introduce versioned Route Handlers alongside Server Actions" note). `src/proxy.ts` skips the Supabase session-cookie refresh for `/api/webhooks/*`, since it's an unauthenticated-by-cookie, server-to-server path.
+- Xendit-dashboard-initiated refunds are **not** automatically reflected back into this app (no `/refunds` webhook handler built) — existing order refunds still go through the pre-existing `decide_return` admin flow, which is payment-method-agnostic and required no changes.
+- This is a **sandbox/test-mode implementation only**. Going live would additionally require: real Xendit business verification, a publicly reachable webhook URL, and a security review of the webhook endpoint's exposure (rate limiting) before production traffic — none of that is in scope here.
+
+**Future Revisit:** If this goes into production, revisit: automatic refund-webhook handling, seller payout/settlement (explicitly out of scope for this sandbox change), and confirming the exact amount-unit convention (`request_amount`'s decimal-vs-minor-unit format) and the Card session's webhook event family against a real sandbox account, both of which were resolved by best-evidence reasoning rather than a live API call during this implementation.
+
+---
+
+## ADR-020: Authenticated cart becomes database-backed, with guest-cart merge on sign-in
+
+**Status:** ✅ Accepted
+
+**Context:** ADR-013 established a client-side-only cart for both guests and authenticated buyers, explicitly flagging cross-device persistence as a **Future Revisit** — "if cross-device cart persistence becomes a requirement, add a server-synced cart for authenticated users only, without changing the guest experience." That requirement arrived: the same authenticated account needs to see the same cart on a second browser or device, not just the one it was built on.
+
+**Problem:** `localStorage` is inherently per-browser. Scoping its key by user id (an interim fix, shipped first) stops one account's cart from leaking into another's on a *shared* browser, but cannot make a cart visible on a genuinely *different* browser or device at all — that requires a server-side store for authenticated users.
+
+**Options Considered:**
+1. Keep `localStorage` for everyone, accept no cross-device sync (status quo).
+2. **Database-backed cart for authenticated users only; guest cart stays exactly as ADR-013 decided.**
+3. Server-side cart for *all* users, including guests (session-tied anonymous accounts or device fingerprinting) — rejected for the same complexity-vs-value reasons ADR-013 already rejected it for.
+
+**Decision:** Option 2, per the revisit condition ADR-013 itself set out.
+
+- New, purely additive tables: `carts` (one row per authenticated user) and `cart_items` (`product_id`, nullable `variant_id`, `quantity`). No existing table changed.
+- Plain RLS, `user_id = auth.uid()` ownership, **no admin or seller override** — a cart is private to its owner, the same precedent already established for `addresses`/`wishlists`, not the staff-visible pattern used for `orders`/`products`.
+- `productId + variantId` is the cart-line identity, enforced by partial unique indexes — the same pattern already used by `order_items`/`inventory` for a nullable `variant_id` — so the same product in two different variants is always two distinct lines, and the same product+variant always merges into one.
+- `CartProvider` forks on the resolved identity: guest → unchanged `localStorage` + `useReducer`; authenticated → new Server Actions (`features/cart/actions/cart.actions.ts`), reconciled by a full refetch after every mutation rather than optimistic client-side patching, so the client never has to re-implement the server's merge/increment logic.
+- **Guest→account merge on sign-in:** a non-empty guest cart is folded into the account cart the moment an identity resolves as authenticated — covering both "signs in this session" and "already-signed-in visitor whose browser still has a leftover guest cart from a past anonymous visit." Matching lines sum; new lines are added. A line that's gone stale (archived product, insufficient stock) is not specially filtered at merge time — it surfaces through the *existing* "no longer available" / "only N left" cart banners the same way any other stale line already does, so merge needed no new stock-validation logic of its own. The guest bucket is cleared only after a confirmed successful merge, so a network failure can't lose the guest's cart — a later page load naturally retries.
+
+**Consequences:**
+- The same account now sees the same cart on any browser or device — the exact gap ADR-013's Future Revisit flagged.
+- No change to the guest experience, checkout, order creation, or product/variant logic.
+- Cart price/stock are still never stored on a cart line — always resolved live via join, same as the pre-existing client cart already did before checkout.
+- A known, accepted residual gap: two browser tabs signing in at the same moment could both attempt to merge the same guest bucket before either clears it, double-counting the affected lines' quantities. Low severity (the buyer can just adjust the quantity, same as any other cart line) and not worth a distributed lock for the value it would add.
+
+**Future Revisit:** None currently planned — the cross-device gap this ADR closes was the only open item ADR-013 left on the table.

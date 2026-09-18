@@ -13,6 +13,11 @@ export interface ProductListSectionProps {
   searchParams: Record<string, string | string[] | undefined>;
   /** Pinned category (e.g. /categories/[slug]). Overrides any URL `categoryId`. */
   categoryId?: string;
+  /** Real shop name, already resolved by the caller (e.g. `getShopById`) when
+   * the listing is filtered by `?shopId=` — lets the empty state name the
+   * shop instead of showing a generic "no products" message. Never fetched
+   * here; never fabricated. */
+  shopName?: string;
 }
 
 /**
@@ -24,6 +29,7 @@ export interface ProductListSectionProps {
 export async function ProductListSection({
   searchParams,
   categoryId,
+  shopName,
 }: ProductListSectionProps) {
   const parsed = productListParamsSchema.safeParse(searchParams);
   if (!parsed.success) {
@@ -54,7 +60,12 @@ export async function ProductListSection({
       <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-rj-gray-400" aria-live="polite">
         {total} product{total === 1 ? "" : "s"}
       </p>
-      <ProductGrid products={items} viewMode={viewMode} searchTerm={parsed.data.search} />
+      <ProductGrid
+        products={items}
+        viewMode={viewMode}
+        searchTerm={parsed.data.search}
+        shopName={shopName}
+      />
       {totalPages > 1 ? <PaginationControls page={page} totalPages={totalPages} /> : null}
     </section>
   );

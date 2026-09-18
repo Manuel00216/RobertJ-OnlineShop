@@ -12,7 +12,7 @@ import { getReturnEvidenceSignedUrl, listReturnRequests } from "@/lib/supabase/q
  * Server Component: every return request visible to the caller (RLS scopes
  * to admin = all, seller = own-shop's — this page is admin-only per its
  * route guard, but the query/component are role-agnostic, matching
- * `VerificationQueue`'s shape), each with its evidence photo's signed URL
+ * `PaymentsList`'s shape), each with its evidence photo's signed URL
  * resolved up front since the bucket is private.
  */
 export async function ReturnQueue() {
@@ -47,11 +47,11 @@ export async function ReturnQueue() {
         <li key={request.id} className="flex flex-col gap-2">
           <Link
             href={ROUTES.adminOrderDetail(request.orderId)}
-            className="text-xs font-semibold text-rj-black hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30"
+            className="text-xs font-semibold text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
           >
             {request.orderNumber} →
           </Link>
-          <ReturnRequestStatusCard request={request} evidenceUrl={evidenceUrl} />
+          <ReturnRequestStatusCard request={request} evidenceUrl={evidenceUrl} themed />
           {request.status === RETURN_STATUS.sellerAccepted ||
           request.status === RETURN_STATUS.sellerRejected ? (
             <DecideReturnPanel

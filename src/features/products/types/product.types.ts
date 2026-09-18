@@ -70,3 +70,24 @@ export type ProductSort = "newest" | "price-asc" | "price-desc" | "title-asc";
 export function getCoverImage(product: Product): ProductImage | null {
   return product.images[0] ?? null;
 }
+
+/**
+ * An optional color/size variant of a product (Phase 3b). A product with no
+ * variant rows is a plain single-SKU listing — nothing else in the schema
+ * requires this to be populated. Stock lives in `inventory`
+ * (`variant_id`-keyed), never here — see `adjustStock`.
+ */
+export interface ProductVariant {
+  id: string;
+  productId: string;
+  sellerId: string;
+  shopId: string | null;
+  sku: string | null;
+  color: string | null;
+  size: string | null;
+  /** null = inherits the parent product's price_cents. */
+  priceCents: number | null;
+  status: ProductStatus;
+  createdAt: string;
+  updatedAt: string;
+}

@@ -14,8 +14,9 @@ export interface RespondToReturnPanelProps {
 
 /**
  * The order's own seller (or admin) accepts/rejects a pending return
- * request — mirrors `VerificationCard`'s two-button-then-shared-`ConfirmPanel`
- * shape. Only ever rendered by the caller when `request.status === 'pending'`.
+ * request — a two-button-then-shared-`ConfirmPanel` shape (see
+ * `MarkCodCollectedButton` for the same pattern). Only ever rendered by the
+ * caller when `request.status === 'pending'`.
  */
 export function RespondToReturnPanel({ returnId }: RespondToReturnPanelProps) {
   const [pendingDecision, setPendingDecision] = useState<SellerReturnDecision | null>(null);
@@ -54,7 +55,7 @@ export function RespondToReturnPanel({ returnId }: RespondToReturnPanelProps) {
               : "The buyer can still escalate — an administrator may overrule this."
           }
           tone="neutral"
-          confirmVariant={pendingDecision === "accept" ? "rj" : "danger"}
+          confirmVariant={pendingDecision === "accept" ? "primary" : "danger"}
           confirmLabel={`Yes, ${pendingDecision}`}
           isPending={isPending}
           onConfirm={confirmDecision}
@@ -64,7 +65,7 @@ export function RespondToReturnPanel({ returnId }: RespondToReturnPanelProps) {
         <div className="flex flex-wrap gap-2">
           <Button
             type="button"
-            variant="rj"
+            variant="primary"
             size="rjSm"
             onClick={() => setPendingDecision("accept")}
           >

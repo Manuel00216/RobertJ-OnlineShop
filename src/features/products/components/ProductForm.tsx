@@ -28,9 +28,9 @@ interface PendingImage {
 }
 
 const selectClasses =
-  "h-10 rounded-md border border-rj-gray-200 bg-rj-white px-3 text-sm text-rj-black outline-none transition-colors focus-visible:border-rj-black focus-visible:ring-2 focus-visible:ring-rj-red/30";
+  "h-10 rounded-md border border-border bg-background px-3 text-sm text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30";
 const textareaClasses =
-  "min-h-24 rounded-md border border-rj-gray-200 bg-rj-white px-3 py-2 text-sm text-rj-black outline-none transition-colors placeholder:text-rj-gray-400 focus-visible:border-rj-black focus-visible:ring-2 focus-visible:ring-rj-red/30";
+  "min-h-24 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30";
 
 export interface ProductFormProps {
   categories: Category[];
@@ -149,6 +149,7 @@ export function ProductForm({ categories, product, onDone }: ProductFormProps) {
         placeholder="e.g. Vintage Denim Jacket"
         errors={fieldErrors?.title}
         required
+        themed
       />
 
       <div className="flex flex-col gap-1.5">
@@ -222,10 +223,10 @@ export function ProductForm({ categories, product, onDone }: ProductFormProps) {
           multiple
           onChange={(event) => handleFilesSelected(event.target.files)}
           disabled={isImagePending}
-          className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-rj-black file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-rj-white"
+          className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-primary-foreground"
         />
         {imageError ? (
-          <p role="alert" className="text-xs text-rj-red-dark">
+          <p role="alert" className="text-xs text-danger">
             {imageError}
           </p>
         ) : null}
@@ -241,6 +242,7 @@ export function ProductForm({ categories, product, onDone }: ProductFormProps) {
           defaultValue={product ? fromCents(product.priceCents) : undefined}
           errors={fieldErrors?.price}
           required
+          themed
         />
         <FormField
           name="quantity"
@@ -251,6 +253,7 @@ export function ProductForm({ categories, product, onDone }: ProductFormProps) {
           defaultValue={product?.quantity ?? 0}
           errors={fieldErrors?.quantity}
           required
+          themed
         />
       </div>
 
@@ -297,7 +300,7 @@ export function ProductForm({ categories, product, onDone }: ProductFormProps) {
           type="checkbox"
           name="featured"
           defaultChecked={product?.featured ?? false}
-          className="h-4 w-4 rounded border-rj-gray-200 text-rj-black focus-visible:ring-2 focus-visible:ring-rj-red/30"
+          className="h-4 w-4 rounded border-border text-primary focus-visible:ring-2 focus-visible:ring-ring/30"
         />
         Featured on homepage
       </label>
@@ -327,9 +330,10 @@ export function ProductForm({ categories, product, onDone }: ProductFormProps) {
         defaultValue={product?.location ?? ""}
         placeholder="e.g. Quezon City"
         errors={fieldErrors?.location}
+        themed
       />
 
-      <Button type="submit" variant="rj" size="rj" isLoading={isPending} className="w-full sm:w-auto">
+      <Button type="submit" variant="primary" size="rj" isLoading={isPending} className="w-full sm:w-auto">
         {isPending ? "Saving…" : isEdit ? "Save changes" : "Create product"}
       </Button>
     </form>

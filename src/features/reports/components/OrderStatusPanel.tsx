@@ -27,9 +27,9 @@ export async function OrderStatusPanel({ filters }: { filters: ReportFilters }) 
   }));
 
   return (
-    <Card className="border-rj-gray-100">
+    <Card>
       <CardContent className="flex flex-col gap-4 p-5">
-        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-rj-gray-400">
+        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
           Orders by status
         </p>
         {data.length > 0 ? (

@@ -1,13 +1,3 @@
-/**
- * Database types for the Roberj Marketplace schema.
- *
- * Generated from the live project (hjxtbnmnwlbqgptgncoh). Regenerate after
- * any migration:
- *
- *   npx supabase login
- *   npx supabase link --project-ref hjxtbnmnwlbqgptgncoh
- *   npx supabase gen types typescript --linked > src/lib/supabase/database.types.ts
- */
 export type Json =
   | string
   | number
@@ -20,10 +10,72 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.15"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
+      addresses: {
+        Row: {
+          barangay: string | null
+          city: string
+          country: string
+          created_at: string
+          id: string
+          is_default: boolean
+          label: string
+          phone: string
+          postal_code: string
+          province: string | null
+          recipient_name: string
+          region: string | null
+          street_details: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          barangay?: string | null
+          city: string
+          country?: string
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          label?: string
+          phone: string
+          postal_code: string
+          province?: string | null
+          recipient_name: string
+          region?: string | null
+          street_details: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          barangay?: string | null
+          city?: string
+          country?: string
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          label?: string
+          phone?: string
+          postal_code?: string
+          province?: string | null
+          recipient_name?: string
+          region?: string | null
+          street_details?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "addresses_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       admin_action_log: {
         Row: {
           action: string
@@ -71,6 +123,131 @@ export type Database = {
             foreignKeyName: "admin_action_log_target_user_id_fkey"
             columns: ["target_user_id"]
             isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      buyer_preferences: {
+        Row: {
+          created_at: string
+          default_payment_method: string | null
+          email_enabled: boolean
+          order_updates: boolean
+          promotions: boolean
+          push_enabled: boolean
+          sms_enabled: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          default_payment_method?: string | null
+          email_enabled?: boolean
+          order_updates?: boolean
+          promotions?: boolean
+          push_enabled?: boolean
+          sms_enabled?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          default_payment_method?: string | null
+          email_enabled?: boolean
+          order_updates?: boolean
+          promotions?: boolean
+          push_enabled?: boolean
+          sms_enabled?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "buyer_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cart_items: {
+        Row: {
+          cart_id: string
+          created_at: string
+          id: string
+          product_id: string
+          quantity: number
+          updated_at: string
+          variant_id: string | null
+        }
+        Insert: {
+          cart_id: string
+          created_at?: string
+          id?: string
+          product_id: string
+          quantity: number
+          updated_at?: string
+          variant_id?: string | null
+        }
+        Update: {
+          cart_id?: string
+          created_at?: string
+          id?: string
+          product_id?: string
+          quantity?: number
+          updated_at?: string
+          variant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cart_items_cart_id_fkey"
+            columns: ["cart_id"]
+            isOneToOne: false
+            referencedRelation: "carts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cart_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cart_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      carts: {
+        Row: {
+          created_at: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "carts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -135,6 +312,7 @@ export type Database = {
           quantity: number
           shop_id: string | null
           updated_at: string
+          variant_id: string | null
         }
         Insert: {
           created_at?: string
@@ -144,6 +322,7 @@ export type Database = {
           quantity?: number
           shop_id?: string | null
           updated_at?: string
+          variant_id?: string | null
         }
         Update: {
           created_at?: string
@@ -153,12 +332,13 @@ export type Database = {
           quantity?: number
           shop_id?: string | null
           updated_at?: string
+          variant_id?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "inventory_product_id_fkey"
             columns: ["product_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -167,6 +347,13 @@ export type Database = {
             columns: ["shop_id"]
             isOneToOne: false
             referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
             referencedColumns: ["id"]
           },
         ]
@@ -181,6 +368,8 @@ export type Database = {
           quantity: number
           subtotal_cents: number
           unit_price_cents: number
+          variant_id: string | null
+          variant_label: string | null
         }
         Insert: {
           created_at?: string
@@ -191,6 +380,8 @@ export type Database = {
           quantity: number
           subtotal_cents: number
           unit_price_cents: number
+          variant_id?: string | null
+          variant_label?: string | null
         }
         Update: {
           created_at?: string
@@ -201,6 +392,8 @@ export type Database = {
           quantity?: number
           subtotal_cents?: number
           unit_price_cents?: number
+          variant_id?: string | null
+          variant_label?: string | null
         }
         Relationships: [
           {
@@ -217,12 +410,20 @@ export type Database = {
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "order_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
         ]
       }
       orders: {
         Row: {
           buyer_id: string
           cancelled_at: string | null
+          checkout_group_id: string | null
           created_at: string
           currency: string
           delivered_at: string | null
@@ -244,6 +445,7 @@ export type Database = {
         Insert: {
           buyer_id: string
           cancelled_at?: string | null
+          checkout_group_id?: string | null
           created_at?: string
           currency?: string
           delivered_at?: string | null
@@ -265,6 +467,7 @@ export type Database = {
         Update: {
           buyer_id?: string
           cancelled_at?: string | null
+          checkout_group_id?: string | null
           created_at?: string
           currency?: string
           delivered_at?: string | null
@@ -300,48 +503,116 @@ export type Database = {
           },
         ]
       }
+      payment_webhook_events: {
+        Row: {
+          event_type: string | null
+          id: string
+          payment_row_id: string | null
+          processing_result: string
+          raw_payload: Json
+          received_at: string
+          reference_id: string | null
+          status: string | null
+          xendit_payment_id: string | null
+          xendit_payment_request_id: string | null
+        }
+        Insert: {
+          event_type?: string | null
+          id?: string
+          payment_row_id?: string | null
+          processing_result: string
+          raw_payload: Json
+          received_at?: string
+          reference_id?: string | null
+          status?: string | null
+          xendit_payment_id?: string | null
+          xendit_payment_request_id?: string | null
+        }
+        Update: {
+          event_type?: string | null
+          id?: string
+          payment_row_id?: string | null
+          processing_result?: string
+          raw_payload?: Json
+          received_at?: string
+          reference_id?: string | null
+          status?: string | null
+          xendit_payment_id?: string | null
+          xendit_payment_request_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_webhook_events_payment_row_id_fkey"
+            columns: ["payment_row_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payments: {
         Row: {
           amount_cents: number
+          checkout_group_id: string | null
+          checkout_url: string | null
           created_at: string
           currency: string
+          expires_at: string | null
           failure_reason: string | null
           id: string
           order_id: string
+          payment_channel: string | null
           payment_method_type: Database["public"]["Enums"]["payment_method_type"]
+          provider_response: Json | null
           receipt_path: string | null
           status: Database["public"]["Enums"]["payment_status"]
           updated_at: string
           verified_at: string | null
           verified_by: string | null
+          xendit_payment_id: string | null
+          xendit_payment_request_id: string | null
         }
         Insert: {
           amount_cents: number
+          checkout_group_id?: string | null
+          checkout_url?: string | null
           created_at?: string
           currency?: string
+          expires_at?: string | null
           failure_reason?: string | null
           id?: string
           order_id: string
+          payment_channel?: string | null
           payment_method_type?: Database["public"]["Enums"]["payment_method_type"]
+          provider_response?: Json | null
           receipt_path?: string | null
           status?: Database["public"]["Enums"]["payment_status"]
           updated_at?: string
           verified_at?: string | null
           verified_by?: string | null
+          xendit_payment_id?: string | null
+          xendit_payment_request_id?: string | null
         }
         Update: {
           amount_cents?: number
+          checkout_group_id?: string | null
+          checkout_url?: string | null
           created_at?: string
           currency?: string
+          expires_at?: string | null
           failure_reason?: string | null
           id?: string
           order_id?: string
+          payment_channel?: string | null
           payment_method_type?: Database["public"]["Enums"]["payment_method_type"]
+          provider_response?: Json | null
           receipt_path?: string | null
           status?: Database["public"]["Enums"]["payment_status"]
           updated_at?: string
           verified_at?: string | null
           verified_by?: string | null
+          xendit_payment_id?: string | null
+          xendit_payment_request_id?: string | null
         }
         Relationships: [
           {
@@ -391,6 +662,70 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_variants: {
+        Row: {
+          color: string | null
+          created_at: string
+          id: string
+          price_cents: number | null
+          product_id: string
+          seller_id: string
+          shop_id: string | null
+          size: string | null
+          sku: string | null
+          status: Database["public"]["Enums"]["product_status"]
+          updated_at: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          price_cents?: number | null
+          product_id: string
+          seller_id: string
+          shop_id?: string | null
+          size?: string | null
+          sku?: string | null
+          status?: Database["public"]["Enums"]["product_status"]
+          updated_at?: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          price_cents?: number | null
+          product_id?: string
+          seller_id?: string
+          shop_id?: string | null
+          size?: string | null
+          sku?: string | null
+          status?: Database["public"]["Enums"]["product_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_variants_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_variants_seller_id_fkey"
+            columns: ["seller_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_variants_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
             referencedColumns: ["id"]
           },
         ]
@@ -491,7 +826,9 @@ export type Database = {
           avatar_url: string | null
           bio: string | null
           created_at: string
+          date_of_birth: string | null
           full_name: string | null
+          gender: Database["public"]["Enums"]["gender_type"] | null
           id: string
           is_active: boolean
           payment_qr_url: string | null
@@ -499,12 +836,15 @@ export type Database = {
           role: Database["public"]["Enums"]["user_role"]
           updated_at: string
           username: string | null
+          username_changed_at: string | null
         }
         Insert: {
           avatar_url?: string | null
           bio?: string | null
           created_at?: string
+          date_of_birth?: string | null
           full_name?: string | null
+          gender?: Database["public"]["Enums"]["gender_type"] | null
           id: string
           is_active?: boolean
           payment_qr_url?: string | null
@@ -512,12 +852,15 @@ export type Database = {
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
           username?: string | null
+          username_changed_at?: string | null
         }
         Update: {
           avatar_url?: string | null
           bio?: string | null
           created_at?: string
+          date_of_birth?: string | null
           full_name?: string | null
+          gender?: Database["public"]["Enums"]["gender_type"] | null
           id?: string
           is_active?: boolean
           payment_qr_url?: string | null
@@ -525,6 +868,7 @@ export type Database = {
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
           username?: string | null
+          username_changed_at?: string | null
         }
         Relationships: []
       }
@@ -545,6 +889,80 @@ export type Database = {
           window_start?: string
         }
         Relationships: []
+      }
+      recommendation_rules: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          occasion:
+            | Database["public"]["Enums"]["recommendation_occasion"]
+            | null
+          product_id: string
+          seller_id: string
+          shop_id: string | null
+          size: string | null
+          updated_at: string
+          variant_id: string | null
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          occasion?:
+            | Database["public"]["Enums"]["recommendation_occasion"]
+            | null
+          product_id: string
+          seller_id: string
+          shop_id?: string | null
+          size?: string | null
+          updated_at?: string
+          variant_id?: string | null
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          occasion?:
+            | Database["public"]["Enums"]["recommendation_occasion"]
+            | null
+          product_id?: string
+          seller_id?: string
+          shop_id?: string | null
+          size?: string | null
+          updated_at?: string
+          variant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recommendation_rules_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recommendation_rules_seller_id_fkey"
+            columns: ["seller_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recommendation_rules_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recommendation_rules_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       return_requests: {
         Row: {
@@ -743,24 +1161,33 @@ export type Database = {
       shops: {
         Row: {
           active: boolean
+          banner_url: string | null
           created_at: string
+          description: string | null
           id: string
+          logo_url: string | null
           name: string
           slug: string
           updated_at: string
         }
         Insert: {
           active?: boolean
+          banner_url?: string | null
           created_at?: string
+          description?: string | null
           id?: string
+          logo_url?: string | null
           name: string
           slug: string
           updated_at?: string
         }
         Update: {
           active?: boolean
+          banner_url?: string | null
           created_at?: string
+          description?: string | null
           id?: string
+          logo_url?: string | null
           name?: string
           slug?: string
           updated_at?: string
@@ -780,6 +1207,7 @@ export type Database = {
           reason: Database["public"]["Enums"]["stock_adjustment_reason"]
           related_order_id: string | null
           shop_id: string | null
+          variant_id: string | null
         }
         Insert: {
           created_at?: string
@@ -793,6 +1221,7 @@ export type Database = {
           reason: Database["public"]["Enums"]["stock_adjustment_reason"]
           related_order_id?: string | null
           shop_id?: string | null
+          variant_id?: string | null
         }
         Update: {
           created_at?: string
@@ -806,6 +1235,7 @@ export type Database = {
           reason?: Database["public"]["Enums"]["stock_adjustment_reason"]
           related_order_id?: string | null
           shop_id?: string | null
+          variant_id?: string | null
         }
         Relationships: [
           {
@@ -834,6 +1264,13 @@ export type Database = {
             columns: ["shop_id"]
             isOneToOne: false
             referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_adjustments_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
             referencedColumns: ["id"]
           },
         ]
@@ -874,6 +1311,66 @@ export type Database = {
           },
         ]
       }
+      xendit_refunds: {
+        Row: {
+          amount_cents: number
+          created_at: string
+          currency: string
+          failure_code: string | null
+          id: string
+          payment_id: string
+          raw_response: Json | null
+          return_request_id: string
+          status: Database["public"]["Enums"]["xendit_refund_status"]
+          updated_at: string
+          xendit_payment_request_id: string
+          xendit_refund_id: string | null
+        }
+        Insert: {
+          amount_cents: number
+          created_at?: string
+          currency: string
+          failure_code?: string | null
+          id?: string
+          payment_id: string
+          raw_response?: Json | null
+          return_request_id: string
+          status?: Database["public"]["Enums"]["xendit_refund_status"]
+          updated_at?: string
+          xendit_payment_request_id: string
+          xendit_refund_id?: string | null
+        }
+        Update: {
+          amount_cents?: number
+          created_at?: string
+          currency?: string
+          failure_code?: string | null
+          id?: string
+          payment_id?: string
+          raw_response?: Json | null
+          return_request_id?: string
+          status?: Database["public"]["Enums"]["xendit_refund_status"]
+          updated_at?: string
+          xendit_payment_request_id?: string
+          xendit_refund_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "xendit_refunds_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "xendit_refunds_return_request_id_fkey"
+            columns: ["return_request_id"]
+            isOneToOne: false
+            referencedRelation: "return_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -885,6 +1382,7 @@ export type Database = {
           p_note?: string
           p_product_id: string
           p_reason: Database["public"]["Enums"]["stock_adjustment_reason"]
+          p_variant_id?: string
         }
         Returns: {
           created_at: string
@@ -894,6 +1392,7 @@ export type Database = {
           quantity: number
           shop_id: string | null
           updated_at: string
+          variant_id: string | null
         }
         SetofOptions: {
           from: "*"
@@ -908,7 +1407,9 @@ export type Database = {
           avatar_url: string | null
           bio: string | null
           created_at: string
+          date_of_birth: string | null
           full_name: string | null
+          gender: Database["public"]["Enums"]["gender_type"] | null
           id: string
           is_active: boolean
           payment_qr_url: string | null
@@ -916,6 +1417,7 @@ export type Database = {
           role: Database["public"]["Enums"]["user_role"]
           updated_at: string
           username: string | null
+          username_changed_at: string | null
         }
         SetofOptions: {
           from: "*"
@@ -945,7 +1447,9 @@ export type Database = {
           avatar_url: string | null
           bio: string | null
           created_at: string
+          date_of_birth: string | null
           full_name: string | null
+          gender: Database["public"]["Enums"]["gender_type"] | null
           id: string
           is_active: boolean
           payment_qr_url: string | null
@@ -953,10 +1457,71 @@ export type Database = {
           role: Database["public"]["Enums"]["user_role"]
           updated_at: string
           username: string | null
+          username_changed_at: string | null
         }
         SetofOptions: {
           from: "*"
           to: "profiles"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      begin_xendit_group_payment_attempt: {
+        Args: { p_channel_code: string; p_checkout_group_id: string }
+        Returns: {
+          amount_cents: number
+          checkout_group_id: string | null
+          checkout_url: string | null
+          created_at: string
+          currency: string
+          expires_at: string | null
+          failure_reason: string | null
+          id: string
+          order_id: string
+          payment_channel: string | null
+          payment_method_type: Database["public"]["Enums"]["payment_method_type"]
+          provider_response: Json | null
+          receipt_path: string | null
+          status: Database["public"]["Enums"]["payment_status"]
+          updated_at: string
+          verified_at: string | null
+          verified_by: string | null
+          xendit_payment_id: string | null
+          xendit_payment_request_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "payments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      begin_xendit_payment_attempt: {
+        Args: { p_channel_code: string; p_order_id: string }
+        Returns: {
+          amount_cents: number
+          checkout_group_id: string | null
+          checkout_url: string | null
+          created_at: string
+          currency: string
+          expires_at: string | null
+          failure_reason: string | null
+          id: string
+          order_id: string
+          payment_channel: string | null
+          payment_method_type: Database["public"]["Enums"]["payment_method_type"]
+          provider_response: Json | null
+          receipt_path: string | null
+          status: Database["public"]["Enums"]["payment_status"]
+          updated_at: string
+          verified_at: string | null
+          verified_by: string | null
+          xendit_payment_id: string | null
+          xendit_payment_request_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "payments"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -967,6 +1532,7 @@ export type Database = {
       }
       create_order: {
         Args: {
+          p_checkout_group_id?: string
           p_items: Json
           p_notes?: string
           p_seller_id: string
@@ -976,6 +1542,7 @@ export type Database = {
         Returns: {
           buyer_id: string
           cancelled_at: string | null
+          checkout_group_id: string | null
           created_at: string
           currency: string
           delivered_at: string | null
@@ -999,6 +1566,42 @@ export type Database = {
           to: "orders"
           isOneToOne: true
           isSetofReturn: false
+        }
+      }
+      create_order_group: {
+        Args: {
+          p_groups: Json
+          p_notes?: string
+          p_shipping_address: Json
+          p_shipping_fee_cents?: number
+        }
+        Returns: {
+          buyer_id: string
+          cancelled_at: string | null
+          checkout_group_id: string | null
+          created_at: string
+          currency: string
+          delivered_at: string | null
+          id: string
+          notes: string | null
+          order_number: string
+          order_status: Database["public"]["Enums"]["order_status"]
+          paid_at: string | null
+          payment_status: Database["public"]["Enums"]["payment_status"]
+          placed_at: string
+          seller_id: string
+          shipped_at: string | null
+          shipping_address: Json
+          shipping_fee_cents: number
+          subtotal_cents: number
+          total_cents: number
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "orders"
+          isOneToOne: false
+          isSetofReturn: true
         }
       }
       current_user_role: {
@@ -1033,6 +1636,102 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      fail_xendit_refund_submission: {
+        Args: { p_error_note: string; p_refund_id: string }
+        Returns: {
+          amount_cents: number
+          created_at: string
+          currency: string
+          failure_code: string | null
+          id: string
+          payment_id: string
+          raw_response: Json | null
+          return_request_id: string
+          status: Database["public"]["Enums"]["xendit_refund_status"]
+          updated_at: string
+          xendit_payment_request_id: string
+          xendit_refund_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "xendit_refunds"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      finalize_xendit_group_payment_request: {
+        Args: {
+          p_channel_code: string
+          p_checkout_group_id: string
+          p_checkout_url: string
+          p_expires_at?: string
+          p_status?: string
+          p_xendit_payment_request_id: string
+        }
+        Returns: {
+          amount_cents: number
+          checkout_group_id: string | null
+          checkout_url: string | null
+          created_at: string
+          currency: string
+          expires_at: string | null
+          failure_reason: string | null
+          id: string
+          order_id: string
+          payment_channel: string | null
+          payment_method_type: Database["public"]["Enums"]["payment_method_type"]
+          provider_response: Json | null
+          receipt_path: string | null
+          status: Database["public"]["Enums"]["payment_status"]
+          updated_at: string
+          verified_at: string | null
+          verified_by: string | null
+          xendit_payment_id: string | null
+          xendit_payment_request_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "payments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      finalize_xendit_payment_request: {
+        Args: {
+          p_checkout_url: string
+          p_expires_at?: string
+          p_payment_id: string
+          p_status?: string
+          p_xendit_payment_request_id: string
+        }
+        Returns: {
+          amount_cents: number
+          checkout_group_id: string | null
+          checkout_url: string | null
+          created_at: string
+          currency: string
+          expires_at: string | null
+          failure_reason: string | null
+          id: string
+          order_id: string
+          payment_channel: string | null
+          payment_method_type: Database["public"]["Enums"]["payment_method_type"]
+          provider_response: Json | null
+          receipt_path: string | null
+          status: Database["public"]["Enums"]["payment_status"]
+          updated_at: string
+          verified_at: string | null
+          verified_by: string | null
+          xendit_payment_id: string | null
+          xendit_payment_request_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "payments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       get_buyer_activity_feed: {
         Args: { p_limit?: number }
         Returns: {
@@ -1048,7 +1747,9 @@ export type Database = {
           avatar_url: string | null
           bio: string | null
           created_at: string
+          date_of_birth: string | null
           full_name: string | null
+          gender: Database["public"]["Enums"]["gender_type"] | null
           id: string
           is_active: boolean
           payment_qr_url: string | null
@@ -1056,6 +1757,7 @@ export type Database = {
           role: Database["public"]["Enums"]["user_role"]
           updated_at: string
           username: string | null
+          username_changed_at: string | null
         }
         SetofOptions: {
           from: "*"
@@ -1064,8 +1766,140 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      get_variant_stock: {
+        Args: { p_variant_ids: string[] }
+        Returns: {
+          quantity: number
+          variant_id: string
+        }[]
+      }
       is_admin: { Args: never; Returns: boolean }
       is_shop_member: { Args: { p_shop_id: string }; Returns: boolean }
+      mark_cod_payment_collected: {
+        Args: { p_order_id: string }
+        Returns: {
+          amount_cents: number
+          checkout_group_id: string | null
+          checkout_url: string | null
+          created_at: string
+          currency: string
+          expires_at: string | null
+          failure_reason: string | null
+          id: string
+          order_id: string
+          payment_channel: string | null
+          payment_method_type: Database["public"]["Enums"]["payment_method_type"]
+          provider_response: Json | null
+          receipt_path: string | null
+          status: Database["public"]["Enums"]["payment_status"]
+          updated_at: string
+          verified_at: string | null
+          verified_by: string | null
+          xendit_payment_id: string | null
+          xendit_payment_request_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "payments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      process_xendit_refund_webhook: {
+        Args: {
+          p_amount_cents: number
+          p_failure_code: string
+          p_raw_payload: Json
+          p_status: string
+          p_xendit_refund_id: string
+        }
+        Returns: {
+          amount_cents: number
+          created_at: string
+          currency: string
+          failure_code: string | null
+          id: string
+          payment_id: string
+          raw_response: Json | null
+          return_request_id: string
+          status: Database["public"]["Enums"]["xendit_refund_status"]
+          updated_at: string
+          xendit_payment_request_id: string
+          xendit_refund_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "xendit_refunds"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      process_xendit_webhook: {
+        Args: {
+          p_amount_cents: number
+          p_channel_code?: string
+          p_currency: string
+          p_raw_payload: Json
+          p_reference_id: string
+          p_status: string
+          p_xendit_payment_id: string
+          p_xendit_payment_request_id: string
+        }
+        Returns: {
+          amount_cents: number
+          checkout_group_id: string | null
+          checkout_url: string | null
+          created_at: string
+          currency: string
+          expires_at: string | null
+          failure_reason: string | null
+          id: string
+          order_id: string
+          payment_channel: string | null
+          payment_method_type: Database["public"]["Enums"]["payment_method_type"]
+          provider_response: Json | null
+          receipt_path: string | null
+          status: Database["public"]["Enums"]["payment_status"]
+          updated_at: string
+          verified_at: string | null
+          verified_by: string | null
+          xendit_payment_id: string | null
+          xendit_payment_request_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "payments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      record_xendit_refund_submission: {
+        Args: {
+          p_raw_response: Json
+          p_refund_id: string
+          p_xendit_refund_id: string
+        }
+        Returns: {
+          amount_cents: number
+          created_at: string
+          currency: string
+          failure_code: string | null
+          id: string
+          payment_id: string
+          raw_response: Json | null
+          return_request_id: string
+          status: Database["public"]["Enums"]["xendit_refund_status"]
+          updated_at: string
+          xendit_payment_request_id: string
+          xendit_refund_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "xendit_refunds"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       report_order_status_breakdown: {
         Args: { p_from: string; p_shop_id?: string; p_to: string }
         Returns: {
@@ -1085,6 +1919,7 @@ export type Database = {
           revenue_cents: number
           total_orders: number
           units_sold: number
+          xendit_paid_orders: number
         }[]
       }
       report_sales_timeseries: {
@@ -1183,30 +2018,8 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      self_deactivate_account: { Args: never; Returns: undefined }
       slugify: { Args: { value: string }; Returns: string }
-      submit_qr_payment: {
-        Args: { p_order_id: string; p_receipt_path: string }
-        Returns: {
-          amount_cents: number
-          created_at: string
-          currency: string
-          failure_reason: string | null
-          id: string
-          order_id: string
-          payment_method_type: Database["public"]["Enums"]["payment_method_type"]
-          receipt_path: string | null
-          status: Database["public"]["Enums"]["payment_status"]
-          updated_at: string
-          verified_at: string | null
-          verified_by: string | null
-        }
-        SetofOptions: {
-          from: "*"
-          to: "payments"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
       submit_review: {
         Args: { p_comment: string; p_order_item_id: string; p_rating: number }
         Returns: {
@@ -1227,35 +2040,9 @@ export type Database = {
         }
       }
       unaccent_fallback: { Args: { value: string }; Returns: string }
-      verify_payment: {
-        Args: {
-          p_decision: Database["public"]["Enums"]["payment_status"]
-          p_payment_id: string
-          p_reason?: string
-        }
-        Returns: {
-          amount_cents: number
-          created_at: string
-          currency: string
-          failure_reason: string | null
-          id: string
-          order_id: string
-          payment_method_type: Database["public"]["Enums"]["payment_method_type"]
-          receipt_path: string | null
-          status: Database["public"]["Enums"]["payment_status"]
-          updated_at: string
-          verified_at: string | null
-          verified_by: string | null
-        }
-        SetofOptions: {
-          from: "*"
-          to: "payments"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
     }
     Enums: {
+      gender_type: "male" | "female" | "other"
       order_status:
         | "pending"
         | "confirmed"
@@ -1264,7 +2051,7 @@ export type Database = {
         | "delivered"
         | "cancelled"
         | "refunded"
-      payment_method_type: "cod" | "card" | "qr_upload"
+      payment_method_type: "cod" | "card" | "qr_upload" | "xendit"
       payment_status:
         | "pending"
         | "paid"
@@ -1273,6 +2060,14 @@ export type Database = {
         | "partially_refunded"
       product_condition: "new" | "like_new" | "good" | "fair" | "poor"
       product_status: "draft" | "active" | "sold" | "archived"
+      recommendation_occasion:
+        | "casual"
+        | "formal"
+        | "work"
+        | "sportswear"
+        | "party"
+        | "wedding"
+        | "everyday"
       return_status:
         | "pending"
         | "seller_accepted"
@@ -1288,6 +2083,7 @@ export type Database = {
         | "shrinkage"
         | "other"
       user_role: "buyer" | "seller" | "admin"
+      xendit_refund_status: "pending" | "succeeded" | "failed"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1303,12 +2099,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1332,11 +2128,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1357,11 +2153,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1382,11 +2178,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1399,11 +2195,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1415,6 +2211,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      gender_type: ["male", "female", "other"],
       order_status: [
         "pending",
         "confirmed",
@@ -1424,7 +2221,7 @@ export const Constants = {
         "cancelled",
         "refunded",
       ],
-      payment_method_type: ["cod", "card", "qr_upload"],
+      payment_method_type: ["cod", "card", "qr_upload", "xendit"],
       payment_status: [
         "pending",
         "paid",
@@ -1434,6 +2231,15 @@ export const Constants = {
       ],
       product_condition: ["new", "like_new", "good", "fair", "poor"],
       product_status: ["draft", "active", "sold", "archived"],
+      recommendation_occasion: [
+        "casual",
+        "formal",
+        "work",
+        "sportswear",
+        "party",
+        "wedding",
+        "everyday",
+      ],
       return_status: [
         "pending",
         "seller_accepted",
@@ -1451,6 +2257,7 @@ export const Constants = {
         "other",
       ],
       user_role: ["buyer", "seller", "admin"],
+      xendit_refund_status: ["pending", "succeeded", "failed"],
     },
   },
 } as const

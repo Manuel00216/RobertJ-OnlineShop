@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ROUTES } from "@/constants/routes";
 import { USER_ROLES } from "@/constants/roles";
 import { useCart } from "@/features/cart/hooks/useCart";
+import type { SelectedVariantInfo } from "@/features/cart/components/AddToCartButton";
 import {
   getCoverImage,
   type Product,
@@ -18,6 +19,8 @@ export interface BuyNowButtonProps {
   className?: string;
   /** See `AddToCartButton`'s prop of the same name. */
   sellerName?: string | null;
+  /** See `AddToCartButton`'s prop of the same name. */
+  variant?: SelectedVariantInfo | null;
 }
 
 /**
@@ -32,23 +35,30 @@ export function BuyNowButton({
   quantity = 1,
   className,
   sellerName,
+  variant,
 }: BuyNowButtonProps) {
   const router = useRouter();
   const { addItem } = useCart();
   const [isPending, setIsPending] = useState(false);
-  const isOutOfStock = product.quantity <= 0;
+  const hasVariants = variant !== undefined;
+  const isOutOfStock = hasVariants
+    ? variant === null || variant.stock <= 0
+    : product.quantity <= 0;
 
   function handleBuyNow() {
+    if (hasVariants && !variant) return;
     setIsPending(true);
     addItem({
       productId: product.id,
+      variantId: variant?.id,
+      variantLabel: variant?.label ?? null,
       slug: product.slug,
       title: product.title,
       imageUrl: getCoverImage(product)?.url ?? null,
-      unitPriceCents: product.priceCents,
+      unitPriceCents: variant ? variant.priceCents : product.priceCents,
       currency: product.currency,
       quantity,
-      maxQuantity: product.quantity,
+      maxQuantity: variant ? variant.stock : product.quantity,
       sellerId: product.sellerId,
       sellerName:
         sellerName ?? (product.sellerRole === USER_ROLES.seller ? product.sellerName : null),

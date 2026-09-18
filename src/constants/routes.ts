@@ -12,7 +12,10 @@ export const ROUTES = {
   orders: "/orders",
   orderDetail: (id: string) => `/orders/${id}`,
   profile: "/profile",
+  addresses: "/addresses",
   wishlist: "/wishlist",
+  changePassword: "/change-password",
+  privacy: "/privacy",
   /** Legacy Shop Owner/Admin routes — every page under here is now a redirect
    * stub to its `/admin/*` or `/seller/*` equivalent (see `redirectToPortal`),
    * kept so old bookmarks/links keep working. Never build new features here. */
@@ -42,6 +45,7 @@ export const ROUTES = {
   /** Seller Portal — separate from the `/dashboard` tree, mirrors the Admin Portal split. */
   seller: "/seller",
   sellerDashboard: "/seller/dashboard",
+  sellerShop: "/seller/shop",
   sellerProducts: "/seller/products",
   sellerInventory: "/seller/inventory",
   sellerOrders: "/seller/orders",
@@ -73,7 +77,10 @@ export const PROTECTED_ROUTE_PREFIXES = [
   "/checkout",
   "/notifications",
   "/profile",
+  "/addresses",
   "/wishlist",
+  "/change-password",
+  "/privacy",
 ] as const;
 
 /** Routes an authenticated user should be redirected away from. */

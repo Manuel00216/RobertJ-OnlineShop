@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { AccountQuickLinks } from "@/features/account/components/AccountQuickLinks";
 import { OverviewSummary } from "@/features/account/components/OverviewSummary";
 import { RecentOrdersList } from "@/features/account/components/RecentOrdersList";
 import { CatalogHeader } from "@/features/products/components/CatalogHeader";
@@ -21,6 +22,7 @@ export default async function AccountPage() {
       />
       <OverviewSummary statusCounts={summary.statusCounts} />
       <RecentOrdersList orders={summary.recentOrders} />
+      <AccountQuickLinks />
     </div>
   );
 }

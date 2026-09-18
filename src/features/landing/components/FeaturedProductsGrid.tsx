@@ -4,11 +4,16 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { EmptyState } from "@/components/feedback/EmptyState";
 import { ROUTES } from "@/constants/routes";
 import { useReveal } from "@/features/landing/hooks/useReveal";
-import { PRODUCT_FILTERS } from "@/features/landing/constants/landing.constants";
 import { ProductTile, type ProductTileItem } from "@/features/products/components/ProductTile";
 import type { FeaturedProductView } from "@/features/landing/types/landing.types";
+
+/** Always available — "show everything currently featured." */
+const ALL_FILTER = "All";
+/** Derived from `product.tags`, not a real category — always last when present. */
+const SALE_FILTER = "Sale";
 
 export interface FeaturedProductsGridProps {
   products: FeaturedProductView[];
@@ -34,26 +39,20 @@ function toTileItem(
     isNew: view.isNew,
     isSale: view.isSale,
     conditionLabel: null,
-    maxQuantity: view.productId ? view.maxQuantity : null,
-    addToCart:
-      view.productId && view.slug && view.sellerId
-        ? {
-            productId: view.productId,
-            slug: view.slug,
-            sellerId: view.sellerId,
-            // Marketing quick-add has no seller name; checkout falls back to "Seller".
-            sellerName: null,
-          }
-        : null,
-    // Placeholders (no productId yet) never show a wishlist heart — there is
-    // nothing real to save.
-    wishlist: view.productId
-      ? {
-          productId: view.productId,
-          initialSaved: wishlistedIds.has(view.productId),
-          isAuthenticated,
-        }
-      : null,
+    maxQuantity: view.maxQuantity,
+    // Every view is a real, purchasable product — see FeaturedProductView.
+    addToCart: {
+      productId: view.productId,
+      slug: view.slug,
+      sellerId: view.sellerId,
+      // Marketing quick-add has no seller name; checkout falls back to "Seller".
+      sellerName: null,
+    },
+    wishlist: {
+      productId: view.productId,
+      initialSaved: wishlistedIds.has(view.productId),
+      isAuthenticated,
+    },
   };
 }
 
@@ -66,12 +65,27 @@ export function FeaturedProductsGrid({
     () => new Set(wishlistedProductIds),
     [wishlistedProductIds],
   );
-  const [activeFilter, setActiveFilter] = useState<string>("All");
+  const [activeFilter, setActiveFilter] = useState<string>(ALL_FILTER);
   const { ref: gridRef, inView } = useReveal<HTMLDivElement>({ amount: 0.1 });
 
+  // Derived from whatever is actually featured right now, so a filter chip
+  // can never reference a category name that doesn't exist in the database
+  // (e.g. a fictional "Women's"/"Men's" split the real catalog doesn't use).
+  const filters = useMemo(() => {
+    const categories = [
+      ...new Set(
+        products
+          .map((p) => p.category)
+          .filter((category): category is string => category.length > 0),
+      ),
+    ].sort((a, b) => a.localeCompare(b));
+    const hasSale = products.some((p) => p.isSale);
+    return [ALL_FILTER, ...categories, ...(hasSale ? [SALE_FILTER] : [])];
+  }, [products]);
+
   const filtered = useMemo(() => {
-    if (activeFilter === "All") return products;
-    if (activeFilter === "Sale") return products.filter((p) => p.isSale);
+    if (activeFilter === ALL_FILTER) return products;
+    if (activeFilter === SALE_FILTER) return products.filter((p) => p.isSale);
     return products.filter((p) => p.category === activeFilter);
   }, [activeFilter, products]);
 
@@ -87,49 +101,75 @@ export function FeaturedProductsGrid({
             Picked for You
           </h2>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {PRODUCT_FILTERS.map((filter) => (
-            <button
-              key={filter}
-              type="button"
-              aria-pressed={activeFilter === filter}
-              onClick={() => setActiveFilter(filter)}
-              className={`rounded-full border-[1.5px] px-4 py-1.5 text-[11px] font-bold transition-all ${
-                activeFilter === filter
-                  ? "border-rj-black bg-rj-black text-rj-white"
-                  : "border-rj-gray-200 bg-transparent text-rj-gray-600 hover:border-rj-black hover:text-rj-black"
-              }`}
+        {/* Nothing meaningful to filter by with 0 or 1 option (just "All"). */}
+        {products.length > 0 && filters.length > 1 ? (
+          <div className="flex flex-wrap gap-2">
+            {filters.map((filter) => (
+              <button
+                key={filter}
+                type="button"
+                aria-pressed={activeFilter === filter}
+                onClick={() => setActiveFilter(filter)}
+                className={`rounded-full border-[1.5px] px-4 py-1.5 text-[11px] font-bold transition-all ${
+                  activeFilter === filter
+                    ? "border-rj-black bg-rj-black text-rj-white"
+                    : "border-rj-gray-200 bg-transparent text-rj-gray-600 hover:border-rj-black hover:text-rj-black"
+                }`}
+              >
+                {filter}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
+      {products.length === 0 ? (
+        <EmptyState
+          title="No featured products yet"
+          description="Sellers haven't marked any products as featured. Check back soon, or browse the full catalog."
+          action={
+            <Link
+              href={ROUTES.products}
+              className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-rj-black px-8 py-3.5 text-[13px] font-bold text-rj-black transition-colors hover:bg-rj-black hover:text-rj-white"
             >
-              {filter}
-            </button>
-          ))}
-        </div>
-      </div>
+              Browse All Products
+              <ArrowRight className="h-[13px] w-[13px]" aria-hidden="true" />
+            </Link>
+          }
+        />
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          title="No products match this filter"
+          description="Try a different category, or view everything that's featured."
+        />
+      ) : (
+        <>
+          <div
+            ref={gridRef}
+            className="grid grid-cols-2 gap-5 md:grid-cols-3 md:gap-6 lg:grid-cols-4"
+          >
+            {filtered.map((item, i) => (
+              <ProductTile
+                key={item.key}
+                item={toTileItem(item, wishlistedIds, isAuthenticated)}
+                style={{
+                  animation: inView ? `fadeSlideIn 0.5s ease ${i * 60}ms both` : "none",
+                }}
+              />
+            ))}
+          </div>
 
-      <div
-        ref={gridRef}
-        className="grid grid-cols-2 gap-5 md:grid-cols-3 md:gap-6 lg:grid-cols-4"
-      >
-        {filtered.map((item, i) => (
-          <ProductTile
-            key={item.key}
-            item={toTileItem(item, wishlistedIds, isAuthenticated)}
-            style={{
-              animation: inView ? `fadeSlideIn 0.5s ease ${i * 60}ms both` : "none",
-            }}
-          />
-        ))}
-      </div>
-
-      <div className="mt-14 text-center">
-        <Link
-          href={ROUTES.products}
-          className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-rj-black px-8 py-3.5 text-[13px] font-bold text-rj-black transition-colors hover:bg-rj-black hover:text-rj-white"
-        >
-          View All Products
-          <ArrowRight className="h-[13px] w-[13px]" aria-hidden="true" />
-        </Link>
-      </div>
+          <div className="mt-14 text-center">
+            <Link
+              href={ROUTES.products}
+              className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-rj-black px-8 py-3.5 text-[13px] font-bold text-rj-black transition-colors hover:bg-rj-black hover:text-rj-white"
+            >
+              View All Products
+              <ArrowRight className="h-[13px] w-[13px]" aria-hidden="true" />
+            </Link>
+          </div>
+        </>
+      )}
     </>
   );
 }

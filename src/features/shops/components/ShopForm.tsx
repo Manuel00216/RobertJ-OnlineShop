@@ -47,9 +47,10 @@ export function ShopForm({ shop, onDone }: ShopFormProps) {
         placeholder="e.g. Shop One"
         errors={fieldErrors?.name}
         required
+        themed
       />
 
-      <Button type="submit" variant="rj" size="rj" isLoading={isPending} className="w-full sm:w-auto">
+      <Button type="submit" variant="primary" size="rj" isLoading={isPending} className="w-full sm:w-auto">
         {isPending ? "Saving…" : isEdit ? "Save changes" : "Create shop"}
       </Button>
     </form>

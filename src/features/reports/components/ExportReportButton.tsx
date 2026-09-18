@@ -48,7 +48,7 @@ export function ExportReportButton({ filters }: { filters: ReportFilters }) {
     <div className="flex flex-col items-start gap-1">
       <Button
         type="button"
-        variant="rjOutline"
+        variant="outline"
         size="rjSm"
         onClick={handleExport}
         isLoading={isExporting}

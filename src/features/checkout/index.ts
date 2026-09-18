@@ -17,4 +17,5 @@ export type {
   PlacedOrder,
   FailedGroup,
   PlaceOrderResult,
+  PaymentMethod,
 } from "./types/checkout.types";

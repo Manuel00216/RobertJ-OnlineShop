@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { ROUTES } from "@/constants/routes";
 import type { CartItem } from "@/features/cart/types/cart.types";
+import { getCartLineKey } from "@/features/cart/utils/cart-reducer";
 import { formatCurrency } from "@/lib/utils/currency";
 
 /** Cart line rows for one seller group in checkout. */
@@ -16,7 +17,7 @@ export function CheckoutItemsList({
   return (
     <ul className="flex flex-col divide-y divide-rj-gray-100">
       {items.map((item) => (
-        <li key={item.productId} className="flex items-center gap-4 py-3">
+        <li key={getCartLineKey(item)} className="flex items-center gap-4 py-3">
           {item.imageUrl ? (
             <Image
               src={item.imageUrl}
@@ -38,6 +39,9 @@ export function CheckoutItemsList({
             >
               {item.title}
             </Link>
+            {item.variantLabel ? (
+              <p className="mt-0.5 text-xs text-rj-gray-500">{item.variantLabel}</p>
+            ) : null}
             <p className="mt-0.5 text-xs text-rj-gray-600">
               {item.quantity} × {formatCurrency(item.unitPriceCents, currency)}
             </p>

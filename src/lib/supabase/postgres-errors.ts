@@ -19,6 +19,14 @@ const KNOWN_ERRORS: Array<{
     message: "That username is already taken.",
   },
   { code: "23505", message: "That value is already in use." },
+  {
+    // Raised by `profiles_enforce_username_change_once` — the trigger's
+    // message is already friendly, so pass it through verbatim instead of
+    // falling into the generic 23514 copy below.
+    code: "23514",
+    test: (error) => /username can only be changed once/i.test(error.message),
+    message: "Username can only be changed once.",
+  },
   { code: "23514", message: "That value isn't valid." },
   { code: "23503", message: "That item no longer exists." },
 ];

@@ -25,16 +25,16 @@ export async function TopProductsPanel({ filters }: { filters: ReportFilters }) 
   }
 
   return (
-    <Card className="border-rj-gray-100">
+    <Card>
       <CardContent className="flex flex-col gap-4 p-5">
-        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-rj-gray-400">
+        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
           Top products
         </p>
         {products.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-rj-gray-100 text-left text-rj-gray-500">
+                <tr className="border-b border-rj-gray-100 text-left text-muted-foreground">
                   <th scope="col" className="py-2 pr-3 font-medium">
                     Product
                   </th>
@@ -49,11 +49,11 @@ export async function TopProductsPanel({ filters }: { filters: ReportFilters }) 
               <tbody>
                 {products.map((p) => (
                   <tr key={p.productId} className="border-b border-rj-gray-50 last:border-0">
-                    <td className="py-2 pr-3 text-rj-black">{p.productTitle}</td>
-                    <td className="py-2 px-3 text-right tabular-nums text-rj-gray-600">
+                    <td className="py-2 pr-3 text-foreground">{p.productTitle}</td>
+                    <td className="py-2 px-3 text-right tabular-nums text-muted-foreground">
                       {p.unitsSold}
                     </td>
-                    <td className="py-2 pl-3 text-right tabular-nums text-rj-black">
+                    <td className="py-2 pl-3 text-right tabular-nums text-foreground">
                       {formatCurrency(p.revenueCents)}
                     </td>
                   </tr>

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -16,7 +17,6 @@ import type { SessionUser } from "@/types/common.types";
 const BASE_MENU_ITEMS = [
   { href: ROUTES.account, label: "My Account" },
   { href: ROUTES.orders, label: "Orders" },
-  { href: ROUTES.profile, label: "Profile" },
 ] as const;
 
 /** Links straight to the user's own portal — Admin and Seller each have a dedicated dashboard, not a shared one. */
@@ -63,8 +63,19 @@ export function AccountMenu({ user }: { user: SessionUser }) {
         aria-label="Account menu"
         className="flex h-9 items-center gap-0.5 rounded-full px-1 transition-colors hover:bg-rj-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30"
       >
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-rj-black text-[11px] font-bold text-rj-white">
-          {initials}
+        <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-rj-black text-[11px] font-bold text-rj-white">
+          {user.avatarUrl ? (
+            <Image
+              src={user.avatarUrl}
+              alt=""
+              width={28}
+              height={28}
+              unoptimized
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            initials
+          )}
         </span>
         <ChevronDown
           className={cn(

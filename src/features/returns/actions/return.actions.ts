@@ -6,6 +6,8 @@ import { DASHBOARD_ROLES } from "@/constants/roles";
 import { ROUTES } from "@/constants/routes";
 import { fail, fromZodError, ok } from "@/lib/utils/result";
 import * as queries from "@/lib/supabase/queries";
+import { createRefund } from "@/lib/xendit/client";
+import type { Json } from "@/lib/supabase/database.types";
 import type { ActionResult } from "@/types/action.types";
 import {
   decideReturnSchema,
@@ -95,10 +97,22 @@ export async function respondToReturnAction(
 }
 
 /**
- * Admin-only: approves (executes the refund) or rejects a return request.
- * Authorization is enforced inside the `decide_return` RPC itself
- * (`is_admin()` re-derived, never trusted from the caller's role claim);
- * `requireRole` here is defense-in-depth, not the primary boundary.
+ * Admin-only: approves or rejects a return request. Authorization is
+ * enforced inside the `decide_return` RPC itself (`is_admin()` re-derived,
+ * never trusted from the caller's role claim); `requireRole` here is
+ * defense-in-depth, not the primary boundary.
+ *
+ * Phase 5B: for a COD (or legacy) payment, `decide_return` finalizes
+ * immediately exactly as before — nothing else to do here. For a Xendit
+ * payment, `decide_return` only submits a pending refund attempt; this
+ * action then makes the actual `POST /refunds` call and records the
+ * outcome. If Xendit's call itself fails (never even got a response), the
+ * attempt is marked failed immediately so the admin can safely retry —
+ * `return_requests`/`payments`/`orders` were never touched by the approval
+ * step, so there is nothing to undo. If the call succeeds, the attempt
+ * stays "pending" from our own database's point of view until the real
+ * `refund.succeeded`/`refund.failed` webhook confirms it — this action
+ * never marks anything refunded itself.
  */
 export async function decideReturnAction(
   returnId: string,
@@ -115,6 +129,34 @@ export async function decideReturnAction(
       parsed.data.decision,
       parsed.data.note ?? null,
     );
+
+    if (parsed.data.decision === "approve") {
+      const pendingRefund = await queries.getPendingXenditRefundForReturn(parsed.data.returnId);
+      if (pendingRefund) {
+        try {
+          const response = await createRefund({
+            paymentRequestId: pendingRefund.xenditPaymentRequestId,
+            amountCents: pendingRefund.amountCents,
+            currency: pendingRefund.currency,
+            idempotencyKey: pendingRefund.id,
+          });
+          await queries.recordXenditRefundSubmission(
+            pendingRefund.id,
+            response.id,
+            response as unknown as Json,
+          );
+        } catch (error) {
+          await queries.failXenditRefundSubmission(
+            pendingRefund.id,
+            error instanceof Error ? error.message : "Xendit refund request failed.",
+          );
+          return fail(
+            "Could not submit the refund to Xendit. Nothing was charged or refunded — you can safely try again.",
+          );
+        }
+      }
+    }
+
     revalidatePath(ROUTES.adminReturns);
     revalidatePath(ROUTES.adminOrders);
     revalidatePath(ROUTES.sellerOrders);

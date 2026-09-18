@@ -24,7 +24,7 @@ export default async function WishlistPage() {
   return (
     <div className="flex flex-col gap-8">
       <CatalogHeader
-        eyebrow="Saved"
+        eyebrow="My Account"
         title="My Wishlist"
         description="Products you've saved for later."
       />
