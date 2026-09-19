@@ -1,6 +1,5 @@
 import { useId } from "react";
 
-import { RJ_CARD } from "@/components/ui/card";
 import { CHECKOUT_COPY } from "@/features/checkout/constants/checkout.constants";
 import { cn } from "@/lib/utils/cn";
 
@@ -15,7 +14,8 @@ export interface OrderNotesFieldProps {
  * checkout creates. `FormField` (`src/components/forms`) only wraps `<input>`
  * elements, so this is its own small section rather than forcing a textarea
  * through that component — same visual language (label, hint, error) as the
- * rest of checkout.
+ * rest of checkout. Renders as a plain label+textarea block, not its own
+ * bordered card, since it now sits inside the parent sheet's divider list.
  */
 export function OrderNotesField({ value, onChange, errors }: OrderNotesFieldProps) {
   const id = useId();
@@ -23,7 +23,7 @@ export function OrderNotesField({ value, onChange, errors }: OrderNotesFieldProp
   const hasError = Boolean(errors?.length);
 
   return (
-    <section aria-label={CHECKOUT_COPY.notesSectionTitle} className={cn(RJ_CARD, "p-5")}>
+    <section aria-label={CHECKOUT_COPY.notesSectionTitle}>
       <label
         htmlFor={id}
         className="text-[10px] font-bold uppercase tracking-[0.3em] text-rj-gray-600"

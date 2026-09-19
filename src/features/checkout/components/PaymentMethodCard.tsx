@@ -1,4 +1,5 @@
-import { RJ_CARD } from "@/components/ui/card";
+import { ChevronDown } from "lucide-react";
+
 import { CHECKOUT_COPY } from "@/features/checkout/constants/checkout.constants";
 import type { XenditChannel } from "@/features/checkout/schemas/checkout.schema";
 import type { PaymentMethod } from "@/features/checkout/types/checkout.types";
@@ -22,11 +23,13 @@ const CHANNELS: Array<{ value: XenditChannel; label: string; description: string
 ];
 
 /**
- * Payment-method selector (COD | Online Payment). Selecting Online Payment
- * expands an inline GCash/Maya/Card submenu — the buyer's channel choice is
- * made here, at checkout, and carried straight into the matching Xendit
- * action right after Place Order (see `CheckoutForm`). COD never shows the
- * submenu and is otherwise unaffected.
+ * Payment-method selector (COD | Online Payment), shown as a compact button
+ * grid. Selecting Online Payment expands a dense GCash/Maya/Card dropdown
+ * list right below it — the buyer's channel choice is made here, at
+ * checkout, and carried straight into the matching Xendit action right after
+ * Place Order (see `CheckoutForm`). COD never shows the dropdown and is
+ * otherwise unaffected. This is a visual restyle of an already-functional
+ * component — props, handlers, and validation are unchanged.
  */
 export function PaymentMethodCard({
   method,
@@ -41,89 +44,90 @@ export function PaymentMethodCard({
   onChannelChange: (channel: XenditChannel) => void;
   channelError?: string;
 }) {
+  const selectedOption = METHODS.find((option) => option.value === method);
+
   return (
-    <fieldset className={cn(RJ_CARD, "p-5")}>
+    <fieldset>
       <legend className="text-[10px] font-bold uppercase tracking-[0.3em] text-rj-gray-600">
         {CHECKOUT_COPY.paymentSectionTitle}
       </legend>
-      <div className="mt-3 flex flex-col gap-3">
+
+      <div className="mt-3 grid grid-cols-2 gap-3">
         {METHODS.map((option) => {
           const selected = method === option.value;
           return (
-            <div key={option.value}>
-              <label
-                className={cn(
-                  "flex cursor-pointer items-start gap-3 rounded-xl border-[1.5px] p-4 transition-colors focus-within:outline-none focus-within:ring-2 focus-within:ring-rj-red/30",
-                  selected
-                    ? "border-rj-black bg-rj-gray-50"
-                    : "border-rj-gray-200 hover:border-rj-gray-400",
-                )}
-              >
-                <input
-                  type="radio"
-                  name="payment-method"
-                  value={option.value}
-                  checked={selected}
-                  onChange={() => onChange(option.value)}
-                  className="mt-0.5 h-4 w-4 shrink-0 accent-rj-red"
+            <label
+              key={option.value}
+              className={cn(
+                "flex cursor-pointer items-center justify-center gap-1.5 rounded-xl border-[1.5px] px-3 py-2.5 transition-colors focus-within:outline-none focus-within:ring-2 focus-within:ring-rj-red/30",
+                selected
+                  ? "border-rj-red bg-rj-gray-50 text-rj-red-dark"
+                  : "border-rj-gray-200 text-rj-black hover:border-rj-gray-400",
+              )}
+            >
+              <input
+                type="radio"
+                name="payment-method"
+                value={option.value}
+                checked={selected}
+                onChange={() => onChange(option.value)}
+                className="sr-only"
+              />
+              <span className="text-sm font-semibold">{option.label}</span>
+              {option.value === "xendit" ? (
+                <ChevronDown
+                  className={cn("h-3.5 w-3.5 shrink-0 transition-transform", selected && "rotate-180")}
+                  aria-hidden="true"
                 />
-                <span className="min-w-0">
-                  <span className="block text-sm font-semibold text-rj-black">
-                    {option.label}
-                  </span>
-                  <span className="mt-0.5 block text-xs text-rj-gray-600">
-                    {option.description}
-                  </span>
-                </span>
-              </label>
-
-              {option.value === "xendit" && selected ? (
-                <fieldset className="ml-4 mt-3 flex flex-col gap-2 border-l-2 border-rj-gray-100 pl-4">
-                  <legend className="mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-rj-gray-600">
-                    {CHECKOUT_COPY.channelSectionLabel}
-                  </legend>
-                  {CHANNELS.map((channelOption) => {
-                    const channelSelected = channel === channelOption.value;
-                    return (
-                      <label
-                        key={channelOption.value}
-                        className={cn(
-                          "flex cursor-pointer items-start gap-3 rounded-xl border-[1.5px] p-3 transition-colors focus-within:outline-none focus-within:ring-2 focus-within:ring-rj-red/30",
-                          channelSelected
-                            ? "border-rj-black bg-white"
-                            : "border-rj-gray-200 bg-white hover:border-rj-gray-400",
-                        )}
-                      >
-                        <input
-                          type="radio"
-                          name="payment-channel"
-                          value={channelOption.value}
-                          checked={channelSelected}
-                          onChange={() => onChannelChange(channelOption.value)}
-                          className="mt-0.5 h-4 w-4 shrink-0 accent-rj-red"
-                        />
-                        <span className="min-w-0">
-                          <span className="block text-sm font-semibold text-rj-black">
-                            {channelOption.label}
-                          </span>
-                          <span className="mt-0.5 block text-xs text-rj-gray-600">
-                            {channelOption.description}
-                          </span>
-                        </span>
-                      </label>
-                    );
-                  })}
-                  {channelError ? (
-                    <p role="alert" className="text-xs font-medium text-rj-red-dark">
-                      {channelError}
-                    </p>
-                  ) : null}
-                </fieldset>
               ) : null}
-            </div>
+            </label>
           );
         })}
       </div>
+
+      {selectedOption ? (
+        <p className="mt-2 text-xs text-rj-gray-600">{selectedOption.description}</p>
+      ) : null}
+
+      {method === "xendit" ? (
+        <fieldset className="mt-3 flex flex-col divide-y divide-rj-gray-100 rounded-xl border border-rj-gray-100">
+          <legend className="sr-only">{CHECKOUT_COPY.channelSectionLabel}</legend>
+          {CHANNELS.map((channelOption) => {
+            const channelSelected = channel === channelOption.value;
+            return (
+              <label
+                key={channelOption.value}
+                className={cn(
+                  "flex cursor-pointer items-center justify-between gap-3 px-3 py-2.5 transition-colors focus-within:outline-none focus-within:ring-2 focus-within:ring-rj-red/30",
+                  channelSelected ? "bg-rj-gray-50" : "hover:bg-rj-gray-50",
+                )}
+              >
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-rj-black">
+                    {channelOption.label}
+                  </span>
+                  <span className="block text-xs text-rj-gray-500">
+                    {channelOption.description}
+                  </span>
+                </span>
+                <input
+                  type="radio"
+                  name="payment-channel"
+                  value={channelOption.value}
+                  checked={channelSelected}
+                  onChange={() => onChannelChange(channelOption.value)}
+                  className="h-4 w-4 shrink-0 accent-rj-red"
+                />
+              </label>
+            );
+          })}
+          {channelError ? (
+            <p role="alert" className="px-3 py-2 text-xs font-medium text-rj-red-dark">
+              {channelError}
+            </p>
+          ) : null}
+        </fieldset>
+      ) : null}
     </fieldset>
   );
 }

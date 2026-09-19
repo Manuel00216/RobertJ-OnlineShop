@@ -422,7 +422,9 @@ export type Database = {
       orders: {
         Row: {
           buyer_id: string
+          cancellation_reason: string | null
           cancelled_at: string | null
+          cancelled_by: Database["public"]["Enums"]["user_role"] | null
           checkout_group_id: string | null
           created_at: string
           currency: string
@@ -444,7 +446,9 @@ export type Database = {
         }
         Insert: {
           buyer_id: string
+          cancellation_reason?: string | null
           cancelled_at?: string | null
+          cancelled_by?: Database["public"]["Enums"]["user_role"] | null
           checkout_group_id?: string | null
           created_at?: string
           currency?: string
@@ -466,7 +470,9 @@ export type Database = {
         }
         Update: {
           buyer_id?: string
+          cancellation_reason?: string | null
           cancelled_at?: string | null
+          cancelled_by?: Database["public"]["Enums"]["user_role"] | null
           checkout_group_id?: string | null
           created_at?: string
           currency?: string
@@ -1373,7 +1379,24 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      buyer_order_lifecycle: {
+        Row: {
+          active_payment_channel: string | null
+          buyer_id: string
+          lifecycle_tab: string
+          order_id: string
+          placed_at: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_buyer_id_fkey"
+            columns: ["buyer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       adjust_stock: {

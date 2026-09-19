@@ -107,11 +107,11 @@
 |---|---|
 | **Purpose** | Convert a cart spanning multiple shops into one order per shop, capturing shipping details and a payment method. |
 | **Responsibilities** | Group cart by seller; collect shipping address; select payment method; invoke order creation; surface per-shop totals. |
-| **Features** | Shipping address form (country locked to Philippines — domestic-only, no courier API), per-shop order grouping, payment method selection (COD or QR Transfer — QR is informational only at this step, see Payments), order totals, order-confirmation page, empty-cart handling. |
-| **Pages** | `src/app/(shop)/checkout/page.tsx`, `checkout/confirmation/page.tsx` (both protected routes). |
+| **Features** | Shipping address form (country locked to Philippines — domestic-only, no courier API), per-shop order grouping, payment method selection (COD or QR Transfer — QR is informational only at this step, see Payments), order totals, empty-cart handling. |
+| **Pages** | `src/app/(shop)/checkout/page.tsx` (protected route). Checkout no longer hands off to a dedicated confirmation page — placing an order redirects straight to `/orders` (see Orders module), landing on the tab matching the order's actual state. |
 | **Components** | `features/checkout/components/{CheckoutEmptyState,CheckoutForm,CheckoutGroupCard,CheckoutItemsList,CheckoutTotals,PaymentMethodCard,ShippingAddressForm}`. |
 | **Server Actions** | `features/checkout/actions/checkout.actions.ts` — `placeOrderAction`. |
-| **Services** | `lib/supabase/queries.ts` — `createOrder` (wraps the `create_order` RPC), `getBuyerOrder` (confirmation page); `features/checkout/utils/groupCartBySeller`. |
+| **Services** | `lib/supabase/queries.ts` — `createOrder` (wraps the `create_order` RPC); `features/checkout/utils/groupCartBySeller`. |
 | **Database Tables** | Writes `orders`, `order_items` via `create_order`; reads `products` for price/stock validation. |
 | **Dependencies** | Cart (source), Orders (target of creation), Payments (method selection + the actual receipt-upload/verification flow, which lives entirely in the Payments module, not here). |
 | **Current Status** | ✅ Completed (the Stripe/card spike, ADR-014, was removed — see [DECISIONS.md → ADR-014](./DECISIONS.md#adr-014-stripe-integration-is-a-provisional-spike)). |

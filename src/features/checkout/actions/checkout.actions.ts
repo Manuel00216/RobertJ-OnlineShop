@@ -10,9 +10,25 @@ import type {
   PlaceOrderResult,
   PlacedOrder,
 } from "@/features/checkout/types/checkout.types";
+import type { LifecycleTab } from "@/features/orders";
 import { fail, fromZodError, ok } from "@/lib/utils/result";
 import * as queries from "@/lib/supabase/queries";
 import type { ActionResult } from "@/types/action.types";
+
+/**
+ * Resolves where `CheckoutForm` should redirect after placing these orders —
+ * read from the `buyer_order_lifecycle` view (see its migration), never
+ * re-derived here, so the tab mapping has exactly one source of truth. Falls
+ * back to `null` ("All") when the created orders don't all agree on one tab:
+ * not reachable today since one checkout submission applies one payment
+ * method to every seller group, but kept correct rather than assumed.
+ */
+async function resolveRedirectTab(orderIds: string[], buyerId: string): Promise<LifecycleTab | null> {
+  if (orderIds.length === 0) return null;
+  const tabs = await queries.getOrderLifecycleTabs(orderIds, buyerId);
+  const distinct = new Set(Object.values(tabs));
+  return distinct.size === 1 ? [...distinct][0] : null;
+}
 
 /**
  * Places the buyer's cart — one `create_order` call per seller group. The RPC is
@@ -79,16 +95,36 @@ export async function placeOrderAction(
         };
       });
 
+      // Eagerly reserve the shared Xendit attempt for every channel — not
+      // just GCash/Maya's synchronous handoff — so a Card order is
+      // immediately classified "To Pay" too (its payment session only
+      // actually starts later, from the order card). Best-effort: these
+      // orders are already created; a reservation hiccup here doesn't
+      // affect them, and the buyer's subsequent Pay Now/Complete Card
+      // Payment click retries this same, idempotent reservation anyway.
+      if (parsed.data.xenditChannel) {
+        try {
+          await queries.beginXenditGroupPaymentAttempt(
+            group.checkoutGroupId,
+            parsed.data.xenditChannel,
+          );
+        } catch (error) {
+          console.error("Eager Xendit group payment reservation failed:", error);
+        }
+      }
+
       revalidatePath(ROUTES.orders, "layout");
       revalidatePath(ROUTES.account, "layout");
 
-      return ok({ created, failed: [], checkoutGroupId: group.checkoutGroupId });
+      const redirectTab = await resolveRedirectTab(created.map((order) => order.orderId), user.id);
+      return ok({ created, failed: [], checkoutGroupId: group.checkoutGroupId, redirectTab });
     }
 
     const created: PlacedOrder[] = [];
     const failed: FailedGroup[] = [];
 
     for (const group of parsed.data.groups) {
+      let orderId: string;
       try {
         const order = await queries.createOrder({
           sellerId: group.sellerId,
@@ -97,6 +133,7 @@ export async function placeOrderAction(
           shippingFeeCents: CHECKOUT_CONSTANTS.shippingFeeCentsPerSeller,
           notes: parsed.data.notes || null,
         });
+        orderId = order.orderId;
         created.push({
           orderId: order.orderId,
           orderNumber: order.orderNumber,
@@ -116,6 +153,19 @@ export async function placeOrderAction(
               ? error.message
               : "We couldn't place this order.",
         });
+        continue;
+      }
+
+      // Eager, best-effort Xendit reservation — see the group branch above
+      // for why this runs for every channel and is isolated from the
+      // order-creation try/catch (a reservation hiccup must never mark an
+      // already-created order as "failed").
+      if (parsed.data.paymentMethod === "xendit" && parsed.data.xenditChannel) {
+        try {
+          await queries.beginXenditPaymentAttempt(orderId, parsed.data.xenditChannel);
+        } catch (error) {
+          console.error("Eager Xendit payment reservation failed:", error);
+        }
       }
     }
 
@@ -125,7 +175,8 @@ export async function placeOrderAction(
       revalidatePath(ROUTES.account, "layout");
     }
 
-    return ok({ created, failed });
+    const redirectTab = await resolveRedirectTab(created.map((order) => order.orderId), user.id);
+    return ok({ created, failed, redirectTab });
   } catch (error) {
     return fail(
       error instanceof Error ? error.message : "Could not place your order.",

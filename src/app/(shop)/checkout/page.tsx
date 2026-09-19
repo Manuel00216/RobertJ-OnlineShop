@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 
-import { CatalogHeader } from "@/features/products/components/CatalogHeader";
 import { CheckoutForm } from "@/features/checkout/components/CheckoutForm";
 import { CHECKOUT_CONSTANTS } from "@/features/checkout/constants/checkout.constants";
 import type { ShippingAddressInput } from "@/features/checkout/schemas/checkout.schema";
@@ -66,12 +65,10 @@ export default async function CheckoutPage() {
   }
 
   return (
-    <div className="flex flex-col gap-8">
-      <CatalogHeader
-        eyebrow="Checkout"
-        title="Checkout"
-        description="Review your order, add a delivery address, and place your order."
-      />
+    <div className="flex flex-col gap-6">
+      <div className="border-b border-rj-gray-100 pb-3">
+        <h1 className="text-xl font-semibold text-rj-black">Checkout</h1>
+      </div>
       <CheckoutForm
         savedAddresses={savedAddresses}
         initialAddress={initialAddress}

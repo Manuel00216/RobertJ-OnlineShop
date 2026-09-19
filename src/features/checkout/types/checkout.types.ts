@@ -1,17 +1,21 @@
 import type { CartItem, CartLineRef } from "@/features/cart/types/cart.types";
+import type { LifecycleTab } from "@/features/orders";
 
 /**
  * Payment method selected at checkout. The Stripe/card spike (ADR-014) and
  * the QR/manual-verification flow have both been retired — COD and Xendit
  * Online Payment (GCash, Maya, Card) are the only two options.
  *
- * Selecting `xendit` is purely informational at order-placement time in both
- * cases — nothing is persisted here. For a single-seller cart, the buyer
- * starts the Xendit payment afterward from the order detail page, unchanged.
- * For a multi-seller cart, orders are placed atomically via
- * `create_order_group` and the buyer picks the channel (GCash/Maya/Card)
- * afterward on the checkout confirmation page, which starts one combined
- * payment for the whole group — see `checkout/confirmation/page.tsx`.
+ * The channel (GCash/Maya/Card) is chosen once, at checkout, in
+ * `CheckoutForm` — never re-asked afterward. `placeOrderAction` eagerly
+ * reserves the matching Xendit payment attempt right away (for every
+ * channel, not just GCash/Maya), so the order is correctly classified "To
+ * Pay" the instant it's created. GCash/Maya then continue immediately into
+ * Xendit's hosted checkout; Card's session only actually starts later, from
+ * the order's "To Pay" card on `/orders` (its widget needs a buyer-
+ * interactive, mounted DOM it can't get from a Server Action redirect
+ * chain). There is no dedicated checkout-confirmation page — every path
+ * lands on `/orders`.
  */
 export type PaymentMethod = "cod" | "xendit";
 
@@ -53,4 +57,13 @@ export interface PlaceOrderResult {
    * Undefined for COD and single-seller checkouts.
    */
   checkoutGroupId?: string;
+  /**
+   * Which `/orders` lifecycle tab the just-placed order(s) landed on,
+   * resolved server-side from `buyer_order_lifecycle` (see
+   * `resolveRedirectTab` in `checkout.actions.ts`) — `null` means "All"
+   * (COD orders, or the defensive case where created orders span more than
+   * one tab). `CheckoutForm` redirects using this value directly; it never
+   * re-derives the tab mapping itself.
+   */
+  redirectTab: LifecycleTab | null;
 }

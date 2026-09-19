@@ -206,8 +206,7 @@ export async function createXenditGroupEwalletPaymentAction(
     );
     if (reconciliation === "blocked") return fail(RECONCILIATION_RETRY_MESSAGE);
     if (reconciliation === "already_paid") {
-      const orderIds = await queries.getOrderIdsForCheckoutGroup(parsed.data.checkoutGroupId);
-      redirect(`${ROUTES.checkoutConfirmation}?orders=${orderIds.join(",")}&xendit_return=1`);
+      redirect(`${ROUTES.orders}?xendit_return=1`);
     }
     // "cleared_for_retry": fall through, beginXenditGroupPaymentAttempt will
     // correctly start a fresh combined attempt for the whole group.
@@ -227,8 +226,11 @@ export async function createXenditGroupEwalletPaymentAction(
         parsed.data.checkoutGroupId,
         parsed.data.channelCode,
       );
-      const orderIds = await queries.getOrderIdsForCheckoutGroup(parsed.data.checkoutGroupId);
-      const returnUrl = `${publicEnv.NEXT_PUBLIC_SITE_URL}${ROUTES.checkoutConfirmation}?orders=${orderIds.join(",")}&xendit_return=1`;
+      // Lands back on the orders list, not a per-checkout confirmation page
+      // (removed) — `buyer_order_lifecycle` reclassifies the group the
+      // instant the webhook lands, so no tab/channel needs to ride in the
+      // query string here.
+      const returnUrl = `${publicEnv.NEXT_PUBLIC_SITE_URL}${ROUTES.orders}?xendit_return=1`;
 
       const response = await createEwalletPaymentRequest({
         referenceId: parsed.data.checkoutGroupId,
@@ -306,8 +308,9 @@ export async function createXenditGroupCardSessionAction(
       parsed.data.checkoutGroupId,
       "CARD",
     );
-    const orderIds = await queries.getOrderIdsForCheckoutGroup(parsed.data.checkoutGroupId);
-    const returnUrl = `${publicEnv.NEXT_PUBLIC_SITE_URL}${ROUTES.checkoutConfirmation}?orders=${orderIds.join(",")}&xendit_return=1`;
+    // Lands back on the orders list, not a per-checkout confirmation page
+    // (removed) — same reasoning as the e-wallet action above.
+    const returnUrl = `${publicEnv.NEXT_PUBLIC_SITE_URL}${ROUTES.orders}?xendit_return=1`;
 
     const session = await createCardPaymentSession({
       referenceId: parsed.data.checkoutGroupId,

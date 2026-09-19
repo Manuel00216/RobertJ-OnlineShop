@@ -10,8 +10,8 @@ import { OrderItemsList } from "@/features/orders/components/OrderItemsList";
 import { OrderSummary } from "@/features/orders/components/OrderSummary";
 import { OrderTimeline } from "@/features/orders/components/OrderTimeline";
 import { PaymentStatusBadge } from "@/features/orders/components/PaymentStatusBadge";
-import { ShippingAddressCard } from "@/features/orders/components/ShippingAddressCard";
-import { XenditPaymentOptions } from "@/features/payments/components/XenditPaymentOptions";
+import { SellerShopRow } from "@/features/orders/components/SellerShopRow";
+import { paymentMethodLabel } from "@/features/orders/utils/payment-method-label";
 import { RequestReturnPanel } from "@/features/returns/components/RequestReturnPanel";
 import { ReturnRequestStatusCard } from "@/features/returns/components/ReturnRequestStatusCard";
 import {
@@ -19,7 +19,7 @@ import {
   getBuyerOrder,
   getReturnEvidenceSignedUrl,
   getReturnRequestForOrder,
-  getShopNamesBySellerIds,
+  getShopMembershipBySellerIds,
   listReviewedOrderItemIds,
   requireSessionUser,
 } from "@/lib/supabase/queries";
@@ -51,31 +51,21 @@ export default async function OrderDetailPage({
   // Same resolution as the catalog/PDP (see ProductGrid.tsx's toTileItem):
   // a real shop name when the seller belongs to one, else the seller's own
   // name only if `seller_id` actually resolves to a `seller` account —
-  // never an admin's or a demoted account's personal name.
-  const shopNames = await getShopNamesBySellerIds([order.sellerId]).catch(
-    () => new Map<string, string>(),
+  // never an admin's or a demoted account's personal name. Uses the
+  // membership variant (not `getShopNamesBySellerIds`) because "View Shop"
+  // needs the real `shopId` to filter the catalog, not just a display name.
+  const shopMembership = await getShopMembershipBySellerIds([order.sellerId]).catch(
+    () => new Map<string, { shopId: string; shopName: string }>(),
   );
+  const membership = shopMembership.get(order.sellerId) ?? null;
   const shopName =
-    shopNames.get(order.sellerId) ??
+    membership?.shopName ??
     (order.sellerRole === USER_ROLES.seller ? order.sellerName : null);
 
-  // Pending or failed: shows Xendit payment options (a "continue to payment"
-  // link if an attempt is already in flight, otherwise fresh channel choices
-  // to retry) — the failed case also carries its failure reason, shown in
-  // the Payment card below. Paid needs neither — PaymentStatusBadge already
-  // reflects it.
-  const activePayment =
-    order.paymentStatus === "pending" || order.paymentStatus === "failed"
-      ? await getActivePaymentForOrder(order.id)
-      : null;
-
-  const resumableCheckoutUrl =
-    activePayment?.paymentMethodType === "xendit" &&
-    activePayment.status === "pending" &&
-    activePayment.checkoutUrl &&
-    (!activePayment.expiresAt || new Date(activePayment.expiresAt) > new Date())
-      ? activePayment.checkoutUrl
-      : null;
+  // Fetched unconditionally (not just for pending/failed) — the Payment
+  // Information section below needs to correctly label a paid/refunded
+  // order's channel too, not only show a failure reason.
+  const activePayment = await getActivePaymentForOrder(order.id).catch(() => null);
 
   // "Write a Review" only applies to a delivered order, and only for items
   // the buyer hasn't already reviewed.
@@ -124,30 +114,6 @@ export default async function OrderDetailPage({
         <BuyAgainButton order={order} sellerName={shopName} />
       </div>
 
-      {order.paymentStatus === "pending" || order.paymentStatus === "failed" ? (
-        <section
-          aria-label="Payment"
-          className="rounded-2xl border border-rj-gray-100 bg-rj-gray-50 p-5"
-        >
-          <h2 className="text-[10px] font-bold uppercase tracking-[0.3em] text-rj-gray-400">
-            Online Payment
-          </h2>
-          <p className="mt-1 text-xs text-rj-gray-600">
-            {order.paymentStatus === "failed"
-              ? "Your online payment didn't go through. You can try again below."
-              : activePayment
-                ? // A payments row already exists (any status) — the buyer
-                  // already chose Online Payment at checkout, so this is a
-                  // retry/resume, not a first-time choice.
-                  "Your online payment hasn't been completed yet. Continue below."
-                : `Paying by Cash on Delivery? No action needed — ${shopName ?? "the seller"} will mark it collected once received. Prefer to pay now instead?`}
-          </p>
-          <div className="mt-3">
-            <XenditPaymentOptions orderId={order.id} existingCheckoutUrl={resumableCheckoutUrl} />
-          </div>
-        </section>
-      ) : null}
-
       {canRequestReturn ? (
         returnRequest ? (
           <ReturnRequestStatusCard request={returnRequest} evidenceUrl={returnEvidenceUrl} />
@@ -155,6 +121,8 @@ export default async function OrderDetailPage({
           <RequestReturnPanel orderId={order.id} />
         )
       ) : null}
+
+      <SellerShopRow shopName={shopName} shopId={membership?.shopId ?? null} />
 
       <div className="grid gap-8 lg:grid-cols-3">
         <div className="flex flex-col gap-8 lg:col-span-2">
@@ -164,16 +132,15 @@ export default async function OrderDetailPage({
             orderId={order.id}
             reviewableOrderItemIds={reviewableOrderItemIds}
           />
-          <ShippingAddressCard address={order.shippingAddress} />
         </div>
         <div className="flex flex-col gap-6">
           <OrderSummary order={order} />
           <section
-            aria-label="Payment and shop"
+            aria-label="Payment information"
             className={cn(RJ_CARD, "p-5")}
           >
             <h2 className="text-[10px] font-bold uppercase tracking-[0.3em] text-rj-gray-400">
-              Payment
+              Payment Information
             </h2>
             <div className="mt-3">
               <PaymentStatusBadge status={order.paymentStatus} />
@@ -184,12 +151,12 @@ export default async function OrderDetailPage({
                 {activePayment.failureReason}
               </p>
             ) : null}
-            {shopName ? (
-              <p className="mt-3 border-t border-rj-gray-100 pt-3 text-xs text-rj-gray-600">
-                Sold by{" "}
-                <span className="font-semibold text-rj-black">{shopName}</span>
-              </p>
-            ) : null}
+            <p className="mt-3 border-t border-rj-gray-100 pt-3 text-xs text-rj-gray-600">
+              Payment method:{" "}
+              <span className="font-semibold text-rj-black">
+                {paymentMethodLabel(activePayment)}
+              </span>
+            </p>
           </section>
         </div>
       </div>

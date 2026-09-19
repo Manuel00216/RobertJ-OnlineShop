@@ -6,6 +6,7 @@ import { useMemo, useState, useTransition } from "react";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
+import { RJ_CARD } from "@/components/ui/card";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { ROUTES } from "@/constants/routes";
 import { useCart } from "@/features/cart/hooks/useCart";
@@ -31,6 +32,7 @@ import {
 import type { PaymentMethod, PlaceOrderResult } from "@/features/checkout/types/checkout.types";
 import { addressToShippingInput } from "@/features/checkout/utils/addressMapping";
 import { groupCartBySeller } from "@/features/checkout/utils/groupCartBySeller";
+import { cn } from "@/lib/utils/cn";
 // Imported directly from the actions module, not the feature barrel — the
 // barrel also re-exports `PaymentsList`, which pulls in `xendit-reconciliation`
 // and the server-only Xendit client; bundling that into this Client Component
@@ -249,13 +251,17 @@ export function CheckoutForm({
         // not the whole cart, since deselected lines were never part of
         // this checkout and should stay put.
         removeMany(checkoutItems);
-        const orderIds = created.map((order) => order.orderId);
-        const confirmationUrl = `${ROUTES.checkoutConfirmation}?orders=${orderIds.join(",")}`;
+        // Resolved server-side (`resolveRedirectTab`, reading the
+        // `buyer_order_lifecycle` view) — never re-derived here, so the tab
+        // mapping has exactly one source of truth. `null` means "All".
+        const ordersUrl = actionResult.data.redirectTab
+          ? `${ROUTES.orders}?tab=${actionResult.data.redirectTab}`
+          : ROUTES.orders;
 
-        // COD (or a channel that can't auto-continue) lands on the existing
-        // confirmation page, unchanged.
+        // COD (or a channel that can't auto-continue) lands on the orders
+        // list — the just-placed order already carries its bucket.
         if (method !== "xendit" || xenditChannel === null) {
-          router.push(confirmationUrl);
+          router.push(ordersUrl);
           return;
         }
 
@@ -277,19 +283,21 @@ export function CheckoutForm({
           // Only reached on a genuine in-app failure (Xendit unreachable,
           // misconfigured credentials, etc.) — never shown verbatim to the
           // buyer (error hygiene), but logged for diagnosis. The order was
-          // already placed, so route to the confirmation page's recovery
-          // section, telling it which channel just failed so it's presented
-          // honestly as a retry rather than a fresh first choice.
+          // already placed and already carries this channel on its payments
+          // row (the eager reservation in `placeOrderAction`), so the "To
+          // Pay" order card picks it up on its own — no query param needed.
           console.error("Xendit e-wallet handoff failed after checkout:", payResult.error);
-          router.push(`${confirmationUrl}&channel=${xenditChannel}`);
+          router.push(ordersUrl);
           return;
         }
 
         // Card needs its embedded widget mounted client-side (can't redirect
-        // like the e-wallet channels) — the confirmation page renders the
-        // Card widget directly for this order/group, telling it the channel
-        // so it doesn't re-offer GCash/Maya as if nothing had been chosen.
-        router.push(`${confirmationUrl}&channel=CARD`);
+        // like the e-wallet channels, and can't be started from this Server
+        // Action redirect chain either) — its payment session only actually
+        // starts later, from the order's "To Pay" card/detail. The order
+        // already carries "CARD" on its payments row from the eager
+        // reservation, so it lands correctly in To Pay without a query param.
+        router.push(ordersUrl);
         return;
       }
 
@@ -357,81 +365,81 @@ export function CheckoutForm({
         </div>
       ) : null}
 
-      <div className="grid gap-8 lg:grid-cols-3">
-        <div className="flex flex-col gap-8 lg:col-span-2">
-          <section aria-label={CHECKOUT_COPY.orderSectionTitle} className="flex flex-col gap-4">
+      <div className={cn(RJ_CARD, "flex flex-col divide-y divide-rj-gray-100")}>
+        <div className="flex flex-col gap-3 p-5">
+          <div className="flex items-center justify-between gap-2">
             <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-rj-gray-600">
-              {CHECKOUT_COPY.orderSectionTitle}
+              {CHECKOUT_COPY.deliveryAddressSectionTitle}
             </p>
-            <div className="flex flex-col gap-6">
-              {groups.map((group) => (
-                <CheckoutGroupCard
-                  key={group.sellerId}
-                  group={group}
-                  showTotals={groups.length > 1}
-                />
-              ))}
-            </div>
-          </section>
-
-          <div className="flex flex-col gap-3">
             {savedAddresses.length > 0 ? (
-              <div className="flex items-center justify-between px-1">
-                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-rj-gray-600">
-                  {CHECKOUT_COPY.deliveryAddressSectionTitle}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setShowPicker((v) => !v)}
-                  aria-expanded={showPicker}
-                  className="text-xs font-semibold text-rj-red-dark hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30"
-                >
-                  {showPicker ? "Hide" : CHECKOUT_COPY.changeAddressLabel}
-                </button>
-              </div>
-            ) : null}
-
-            {showPicker ? (
-              <AddressPicker
-                addresses={savedAddresses}
-                selectedAddressId={selectedAddressId}
-                onSelectAddress={handleSelectAddress}
-                onSelectNew={handleSelectNewAddress}
-              />
-            ) : null}
-
-            {!showPicker && selectedAddressId !== null ? (
-              <SelectedAddressCard value={address} />
-            ) : null}
-
-            {selectedAddressId === null ? (
-              <>
-                {addressHint ? (
-                  <p className="text-xs text-rj-gray-600">{addressHint}</p>
-                ) : null}
-                <ShippingAddressForm
-                  values={address}
-                  errors={fieldErrors}
-                  onChange={handleChange}
-                />
-              </>
-            ) : null}
-
-            {showSaveAddressOption ? (
-              <label className="flex items-center gap-2 px-1 text-xs font-medium text-rj-gray-600">
-                <input
-                  type="checkbox"
-                  checked={saveNewAddress}
-                  onChange={(event) => setSaveNewAddress(event.target.checked)}
-                  className="h-4 w-4 shrink-0 accent-rj-red"
-                />
-                {CHECKOUT_COPY.saveAddressLabel}
-              </label>
+              <button
+                type="button"
+                onClick={() => setShowPicker((v) => !v)}
+                aria-expanded={showPicker}
+                className="text-xs font-semibold text-rj-red-dark hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30"
+              >
+                {showPicker ? "Hide" : CHECKOUT_COPY.changeAddressLabel}
+              </button>
             ) : null}
           </div>
 
-          <ShippingMethodCard />
+          {showPicker ? (
+            <AddressPicker
+              addresses={savedAddresses}
+              selectedAddressId={selectedAddressId}
+              onSelectAddress={handleSelectAddress}
+              onSelectNew={handleSelectNewAddress}
+            />
+          ) : null}
 
+          {!showPicker && selectedAddressId !== null ? (
+            <SelectedAddressCard value={address} />
+          ) : null}
+
+          {selectedAddressId === null ? (
+            <>
+              {addressHint ? (
+                <p className="text-xs text-rj-gray-600">{addressHint}</p>
+              ) : null}
+              <ShippingAddressForm
+                values={address}
+                errors={fieldErrors}
+                onChange={handleChange}
+              />
+            </>
+          ) : null}
+
+          {showSaveAddressOption ? (
+            <label className="flex items-center gap-2 text-xs font-medium text-rj-gray-600">
+              <input
+                type="checkbox"
+                checked={saveNewAddress}
+                onChange={(event) => setSaveNewAddress(event.target.checked)}
+                className="h-4 w-4 shrink-0 accent-rj-red"
+              />
+              {CHECKOUT_COPY.saveAddressLabel}
+            </label>
+          ) : null}
+        </div>
+
+        <div className="flex flex-col gap-4 p-5">
+          <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-rj-gray-600">
+            {CHECKOUT_COPY.orderSectionTitle}
+          </p>
+          <div className="flex flex-col divide-y divide-dashed divide-rj-gray-100">
+            {groups.map((group) => (
+              <div key={group.sellerId} className="py-4 first:pt-0 last:pb-0">
+                <CheckoutGroupCard group={group} showTotals={groups.length > 1} />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="p-5">
+          <ShippingMethodCard />
+        </div>
+
+        <div className="p-5">
           <PaymentMethodCard
             method={method}
             onChange={handleMethodChange}
@@ -439,7 +447,9 @@ export function CheckoutForm({
             onChannelChange={handleChannelChange}
             channelError={fieldErrors.xenditChannel?.[0]}
           />
+        </div>
 
+        <div className="p-5">
           <OrderNotesField
             value={notes}
             onChange={setNotes}
@@ -447,22 +457,18 @@ export function CheckoutForm({
           />
         </div>
 
-        <aside className="flex flex-col gap-4">
-          <div className="rounded-2xl border border-rj-gray-100 bg-rj-gray-50 p-5">
-            <CheckoutTotals
-              title="Order total"
-              subtotalCents={grandSubtotalCents}
-              shippingFeeCents={grandShippingCents}
-              totalCents={grandTotalCents}
-              currency={currency ?? "PHP"}
-            />
-          </div>
+        <div className="flex flex-col items-stretch gap-3 p-5 sm:items-end">
+          <CheckoutTotals
+            title="Order total"
+            subtotalCents={grandSubtotalCents}
+            shippingFeeCents={grandShippingCents}
+            totalCents={grandTotalCents}
+            currency={currency ?? "PHP"}
+            align="right"
+          />
 
           {groups.length > 1 ? (
-            <p
-              role="note"
-              className="rounded-xl bg-rj-gray-50 px-3 py-2 text-xs font-medium text-rj-gray-600"
-            >
+            <p role="note" className="text-xs font-medium text-rj-gray-600 sm:text-right">
               {method === "xendit"
                 ? CHECKOUT_COPY.multiShopOnlinePaymentNotice
                 : `${CHECKOUT_COPY.multiShopNoticePrefix} ${groups.length} ${CHECKOUT_COPY.multiShopNoticeSuffix}`}
@@ -474,7 +480,7 @@ export function CheckoutForm({
             variant="rj"
             size="rj"
             isLoading={isPending}
-            className="w-full"
+            className="w-full sm:w-auto sm:min-w-55"
           >
             {isPending ? CHECKOUT_COPY.placingOrder : CHECKOUT_COPY.placeOrder}
           </Button>
@@ -483,10 +489,10 @@ export function CheckoutForm({
             <ErrorState title="Couldn't place your order" message={formError} />
           ) : null}
 
-          <p className="text-center text-xs text-rj-gray-600">
+          <p className="text-xs text-rj-gray-600 sm:text-right">
             {CHECKOUT_COPY.agreeNote}
           </p>
-        </aside>
+        </div>
       </div>
     </form>
   );

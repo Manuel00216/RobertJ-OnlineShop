@@ -22,5 +22,6 @@ export {
 export type { Payment, PaymentAttempt, PaymentMethodType } from "./types/payment.types";
 export { XenditPaymentOptions } from "./components/XenditPaymentOptions";
 export { XenditCardPaymentButton } from "./components/XenditCardPaymentButton";
+export { PaymentFailedRetry } from "./components/PaymentFailedRetry";
 export { MarkCodCollectedButton } from "./components/MarkCodCollectedButton";
 export { PaymentsList } from "./components/PaymentsList";

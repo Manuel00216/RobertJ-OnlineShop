@@ -36,6 +36,8 @@ export const DATABASE_TABLES = {
   RECOMMENDATION_RULES: "recommendation_rules",
   BUYER_PREFERENCES: "buyer_preferences",
   XENDIT_REFUNDS: "xendit_refunds",
+  /** View, not a table — computed lifecycle bucket per order for the buyer `/orders` tabs. See its migration for the precedence rules. */
+  BUYER_ORDER_LIFECYCLE: "buyer_order_lifecycle",
 } as const;
 
 /** Union of every table name in the schema. */

@@ -1,4 +1,3 @@
-import { RJ_CARD } from "@/components/ui/card";
 import { AddressSummary } from "@/features/addresses/components/AddressSummary";
 import type { Address } from "@/features/addresses/types/address.types";
 import { cn } from "@/lib/utils/cn";
@@ -29,7 +28,9 @@ export function AddressPicker({
     <div
       role="radiogroup"
       aria-label="Choose a delivery address"
-      className={cn(RJ_CARD, "flex flex-col divide-y divide-rj-gray-100 p-2")}
+      className={cn(
+        "flex flex-col divide-y divide-rj-gray-100 rounded-xl border border-rj-gray-100 p-2",
+      )}
     >
       {addresses.map((address) => {
         const selected = selectedAddressId === address.id;

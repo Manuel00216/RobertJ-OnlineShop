@@ -52,6 +52,10 @@ import {
   ORDER_STATUS_TRANSITIONS,
   getOrderStatusLabel,
 } from "@/features/orders/constants/order.constants";
+import {
+  ORDER_LIFECYCLE_TABS,
+  type LifecycleTab,
+} from "@/features/orders/constants/order-lifecycle.constants";
 import type {
   Order,
   OrderListParams,
@@ -1474,6 +1478,7 @@ const ORDER_COLUMNS = `
   id, order_number, buyer_id, seller_id, subtotal_cents, shipping_fee_cents,
   total_cents, currency, payment_status, order_status, shipping_address, notes,
   placed_at, paid_at, shipped_at, delivered_at, cancelled_at, checkout_group_id,
+  cancellation_reason, cancelled_by,
   buyer:profiles!orders_buyer_id_fkey ( full_name, username ),
   seller:profiles!orders_seller_id_fkey ( full_name, username, role ),
   order_items (
@@ -1554,6 +1559,8 @@ function toOrder(row: OrderRowWithItems): Order {
     cancelledAt: row.cancelled_at,
     cancellable: CANCELLABLE_ORDER_STATUSES.includes(row.order_status),
     checkoutGroupId: row.checkout_group_id,
+    cancellationReason: row.cancellation_reason,
+    cancelledBy: row.cancelled_by,
   };
 }
 
@@ -1566,6 +1573,10 @@ export async function listBuyerOrders(
   buyerId: string,
   params: OrderListParams,
 ): Promise<PaginatedResult<Order>> {
+  if (params.lifecycleTab) {
+    return listBuyerOrdersByLifecycleTab(buyerId, params, params.lifecycleTab);
+  }
+
   const supabase = await createSupabaseServerClient();
 
   let query = supabase
@@ -1590,13 +1601,184 @@ export async function listBuyerOrders(
   }
 
   const total = count ?? 0;
+  const items = await mergeLifecycleMeta(
+    (data ?? []).map((row) => toOrder(row as OrderRowWithItems)),
+  );
   return {
-    items: (data ?? []).map((row) => toOrder(row as OrderRowWithItems)),
+    items,
     total,
     page: params.page,
     pageSize: params.pageSize,
     totalPages: Math.max(1, Math.ceil(total / params.pageSize)),
   };
+}
+
+/**
+ * Merges each order's own `lifecycle_tab` + `active_payment_channel` from
+ * `buyer_order_lifecycle` onto the already-fetched `Order`s — lets the
+ * buyer `/orders` list render the right per-card action row even in the
+ * unfiltered "All" view, not only when a specific tab is selected. Failure
+ * is non-fatal (logged, list still renders) — this is a presentational
+ * enhancement, not core order data.
+ */
+async function mergeLifecycleMeta(orders: Order[]): Promise<Order[]> {
+  if (orders.length === 0) return orders;
+
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.BUYER_ORDER_LIFECYCLE)
+    .select("order_id, lifecycle_tab, active_payment_channel")
+    .in(
+      "order_id",
+      orders.map((order) => order.id),
+    );
+
+  if (error) {
+    console.error("Failed to load order lifecycle metadata:", error);
+    return orders;
+  }
+
+  const byId = new Map((data ?? []).map((row) => [row.order_id, row]));
+  return orders.map((order) => {
+    const meta = byId.get(order.id);
+    if (!meta) return order;
+    order.lifecycleTab = meta.lifecycle_tab as LifecycleTab;
+    order.activePaymentChannel = meta.active_payment_channel as Order["activePaymentChannel"];
+    return order;
+  });
+}
+
+/**
+ * Lifecycle-tab-filtered counterpart of `listBuyerOrders`, for the
+ * Shopee-style `/orders` tab bar. Two queries rather than one embedded
+ * select: `buyer_order_lifecycle` has no FK relationship Supabase's schema
+ * cache can embed `order_items`/profiles through. First resolves every
+ * order id in this buyer's tab from the view (narrow, two columns, scoped
+ * to one buyer — bounded in practice), then runs the real search + sort +
+ * pagination + `order_items` embed against `orders` directly, so `count`
+ * and paging stay accurate even when `search` is combined with a tab.
+ * `active_payment_channel` rides along from the first query and is merged
+ * onto each `Order`, so the "To Pay" card never needs a per-order query.
+ */
+async function listBuyerOrdersByLifecycleTab(
+  buyerId: string,
+  params: OrderListParams,
+  lifecycleTab: LifecycleTab,
+): Promise<PaginatedResult<Order>> {
+  const supabase = await createSupabaseServerClient();
+
+  const { data: viewRows, error: viewError } = await supabase
+    .from(DATABASE_TABLES.BUYER_ORDER_LIFECYCLE)
+    .select("order_id, active_payment_channel")
+    .eq("buyer_id", buyerId)
+    .eq("lifecycle_tab", lifecycleTab);
+
+  if (viewError) {
+    throw queryError("Failed to load orders", viewError);
+  }
+
+  const orderIds = (viewRows ?? []).map((row) => row.order_id);
+  if (orderIds.length === 0) {
+    return { items: [], total: 0, page: params.page, pageSize: params.pageSize, totalPages: 1 };
+  }
+  const channelByOrderId = new Map(
+    (viewRows ?? []).map((row) => [row.order_id, row.active_payment_channel]),
+  );
+
+  let query = supabase
+    .from(DATABASE_TABLES.ORDERS)
+    .select(ORDER_COLUMNS, { count: "exact" })
+    .in("id", orderIds);
+
+  if (params.search) {
+    query = query.ilike("order_number", `%${params.search}%`);
+  }
+
+  query = query.order("placed_at", { ascending: false });
+
+  const { from, to } = toRange(params);
+  const { data, error, count } = await query.range(from, to);
+
+  if (error) {
+    throw queryError("Failed to load orders", error);
+  }
+
+  const total = count ?? 0;
+  const items = (data ?? []).map((row) => {
+    const order = toOrder(row as OrderRowWithItems);
+    // Every result here already matches `lifecycleTab` by construction
+    // (it's the filter itself) — no need to look it up a second time.
+    order.lifecycleTab = lifecycleTab;
+    order.activePaymentChannel = channelByOrderId.get(order.id) as Order["activePaymentChannel"];
+    return order;
+  });
+
+  return {
+    items,
+    total,
+    page: params.page,
+    pageSize: params.pageSize,
+    totalPages: Math.max(1, Math.ceil(total / params.pageSize)),
+  };
+}
+
+/**
+ * Distinct lifecycle tab(s) for a specific set of just-created orders —
+ * lets `placeOrderAction` tell `CheckoutForm` where to redirect without
+ * duplicating `buyer_order_lifecycle`'s precedence rules on the client. An
+ * id with no matching row (e.g. a query race) is simply omitted.
+ *
+ * `buyerId` is an explicit app-level ownership filter on top of the view's
+ * own RLS (`security_invoker`) — defense-in-depth matching every other
+ * buyer-scoped function in this file, even though the current caller
+ * (`resolveRedirectTab`) only ever passes order ids the same request just
+ * created for the authenticated buyer.
+ */
+export async function getOrderLifecycleTabs(
+  orderIds: string[],
+  buyerId: string,
+): Promise<Record<string, LifecycleTab>> {
+  if (orderIds.length === 0) return {};
+
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.BUYER_ORDER_LIFECYCLE)
+    .select("order_id, lifecycle_tab")
+    .eq("buyer_id", buyerId)
+    .in("order_id", orderIds);
+
+  if (error) {
+    throw queryError("Failed to resolve order status", error);
+  }
+
+  return Object.fromEntries(
+    (data ?? []).map((row) => [row.order_id, row.lifecycle_tab as LifecycleTab]),
+  );
+}
+
+/**
+ * Per-tab exact counts for the buyer `/orders` tab bar — mirrors
+ * `getBuyerOrderSummary`'s existing head-only-count-per-bucket pattern,
+ * against `buyer_order_lifecycle` instead of raw `order_status`. "All" isn't
+ * included: it's just the unfiltered total `listBuyerOrders` already returns.
+ */
+export async function getBuyerOrderLifecycleCounts(
+  buyerId: string,
+): Promise<Record<LifecycleTab, number>> {
+  const supabase = await createSupabaseServerClient();
+
+  const counts = await Promise.all(
+    ORDER_LIFECYCLE_TABS.map(async (tab) => {
+      const { count, error } = await supabase
+        .from(DATABASE_TABLES.BUYER_ORDER_LIFECYCLE)
+        .select("order_id", { count: "exact", head: true })
+        .eq("buyer_id", buyerId)
+        .eq("lifecycle_tab", tab);
+      return [tab, error ? 0 : (count ?? 0)] as const;
+    }),
+  );
+
+  return Object.fromEntries(counts) as Record<LifecycleTab, number>;
 }
 
 /**
@@ -1684,6 +1866,7 @@ export async function getDashboardOrderSummary(): Promise<OrderSummary> {
 export async function cancelBuyerOrder(
   orderId: string,
   buyerId: string,
+  reason: string,
 ): Promise<void> {
   const supabase = await createSupabaseServerClient();
 
@@ -1709,6 +1892,8 @@ export async function cancelBuyerOrder(
     .update({
       order_status: ORDER_STATUS.cancelled,
       cancelled_at: new Date().toISOString(),
+      cancellation_reason: reason,
+      cancelled_by: "buyer",
     })
     .eq("id", orderId)
     .eq("buyer_id", buyerId);
@@ -1878,9 +2063,22 @@ export async function advanceOrderStatus(
     }
   }
 
+  // Cancelling also records who did it and when — mirrors `cancelBuyerOrder`'s
+  // own write, closing a pre-existing gap where this path never set
+  // `cancelled_at` at all. No reason is captured here (buyer-only, via
+  // `cancelOrderAction`) — redesigning the seller/admin cancel flow is out
+  // of scope for that feature.
+  const cancellationFields =
+    newStatus === "cancelled"
+      ? {
+          cancelled_at: new Date().toISOString(),
+          cancelled_by: (sellerId ? "seller" : "admin") as "seller" | "admin",
+        }
+      : {};
+
   let writeQuery = supabase
     .from(DATABASE_TABLES.ORDERS)
-    .update({ order_status: newStatus })
+    .update({ order_status: newStatus, ...cancellationFields })
     .eq("id", orderId)
     .eq("order_status", currentStatus);
   if (sellerId) writeQuery = writeQuery.eq("seller_id", sellerId);
@@ -3435,6 +3633,33 @@ export async function getShopNamesBySellerIds(
     ((data ?? []) as ShopMembershipRow[]).map((row) => [
       row.seller_id,
       row.shop_name,
+    ]),
+  );
+}
+
+/**
+ * Like `getShopNamesBySellerIds`, but also returns each seller's `shop_id` —
+ * for "View Shop" links that need to filter `/products?shopId=` rather than
+ * just display a name. Same RPC, same empty-input short-circuit; kept as a
+ * separate function rather than widening `getShopNamesBySellerIds`'s return
+ * shape, so its existing callers are unaffected.
+ */
+export async function getShopMembershipBySellerIds(
+  sellerIds: string[],
+): Promise<Map<string, { shopId: string; shopName: string }>> {
+  if (sellerIds.length === 0) return new Map();
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("resolve_shop_membership", {
+    p_seller_ids: sellerIds,
+  });
+
+  if (error) {
+    throw queryError("Failed to resolve shop membership", error);
+  }
+  return new Map(
+    ((data ?? []) as ShopMembershipRow[]).map((row) => [
+      row.seller_id,
+      { shopId: row.shop_id, shopName: row.shop_name },
     ]),
   );
 }

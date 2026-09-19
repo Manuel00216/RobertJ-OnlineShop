@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ChevronRight, Package } from "lucide-react";
+import { Package } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { RJ_CARD, THEMED_CARD } from "@/components/ui/card";
@@ -16,31 +16,36 @@ export interface OrderCardProps {
   order: Order;
   /** Overrides the default buyer-facing detail link — used by the dashboard list to point at `ROUTES.dashboardOrderDetail`. */
   href?: string;
-  /** Small line under the order number — e.g. which shop this order belongs to. Only the order-confirmation page passes this today; every other caller is unaffected. */
-  subtitle?: ReactNode;
-  /** Explicit trailing "View Order"-style label, for contexts (order confirmation) where each card needs a clearly labeled action rather than relying on the whole card being a link. Omitted elsewhere — no visual change to the existing order-list/dashboard usage. */
-  viewLabel?: string;
   /** Renders through the Admin/Seller portal's tokens instead of the fixed rj-* palette — pass from portal call sites only (DashboardOrdersPanel, RecentOrdersCard); the Buyer order list omits it. */
   themed?: boolean;
+  /**
+   * Lifecycle-tab action row (Pay Now, Cancel Order, Buy Again, etc.),
+   * rendered as a sibling below the clickable card content rather than
+   * inside it — buttons can't nest inside the `<Link>` that makes the rest
+   * of the card clickable. Only the buyer `/orders` list (`OrderCardActions`)
+   * passes this; every other caller (dashboard, seller/admin portals, and
+   * historically the confirmation page) omits it and renders exactly as
+   * before this prop was added.
+   */
+  actions?: ReactNode;
 }
 
 /** Responsive order-list item: cover, order number, date, total, status badge. */
-export function OrderCard({ order, href, subtitle, viewLabel, themed = false }: OrderCardProps) {
+export function OrderCard({ order, href, themed = false, actions }: OrderCardProps) {
   const cover = order.items.find((item) => item.imageUrl)?.imageUrl ?? null;
   const ink = themed ? "text-foreground" : "text-rj-black";
   const muted = themed ? "text-muted-foreground" : "text-rj-gray-600";
-  const accent = themed ? "text-primary" : "text-rj-red-dark";
   const ring = themed ? "focus-visible:ring-ring/30" : "focus-visible:ring-rj-red/30";
 
   return (
-    <Link
-      href={href ?? ROUTES.orderDetail(order.id)}
-      className={cn(
-        themed ? THEMED_CARD : RJ_CARD,
-        "group flex items-center gap-4 p-4 shadow-sm transition-all hover:shadow-lg focus-visible:outline-none focus-visible:ring-2",
-        ring,
-      )}
-    >
+    <div className={cn(themed ? THEMED_CARD : RJ_CARD, "shadow-sm transition-all hover:shadow-lg")}>
+      <Link
+        href={href ?? ROUTES.orderDetail(order.id)}
+        className={cn(
+          "group flex items-center gap-4 rounded-[inherit] p-4 focus-visible:outline-none focus-visible:ring-2",
+          ring,
+        )}
+      >
       {cover ? (
         <Image
           src={cover}
@@ -61,11 +66,6 @@ export function OrderCard({ order, href, subtitle, viewLabel, themed = false }: 
       )}
 
       <div className="min-w-0 flex-1">
-        {subtitle ? (
-          <p className={cn("truncate text-[10px] font-bold uppercase tracking-wide", accent)}>
-            {subtitle}
-          </p>
-        ) : null}
         <p className={cn("text-[13px] font-bold", ink)}>{order.orderNumber}</p>
         <p className={cn("mt-0.5 text-xs", muted)}>{formatDate(order.placedAt)}</p>
       </div>
@@ -75,13 +75,18 @@ export function OrderCard({ order, href, subtitle, viewLabel, themed = false }: 
           {formatCurrency(order.totalCents, order.currency)}
         </p>
         <OrderStatusBadge status={order.status} />
-        {viewLabel ? (
-          <span className={cn("flex items-center gap-0.5 text-xs font-semibold", accent)}>
-            {viewLabel}
-            <ChevronRight className="h-3 w-3" aria-hidden="true" />
-          </span>
-        ) : null}
       </div>
-    </Link>
+      </Link>
+      {actions ? (
+        <div
+          className={cn(
+            "flex flex-wrap items-center justify-end gap-2 border-t px-4 py-3",
+            themed ? "border-border" : "border-rj-gray-100",
+          )}
+        >
+          {actions}
+        </div>
+      ) : null}
+    </div>
   );
 }

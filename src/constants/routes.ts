@@ -6,7 +6,6 @@ export const ROUTES = {
   categoryDetail: (slug: string) => `/categories/${slug}`,
   cart: "/cart",
   checkout: "/checkout",
-  checkoutConfirmation: "/checkout/confirmation",
   /** Customer account hub (order tracking + overview). See docs/customer-account-architecture-plan.md. */
   account: "/account",
   orders: "/orders",

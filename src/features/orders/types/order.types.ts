@@ -1,5 +1,6 @@
 import type { UserRole } from "@/constants/roles";
 import type { OrderStatus, PaymentStatus } from "@/constants/status";
+import type { LifecycleTab } from "@/features/orders/constants/order-lifecycle.constants";
 
 /**
  * Delivery address captured at checkout and snapshotted on the order
@@ -80,6 +81,26 @@ export interface Order {
   cancellable: boolean;
   /** Set when this order was placed as part of a multi-seller, one-combined-payment checkout; null for COD and single-seller orders. */
   checkoutGroupId: string | null;
+  /** Buyer-supplied reason when they cancel their own order (`cancelOrderAction`). Null for seller/admin-initiated cancellations, and for orders that were never cancelled. */
+  cancellationReason: string | null;
+  /** Which role actually cancelled the order. Null until `status` first becomes "cancelled". */
+  cancelledBy: UserRole | null;
+  /**
+   * The order's most recent Xendit attempt channel (GCASH/PAYMAYA/CARD), or
+   * null for COD / no attempt yet. Populated by `listBuyerOrders` (both the
+   * "All"/status-filtered and lifecycle-tab-filtered paths) from
+   * `buyer_order_lifecycle`, avoiding an N+1 query per "To Pay" card —
+   * `undefined` from every other query path, including `getBuyerOrder`.
+   */
+  activePaymentChannel?: "GCASH" | "PAYMAYA" | "CARD" | null;
+  /**
+   * This order's own computed lifecycle bucket (see
+   * `buyer_order_lifecycle`'s migration for the precedence rules) — lets the
+   * buyer `/orders` list render the right action row per card even in the
+   * unfiltered "All" view, not just when a specific tab is selected.
+   * Populated by `listBuyerOrders` only; `undefined` elsewhere.
+   */
+  lifecycleTab?: LifecycleTab;
 }
 
 /** Filters accepted by the buyer order listing query. */
@@ -90,6 +111,8 @@ export interface OrderListParams {
   search?: string;
   /** Optional status filter, driven by the chips UI. */
   status?: OrderStatus;
+  /** Optional lifecycle-tab filter, driven by `OrderLifecycleTabs` (buyer `/orders` only) — mutually exclusive with `status` in practice, but not enforced here. */
+  lifecycleTab?: LifecycleTab;
 }
 
 /** Overview-hub payload: per-status counts + the 5 most recent orders. */

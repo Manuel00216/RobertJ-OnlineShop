@@ -67,10 +67,11 @@ async function blockCancellationIfXenditUnresolved(
  */
 export async function cancelOrderAction(
   orderId: string,
+  reason: string,
 ): Promise<ActionResult<null>> {
-  const parsed = cancelOrderSchema.safeParse({ orderId });
+  const parsed = cancelOrderSchema.safeParse({ orderId, reason });
   if (!parsed.success) {
-    return fail("Order not found.");
+    return fromZodError(parsed.error);
   }
 
   try {
@@ -80,7 +81,7 @@ export async function cancelOrderAction(
     const blocked = await blockCancellationIfXenditUnresolved(parsed.data.orderId);
     if (blocked) return blocked;
 
-    await queries.cancelBuyerOrder(parsed.data.orderId, user.id);
+    await queries.cancelBuyerOrder(parsed.data.orderId, user.id, parsed.data.reason);
     // Re-render the history list and the detail page so the timeline updates.
     revalidatePath(ROUTES.orders, "layout");
     revalidatePath(ROUTES.orderDetail(parsed.data.orderId), "layout");

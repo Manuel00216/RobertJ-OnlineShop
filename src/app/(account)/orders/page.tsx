@@ -3,10 +3,10 @@ import type { Metadata } from "next";
 
 import { CatalogHeader } from "@/features/products/components/CatalogHeader";
 import { OrderListSection } from "@/features/orders/components/OrderListSection";
+import { OrderLifecycleTabs } from "@/features/orders/components/OrderLifecycleTabs";
 import { OrderSearchInput } from "@/features/orders/components/OrderSearchInput";
 import { OrderSkeletons } from "@/features/orders/components/OrderSkeletons";
-import { OrderStatusFilter } from "@/features/orders/components/OrderStatusFilter";
-import { requireSessionUser } from "@/lib/supabase/queries";
+import { getBuyerOrderLifecycleCounts, requireSessionUser } from "@/lib/supabase/queries";
 
 export const metadata: Metadata = { title: "Orders" };
 
@@ -17,6 +17,7 @@ interface OrdersPageProps {
 export default async function OrdersPage({ searchParams }: OrdersPageProps) {
   const params = await searchParams;
   const user = await requireSessionUser();
+  const counts = await getBuyerOrderLifecycleCounts(user.id);
 
   return (
     <div className="flex flex-col gap-8">
@@ -31,7 +32,7 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
           <OrderSearchInput />
         </Suspense>
         <Suspense fallback={null}>
-          <OrderStatusFilter />
+          <OrderLifecycleTabs counts={counts} />
         </Suspense>
       </div>
 

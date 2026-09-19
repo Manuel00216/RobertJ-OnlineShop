@@ -3,15 +3,16 @@ import Link from "next/link";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { buttonVariants } from "@/components/ui/button";
+import { USER_ROLES } from "@/constants/roles";
 import { ROUTES } from "@/constants/routes";
 import { PaginationControls } from "@/features/products/components/PaginationControls";
 import { buyerOrderListParamsSchema } from "@/features/orders/schemas/order.schema";
 import type { Order, OrderListParams } from "@/features/orders/types/order.types";
 import { cn } from "@/lib/utils/cn";
-import { listBuyerOrders } from "@/lib/supabase/queries";
+import { getShopMembershipBySellerIds, listBuyerOrders } from "@/lib/supabase/queries";
 import type { PaginatedResult } from "@/types/pagination.types";
 
-import { OrderCard } from "./OrderCard";
+import { BuyerOrderCard } from "./BuyerOrderCard";
 
 export interface OrderListSectionProps {
   searchParams: Record<string, string | string[] | undefined>;
@@ -33,7 +34,10 @@ export async function OrderListSection({
     );
   }
 
-  const params: OrderListParams = parsed.data;
+  // Schema field is `tab` (short, URL-facing); the query layer's field is
+  // the more descriptive `lifecycleTab` — mapped explicitly here rather than
+  // renaming one to match the other.
+  const params: OrderListParams = { ...parsed.data, lifecycleTab: parsed.data.tab };
 
   let result: PaginatedResult<Order>;
   try {
@@ -47,7 +51,7 @@ export async function OrderListSection({
   const { items, page, totalPages, total } = result;
 
   if (items.length === 0) {
-    const filtering = Boolean(params.search || params.status);
+    const filtering = Boolean(params.search || params.status || params.lifecycleTab);
     return (
       <EmptyState
         title={filtering ? "No matching orders" : "No orders yet"}
@@ -77,6 +81,17 @@ export async function OrderListSection({
     );
   }
 
+  // Resolved once for the whole page, not per card — avoids an N+1 shop
+  // lookup across potentially many orders from different sellers.
+  const sellerIds = [...new Set(items.map((order) => order.sellerId))];
+  const shopMembership = await getShopMembershipBySellerIds(sellerIds).catch(
+    () => new Map<string, { shopId: string; shopName: string }>(),
+  );
+  const shopLabelFor = (order: Order) =>
+    shopMembership.get(order.sellerId)?.shopName ??
+    (order.sellerRole === USER_ROLES.seller ? order.sellerName : null) ??
+    "RobertJ Seller";
+
   return (
     <section className="flex flex-col gap-6">
       <p
@@ -85,10 +100,14 @@ export async function OrderListSection({
       >
         {total} order{total === 1 ? "" : "s"}
       </p>
-      <ul className="flex flex-col gap-3">
+      <ul className="flex flex-col gap-4">
         {items.map((order) => (
           <li key={order.id}>
-            <OrderCard order={order} />
+            <BuyerOrderCard
+              order={order}
+              shopName={shopLabelFor(order)}
+              shopId={shopMembership.get(order.sellerId)?.shopId ?? null}
+            />
           </li>
         ))}
       </ul>
