@@ -135,7 +135,12 @@ export default async function OrderDetailPage({
           <p className="mt-1 text-xs text-rj-gray-600">
             {order.paymentStatus === "failed"
               ? "Your online payment didn't go through. You can try again below."
-              : `Paying by Cash on Delivery? No action needed — ${shopName ?? "the seller"} will mark it collected once received. Prefer to pay now instead?`}
+              : activePayment
+                ? // A payments row already exists (any status) — the buyer
+                  // already chose Online Payment at checkout, so this is a
+                  // retry/resume, not a first-time choice.
+                  "Your online payment hasn't been completed yet. Continue below."
+                : `Paying by Cash on Delivery? No action needed — ${shopName ?? "the seller"} will mark it collected once received. Prefer to pay now instead?`}
           </p>
           <div className="mt-3">
             <XenditPaymentOptions orderId={order.id} existingCheckoutUrl={resumableCheckoutUrl} />

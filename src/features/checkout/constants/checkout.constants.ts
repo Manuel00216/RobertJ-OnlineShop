@@ -31,8 +31,15 @@ export const CHECKOUT_COPY = {
   codLabel: "Cash on Delivery",
   codDescription: "Pay when your order arrives. The seller marks it collected once received.",
   onlineLabel: "Online Payment",
-  onlineDescription:
-    "Pay securely via GCash, Maya, or Card — completed from your order page after checkout.",
+  onlineDescription: "Pay securely via GCash, Maya, or Card — choose one below.",
+  channelSectionLabel: "Choose how you'll pay",
+  gcashLabel: "GCash",
+  gcashDescription: "Redirects to GCash to complete payment.",
+  mayaLabel: "Maya",
+  mayaDescription: "Redirects to Maya to complete payment.",
+  cardLabel: "Card",
+  cardDescription: "Pay with a debit or credit card.",
+  channelRequiredError: "Choose GCash, Maya, or Card to pay online.",
   orderSectionTitle: "Your Order",
   deliveryAddressSectionTitle: "Delivery Address",
   paymentSectionTitle: "Payment",
@@ -45,8 +52,7 @@ export const CHECKOUT_COPY = {
   nothingSelectedTitle: "Nothing selected",
   nothingSelectedDescription:
     "Go back to your cart and check the items you'd like to order.",
-  agreeNote:
-    "Cash on Delivery needs no action — pay online (GCash, Maya, or Card) from your order page after checkout.",
+  agreeNote: "Cash on Delivery needs no action. Paying online continues right after you place your order.",
   multiShopNoticePrefix: "This will be placed as",
   multiShopNoticeSuffix: "separate orders — one per shop.",
   /** Shown instead of multiShopNotice* when Online Payment is selected for a multi-seller cart — orders are still one per shop, but paid for together in one combined Xendit payment. */

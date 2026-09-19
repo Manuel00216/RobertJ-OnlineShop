@@ -26,10 +26,21 @@ import { CHECKOUT_CONSTANTS, CHECKOUT_COPY } from "@/features/checkout/constants
 import {
   shippingAddressSchema,
   type ShippingAddressInput,
+  type XenditChannel,
 } from "@/features/checkout/schemas/checkout.schema";
 import type { PaymentMethod, PlaceOrderResult } from "@/features/checkout/types/checkout.types";
 import { addressToShippingInput } from "@/features/checkout/utils/addressMapping";
 import { groupCartBySeller } from "@/features/checkout/utils/groupCartBySeller";
+// Imported directly from the actions module, not the feature barrel — the
+// barrel also re-exports `PaymentsList`, which pulls in `xendit-reconciliation`
+// and the server-only Xendit client; bundling that into this Client Component
+// via the barrel breaks the build ("server-only cannot be imported from a
+// Client Component"). `XenditPaymentOptions` already imports these two the
+// same way for the same reason.
+import {
+  createXenditEwalletPaymentAction,
+  createXenditGroupEwalletPaymentAction,
+} from "@/features/payments/actions/xendit.actions";
 import type { ActionResult } from "@/types/action.types";
 
 type FieldErrors = Record<string, string[] | undefined>;
@@ -104,8 +115,22 @@ export function CheckoutForm({
   const [formError, setFormError] = useState<string | null>(null);
   const [result, setResult] = useState<PlaceOrderResult | null>(null);
   const [method, setMethod] = useState<PaymentMethod>(initialMethod ?? "cod");
+  const [xenditChannel, setXenditChannel] = useState<XenditChannel | null>(null);
   const [notes, setNotes] = useState("");
   const [isPending, startTransition] = useTransition();
+
+  // Switching back to COD clears any channel choice so a stale selection
+  // never lingers if the buyer flips to Online Payment again.
+  function handleMethodChange(next: PaymentMethod) {
+    setMethod(next);
+    if (next === "cod") setXenditChannel(null);
+    setFieldErrors((prev) => (prev.xenditChannel ? { ...prev, xenditChannel: undefined } : prev));
+  }
+
+  function handleChannelChange(next: XenditChannel) {
+    setXenditChannel(next);
+    setFieldErrors((prev) => (prev.xenditChannel ? { ...prev, xenditChannel: undefined } : prev));
+  }
 
   if (items.length === 0) {
     return <CheckoutEmptyState reason="empty" />;
@@ -162,6 +187,17 @@ export function CheckoutForm({
       return;
     }
 
+    // Online Payment requires a channel choice made right here — mirrored
+    // server-side in `placeOrderSchema`'s refine, this is just the fast,
+    // no-round-trip check so Place Order never submits an ambiguous order.
+    if (method === "xendit" && xenditChannel === null) {
+      setFieldErrors((prev) => ({
+        ...prev,
+        xenditChannel: [CHECKOUT_COPY.channelRequiredError],
+      }));
+      return;
+    }
+
     startTransition(async () => {
       // Best-effort, independent of order placement — a save failure here
       // must never block checkout. Only offered when the buyer isn't
@@ -195,6 +231,7 @@ export function CheckoutForm({
         })),
         notes: notes.trim() || undefined,
         paymentMethod: method,
+        xenditChannel: method === "xendit" ? xenditChannel ?? undefined : undefined,
       });
 
       if (!actionResult.success) {
@@ -203,17 +240,56 @@ export function CheckoutForm({
         return;
       }
 
-      const { created, failed } = actionResult.data;
+      const { created, failed, checkoutGroupId } = actionResult.data;
       setResult(actionResult.data);
       const placedLines = created.flatMap((order) => order.lines);
 
       if (failed.length === 0) {
         // Full success: remove exactly the items that were just ordered —
         // not the whole cart, since deselected lines were never part of
-        // this checkout and should stay put — then hand off to confirmation.
+        // this checkout and should stay put.
         removeMany(checkoutItems);
         const orderIds = created.map((order) => order.orderId);
-        router.push(`${ROUTES.checkoutConfirmation}?orders=${orderIds.join(",")}`);
+        const confirmationUrl = `${ROUTES.checkoutConfirmation}?orders=${orderIds.join(",")}`;
+
+        // COD (or a channel that can't auto-continue) lands on the existing
+        // confirmation page, unchanged.
+        if (method !== "xendit" || xenditChannel === null) {
+          router.push(confirmationUrl);
+          return;
+        }
+
+        // GCash/Maya: continue straight into the existing Xendit action —
+        // the same one `XenditPaymentOptions` already calls — which redirects
+        // to Xendit's hosted checkout itself. A successful call throws
+        // Next's redirect and never returns here at all.
+        if (xenditChannel === "GCASH" || xenditChannel === "PAYMAYA") {
+          const payResult = checkoutGroupId
+            ? await createXenditGroupEwalletPaymentAction(checkoutGroupId, xenditChannel)
+            : await createXenditEwalletPaymentAction(created[0].orderId, xenditChannel);
+
+          if (payResult.success) {
+            // Unreachable in practice — success redirects instead of
+            // resolving — kept as a safe no-op if that ever changes.
+            return;
+          }
+
+          // Only reached on a genuine in-app failure (Xendit unreachable,
+          // misconfigured credentials, etc.) — never shown verbatim to the
+          // buyer (error hygiene), but logged for diagnosis. The order was
+          // already placed, so route to the confirmation page's recovery
+          // section, telling it which channel just failed so it's presented
+          // honestly as a retry rather than a fresh first choice.
+          console.error("Xendit e-wallet handoff failed after checkout:", payResult.error);
+          router.push(`${confirmationUrl}&channel=${xenditChannel}`);
+          return;
+        }
+
+        // Card needs its embedded widget mounted client-side (can't redirect
+        // like the e-wallet channels) — the confirmation page renders the
+        // Card widget directly for this order/group, telling it the channel
+        // so it doesn't re-offer GCash/Maya as if nothing had been chosen.
+        router.push(`${confirmationUrl}&channel=CARD`);
         return;
       }
 
@@ -356,7 +432,13 @@ export function CheckoutForm({
 
           <ShippingMethodCard />
 
-          <PaymentMethodCard method={method} onChange={setMethod} />
+          <PaymentMethodCard
+            method={method}
+            onChange={handleMethodChange}
+            channel={xenditChannel}
+            onChannelChange={handleChannelChange}
+            channelError={fieldErrors.xenditChannel?.[0]}
+          />
 
           <OrderNotesField
             value={notes}

@@ -79,14 +79,31 @@ export const orderNotesSchema = z
  */
 export const xenditChannelSchema = z.enum(["GCASH", "PAYMAYA", "CARD"]);
 
-/** Payload for `placeOrderAction`. */
-export const placeOrderSchema = z.object({
-  address: shippingAddressSchema,
-  groups: z.array(checkoutGroupSchema).min(1, "Your cart is empty."),
-  notes: orderNotesSchema,
-  paymentMethod: z.enum(["cod", "xendit"]).default("cod"),
-  xenditChannel: xenditChannelSchema.optional(),
-});
+/**
+ * Payload for `placeOrderAction`. The buyer now makes the GCash/Maya/Card
+ * choice at checkout itself (inline submenu under Online Payment), not
+ * afterward on the order page — `xenditChannel` is required whenever
+ * `paymentMethod` is `"xendit"` so a crafted/bypassed client request can't
+ * place an online-payment order with no channel selected. `create_order` /
+ * `create_order_group` don't take this value (they never gated on payment
+ * method); the action only validates it here and the client uses its own
+ * selection to immediately continue into the matching Xendit action.
+ */
+export const placeOrderSchema = z
+  .object({
+    address: shippingAddressSchema,
+    groups: z.array(checkoutGroupSchema).min(1, "Your cart is empty."),
+    notes: orderNotesSchema,
+    paymentMethod: z.enum(["cod", "xendit"]).default("cod"),
+    xenditChannel: xenditChannelSchema.optional(),
+  })
+  .refine(
+    (data) => data.paymentMethod !== "xendit" || data.xenditChannel !== undefined,
+    {
+      message: "Choose GCash, Maya, or Card to pay online.",
+      path: ["xenditChannel"],
+    },
+  );
 
 export type ShippingAddressInput = z.infer<typeof shippingAddressSchema>;
 export type CheckoutItemInput = z.infer<typeof checkoutItemSchema>;

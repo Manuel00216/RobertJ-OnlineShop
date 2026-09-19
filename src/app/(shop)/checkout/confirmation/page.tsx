@@ -6,12 +6,14 @@ import type { Metadata } from "next";
 import { buttonVariants } from "@/components/ui/button";
 import { ROUTES } from "@/constants/routes";
 import { USER_ROLES } from "@/constants/roles";
+import { CHECKOUT_COPY } from "@/features/checkout/constants/checkout.constants";
 import { OrderCard } from "@/features/orders/components/OrderCard";
-import { XenditPaymentOptions } from "@/features/payments";
+import { XenditCardPaymentButton, XenditPaymentOptions } from "@/features/payments";
 import { cn } from "@/lib/utils/cn";
 import { formatCurrency } from "@/lib/utils/currency";
 import {
   getActivePaymentForGroup,
+  getActivePaymentForOrder,
   getBuyerOrder,
   getShopNamesBySellerIds,
   requireSessionUser,
@@ -20,7 +22,7 @@ import {
 export const metadata: Metadata = { title: "Order confirmed" };
 
 interface CheckoutConfirmationPageProps {
-  searchParams: Promise<{ orders?: string }>;
+  searchParams: Promise<{ orders?: string; channel?: string }>;
 }
 
 /**
@@ -34,8 +36,18 @@ interface CheckoutConfirmationPageProps {
 export default async function CheckoutConfirmationPage({
   searchParams,
 }: CheckoutConfirmationPageProps) {
-  const { orders: ordersParam } = await searchParams;
+  const { orders: ordersParam, channel: channelParam } = await searchParams;
   const user = await requireSessionUser();
+
+  // Never trust the query string beyond this whitelist — an unrecognized or
+  // absent value is treated as "no channel known" (the pre-existing
+  // resume/retry behavior for a buyer who returns from Xendit or revisits
+  // this page later, independent of anything `CheckoutForm` sets).
+  const channel: "GCASH" | "PAYMAYA" | "CARD" | null =
+    channelParam === "GCASH" || channelParam === "PAYMAYA" || channelParam === "CARD"
+      ? channelParam
+      : null;
+  const channelLabel = channel === "GCASH" ? CHECKOUT_COPY.gcashLabel : CHECKOUT_COPY.mayaLabel;
 
   const orderIds = (ordersParam ?? "").split(",").filter(Boolean);
   if (orderIds.length === 0) notFound();
@@ -94,6 +106,32 @@ export default async function CheckoutConfirmationPage({
       ? activeGroupPayment.checkoutUrl
       : null;
 
+  // Single-seller Online Payment: the buyer already picked GCash/Maya/Card at
+  // checkout (`CheckoutForm`) and it was carried straight into the matching
+  // Xendit action from there — GCash/Maya redirect away immediately, so
+  // landing here only happens when that redirect never completed. Card
+  // always finishes here (it needs its widget mounted client-side). `channel`
+  // is only ever set by that same handoff — a plain COD confirmation never
+  // carries it, so this never surfaces as an unrelated "pay online?" upsell
+  // on a COD order.
+  const singleOrder = orders.length === 1 ? orders[0] : null;
+  const showSinglePayment =
+    channel !== null &&
+    singleOrder !== null &&
+    checkoutGroupId === null &&
+    (singleOrder.paymentStatus === "pending" || singleOrder.paymentStatus === "failed");
+
+  const activeSinglePayment = showSinglePayment
+    ? await getActivePaymentForOrder(singleOrder.id)
+    : null;
+  const resumableSingleCheckoutUrl =
+    activeSinglePayment?.paymentMethodType === "xendit" &&
+    activeSinglePayment.status === "pending" &&
+    activeSinglePayment.checkoutUrl &&
+    (!activeSinglePayment.expiresAt || new Date(activeSinglePayment.expiresAt) > new Date())
+      ? activeSinglePayment.checkoutUrl
+      : null;
+
   return (
     <div className="mx-auto flex max-w-2xl flex-col items-center gap-8 text-center">
       <div className="flex flex-col items-center gap-4">
@@ -131,18 +169,73 @@ export default async function CheckoutConfirmationPage({
           <h2 className="text-[10px] font-bold uppercase tracking-[0.3em] text-rj-gray-400">
             Online Payment
           </h2>
-          <p className="mt-1 text-xs text-rj-gray-600">
-            {orders.every((order) => order.paymentStatus === "failed")
-              ? `Your combined payment for all ${orders.length} shops didn't go through. You can try again below.`
-              : `Pay once to cover all ${orders.length} shops in this checkout. Paying by Cash on Delivery instead? No action needed — each seller marks their order collected once received.`}
-          </p>
-          <div className="mt-3">
-            <XenditPaymentOptions
-              checkoutGroupId={checkoutGroupId}
-              existingCheckoutUrl={resumableGroupCheckoutUrl}
-              allowSwitchingWhileActive
-            />
-          </div>
+          {channel === "CARD" ? (
+            <>
+              <p className="mt-1 text-xs text-rj-gray-600">
+                {orders.every((order) => order.paymentStatus === "failed")
+                  ? "Your card payment didn't go through. You can try again below."
+                  : "Finish your card payment below to complete this checkout."}
+              </p>
+              <div className="mt-3">
+                <XenditCardPaymentButton checkoutGroupId={checkoutGroupId} />
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="mt-1 text-xs text-rj-gray-600">
+                {orders.every((order) => order.paymentStatus === "failed")
+                  ? `Your combined payment for all ${orders.length} shops didn't go through. You can try again below.`
+                  : channel === "GCASH" || channel === "PAYMAYA"
+                    ? `We couldn't start your ${channelLabel} payment automatically. Choose a method below to try again.`
+                    : `Pay once to cover all ${orders.length} shops in this checkout. Paying by Cash on Delivery instead? No action needed — each seller marks their order collected once received.`}
+              </p>
+              <div className="mt-3">
+                <XenditPaymentOptions
+                  checkoutGroupId={checkoutGroupId}
+                  existingCheckoutUrl={resumableGroupCheckoutUrl}
+                  allowSwitchingWhileActive
+                />
+              </div>
+            </>
+          )}
+        </section>
+      ) : null}
+
+      {showSinglePayment && singleOrder ? (
+        <section
+          aria-label="Payment"
+          className="w-full rounded-2xl border border-rj-gray-100 bg-rj-gray-50 p-5 text-left"
+        >
+          <h2 className="text-[10px] font-bold uppercase tracking-[0.3em] text-rj-gray-400">
+            Online Payment
+          </h2>
+          {channel === "CARD" ? (
+            <>
+              <p className="mt-1 text-xs text-rj-gray-600">
+                {singleOrder.paymentStatus === "failed"
+                  ? "Your card payment didn't go through. You can try again below."
+                  : "Finish your card payment below to complete this order."}
+              </p>
+              <div className="mt-3">
+                <XenditCardPaymentButton orderId={singleOrder.id} />
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="mt-1 text-xs text-rj-gray-600">
+                {singleOrder.paymentStatus === "failed"
+                  ? "Your online payment didn't go through. You can try again below."
+                  : `We couldn't start your ${channelLabel} payment automatically. Choose a method below to try again.`}
+              </p>
+              <div className="mt-3">
+                <XenditPaymentOptions
+                  orderId={singleOrder.id}
+                  existingCheckoutUrl={resumableSingleCheckoutUrl}
+                  allowSwitchingWhileActive
+                />
+              </div>
+            </>
+          )}
         </section>
       ) : null}
 
