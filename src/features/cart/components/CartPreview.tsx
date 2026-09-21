@@ -112,33 +112,38 @@ export function CartPreview() {
             </span>
           </div>
 
-          <ul className="mt-2.5 flex flex-col divide-y divide-rj-gray-100">
+          <ul className="mt-2.5 flex flex-col gap-2 divide-y divide-rj-gray-100">
             {recentItems.map((item) => (
-              <li key={getCartLineKey(item)} className="flex items-center gap-2.5 py-2.5 first:pt-0 last:pb-0">
-                {item.imageUrl ? (
-                  <Image
-                    src={item.imageUrl}
-                    alt={item.title}
-                    width={40}
-                    height={40}
-                    className="h-10 w-10 shrink-0 rounded-lg object-cover"
-                  />
-                ) : (
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rj-gray-100">
-                    <Package className="h-4 w-4 text-rj-gray-400" aria-hidden="true" />
+              <li key={getCartLineKey(item)}>
+                <Link
+                  href={ROUTES.cart}
+                  className="flex items-center gap-2.5 rounded-md py-3 first:pt-0 last:pb-0 hover:bg-rj-gray-50"
+                >
+                  {item.imageUrl ? (
+                    <Image
+                      src={item.imageUrl}
+                      alt={item.title}
+                      width={40}
+                      height={40}
+                      className="h-10 w-10 shrink-0 rounded-lg object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-rj-gray-100">
+                      <Package className="h-4 w-4 text-rj-gray-400" aria-hidden="true" />
+                    </span>
+                  )}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-medium leading-tight text-rj-black">
+                      {item.title}
+                    </span>
+                    <span className="mt-0.5 block text-[11px] text-rj-gray-500">
+                      {item.quantity} × {formatCurrency(item.unitPriceCents, item.currency)}
+                    </span>
                   </span>
-                )}
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-xs font-medium leading-tight text-rj-black">
-                    {item.title}
+                  <span className="shrink-0 text-xs font-bold text-rj-red-dark">
+                    {formatCurrency(item.unitPriceCents * item.quantity, item.currency)}
                   </span>
-                  <span className="mt-0.5 block text-[11px] text-rj-gray-500">
-                    {item.quantity} × {formatCurrency(item.unitPriceCents, item.currency)}
-                  </span>
-                </span>
-                <span className="shrink-0 text-xs font-bold text-rj-red-dark">
-                  {formatCurrency(item.unitPriceCents * item.quantity, item.currency)}
-                </span>
+                </Link>
               </li>
             ))}
           </ul>
@@ -151,7 +156,7 @@ export function CartPreview() {
 
           <Link
             href={ROUTES.cart}
-            className={cn(buttonVariants({ variant: "rj", size: "rj" }), "mt-3 w-full")}
+            className={cn(buttonVariants({ variant: "rj", size: "rj" }), "mt-2 w-full py-2")}
           >
             View My Shopping Cart
           </Link>
