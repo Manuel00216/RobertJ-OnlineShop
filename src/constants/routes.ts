@@ -10,6 +10,7 @@ export const ROUTES = {
   account: "/account",
   orders: "/orders",
   orderDetail: (id: string) => `/orders/${id}`,
+  orderCancellation: (id: string) => `/orders/${id}/cancellation`,
   profile: "/profile",
   addresses: "/addresses",
   wishlist: "/wishlist",

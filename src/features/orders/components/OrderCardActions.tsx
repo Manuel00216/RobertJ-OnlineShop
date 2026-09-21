@@ -90,7 +90,7 @@ export function OrderCardActions({ order, lifecycleTab }: OrderCardActionsProps)
       <>
         <BuyAgainButton order={order} />
         <Link
-          href={`${ROUTES.orderDetail(order.id)}/cancellation`}
+          href={ROUTES.orderCancellation(order.id)}
           className={cn(buttonVariants({ variant: "rjOutline", size: "rjSm" }))}
         >
           View Cancellation Details

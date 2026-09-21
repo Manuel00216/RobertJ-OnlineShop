@@ -42,9 +42,7 @@ export function BuyerOrderCard({ order, shopName, shopId }: BuyerOrderCardProps)
   // Cancelled orders open the cancellation-details experience instead of the
   // normal order-detail page; every other status opens order-detail as usual.
   const cardHref =
-    order.status === "cancelled"
-      ? `${ROUTES.orderDetail(order.id)}/cancellation`
-      : ROUTES.orderDetail(order.id);
+    order.status === "cancelled" ? ROUTES.orderCancellation(order.id) : ROUTES.orderDetail(order.id);
 
   return (
     <div className={cn(RJ_CARD, "relative flex flex-col gap-4 p-4 transition-shadow hover:shadow-md")}>
