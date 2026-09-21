@@ -13,14 +13,17 @@ import { ROUTES } from "@/constants/routes";
 import { cn } from "@/lib/utils/cn";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { CartPreview } from "@/features/cart/components/CartPreview";
+import { NotificationBell } from "@/features/notifications/components/NotificationBell";
 import { searchProductSuggestionsAction } from "@/features/products/actions/product.actions";
 import type { Category } from "@/features/categories/types/category.types";
+import type { BuyerActivityEvent } from "@/features/notifications/types/notification.types";
 import type { SessionUser } from "@/types/common.types";
 import type { ProductSuggestion } from "@/lib/supabase/queries";
 
 export interface SiteHeaderClientProps {
   user: SessionUser | null;
   categories: Category[];
+  notifications: BuyerActivityEvent[];
 }
 
 /**
@@ -33,7 +36,7 @@ export interface SiteHeaderClientProps {
  * of that same input — it only ever navigates on an explicit click into a
  * specific product, never on typing.
  */
-export function SiteHeaderClient({ user, categories }: SiteHeaderClientProps) {
+export function SiteHeaderClient({ user, categories, notifications }: SiteHeaderClientProps) {
   const router = useRouter();
 
   const [scrolled, setScrolled] = useState(false);
@@ -225,6 +228,8 @@ export function SiteHeaderClient({ user, categories }: SiteHeaderClientProps) {
           >
             <Search className="h-4 w-4 text-rj-black" aria-hidden="true" />
           </button>
+
+          <NotificationBell events={notifications} />
 
           <CartPreview />
 
