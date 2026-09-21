@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { QuantityStepper } from "@/components/ui/quantity-stepper";
 import { AddToCartButton } from "@/features/cart/components/AddToCartButton";
 import { BuyNowButton } from "@/features/cart/components/BuyNowButton";
+import { LOW_STOCK_THRESHOLD } from "@/features/products/constants/product.constants";
 import { WishlistButton } from "@/features/wishlist/components/WishlistButton";
 import type { WishlistState } from "@/features/wishlist/types/wishlist.types";
 import type { Product, ProductVariant } from "@/features/products/types/product.types";
@@ -102,47 +103,47 @@ export function ProductQuantityAndAddToCart({
     <div className={className}>
       {hasVariants ? (
         <div className="mb-4 flex flex-col gap-4">
-          <div className="flex flex-wrap items-baseline gap-3">
-            <p className="text-2xl font-bold text-rj-black">
-              {formatCurrency(effectivePriceCents, product.currency)}
-            </p>
-            {needsSelection ? (
-              <span className="text-xs font-semibold text-rj-gray-500">
-                Select options to see stock
-              </span>
-            ) : effectiveStock > 0 ? (
-              <span className="rounded-full bg-rj-green/10 px-3 py-1 text-[11px] font-bold text-rj-green">
-                {effectiveStock} in stock
-              </span>
-            ) : (
-              <span className="rounded-full bg-rj-black px-3 py-1 text-[11px] font-bold text-rj-white">
-                Out of stock
-              </span>
-            )}
-          </div>
+          <p className="text-2xl font-bold text-rj-black">
+            {formatCurrency(effectivePriceCents, product.currency)}
+          </p>
 
           {colors.length > 0 ? (
             <div>
               <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.25em] text-rj-gray-600">
                 Color
+                {selectedColor ? (
+                  <span className="ml-1.5 normal-case tracking-normal text-rj-black">
+                    : {selectedColor}
+                  </span>
+                ) : null}
               </p>
               <div className="flex flex-wrap gap-2">
-                {colors.map((color) => (
-                  <button
-                    key={color}
-                    type="button"
-                    onClick={() => setSelectedColor(color)}
-                    aria-pressed={selectedColor === color}
-                    className={cn(
-                      OPTION_BUTTON,
-                      selectedColor === color
-                        ? "border-rj-black bg-rj-black text-rj-white"
-                        : "border-rj-gray-200 text-rj-black hover:border-rj-black",
-                    )}
-                  >
-                    {color}
-                  </button>
-                ))}
+                {colors.map((color) => {
+                  // A color is unavailable once every one of its variant
+                  // rows is out of stock — sold out regardless of size.
+                  const inStock = variants.some(
+                    (v) => v.color === color && (variantStock[v.id] ?? 0) > 0,
+                  );
+                  return (
+                    <button
+                      key={color}
+                      type="button"
+                      disabled={!inStock}
+                      onClick={() => setSelectedColor(color)}
+                      aria-pressed={selectedColor === color}
+                      className={cn(
+                        OPTION_BUTTON,
+                        selectedColor === color
+                          ? "border-rj-black bg-rj-black text-rj-white"
+                          : inStock
+                            ? "border-rj-gray-200 text-rj-black hover:border-rj-black"
+                            : "border-rj-gray-100 text-rj-gray-300 line-through",
+                      )}
+                    >
+                      {color}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           ) : null}
@@ -151,14 +152,27 @@ export function ProductQuantityAndAddToCart({
             <div>
               <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.25em] text-rj-gray-600">
                 Size
+                {selectedSize ? (
+                  <span className="ml-1.5 normal-case tracking-normal text-rj-black">
+                    : {selectedSize}
+                  </span>
+                ) : null}
+                {colors.length > 0 && selectedColor === null ? (
+                  <span className="ml-1.5 normal-case tracking-normal text-rj-gray-400">
+                    (select a color first)
+                  </span>
+                ) : null}
               </p>
               <div className="flex flex-wrap gap-2">
                 {sizes.map((size) => {
                   // A size is only selectable once it's paired with the
-                  // currently chosen color by some real variant row (or
-                  // there's no color axis at all).
+                  // currently chosen color (or there's no color axis at all)
+                  // by a real variant row that still has stock.
                   const available = variants.some(
-                    (v) => v.size === size && (colors.length === 0 || v.color === selectedColor),
+                    (v) =>
+                      v.size === size &&
+                      (colors.length === 0 || v.color === selectedColor) &&
+                      (variantStock[v.id] ?? 0) > 0,
                   );
                   return (
                     <button
@@ -173,7 +187,7 @@ export function ProductQuantityAndAddToCart({
                           ? "border-rj-black bg-rj-black text-rj-white"
                           : available
                             ? "border-rj-gray-200 text-rj-black hover:border-rj-black"
-                            : "border-rj-gray-100 text-rj-gray-300",
+                            : "border-rj-gray-100 text-rj-gray-300 line-through",
                       )}
                     >
                       {size}
@@ -186,16 +200,46 @@ export function ProductQuantityAndAddToCart({
         </div>
       ) : null}
 
-      {isOutOfStock ? null : (
-        <div className="mb-3">
-          <QuantityStepper
-            value={clampedQuantity}
-            max={effectiveStock}
-            onChange={setQuantity}
-            aria-label={`Quantity for ${product.title}`}
-          />
-        </div>
-      )}
+      {/* Stock status sits right beside Quantity — the buyer has just
+          finished picking Color/Size above, so the number that matters is
+          read next to the stepper it governs, not back up near the price. */}
+      <div className="mb-3">
+        {hasVariants ? (
+          <div className="mb-1.5">
+            {needsSelection ? (
+              <span className="text-xs font-semibold text-rj-gray-500">
+                Select options to see stock
+              </span>
+            ) : effectiveStock > LOW_STOCK_THRESHOLD ? (
+              <span className="rounded-full bg-rj-green/10 px-3 py-1 text-[11px] font-bold text-rj-green">
+                {effectiveStock} in stock
+              </span>
+            ) : effectiveStock > 0 ? (
+              <span className="rounded-full bg-rj-gold/10 px-3 py-1 text-[11px] font-bold text-rj-gold">
+                Only {effectiveStock} left
+              </span>
+            ) : (
+              <span className="rounded-full bg-rj-black px-3 py-1 text-[11px] font-bold text-rj-white">
+                Out of stock
+              </span>
+            )}
+          </div>
+        ) : null}
+
+        {isOutOfStock ? null : (
+          <>
+            <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.25em] text-rj-gray-600">
+              Quantity
+            </p>
+            <QuantityStepper
+              value={clampedQuantity}
+              max={effectiveStock}
+              onChange={setQuantity}
+              aria-label={`Quantity for ${product.title}`}
+            />
+          </>
+        )}
+      </div>
       <div className="flex flex-wrap items-center gap-3">
         <AddToCartButton
           product={product}
