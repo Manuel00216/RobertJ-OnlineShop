@@ -68,4 +68,6 @@ export interface FeaturedProductView {
   currency: string;
   maxQuantity: number;
   sellerId: string;
+  /** Paid units sold — see `getProductSoldCounts`. */
+  soldCount: number;
 }

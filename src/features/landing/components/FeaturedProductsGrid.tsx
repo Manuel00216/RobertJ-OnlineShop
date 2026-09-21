@@ -40,6 +40,7 @@ function toTileItem(
     isSale: view.isSale,
     conditionLabel: null,
     maxQuantity: view.maxQuantity,
+    soldCount: view.soldCount,
     // Every view is a real, purchasable product — see FeaturedProductView.
     addToCart: {
       productId: view.productId,

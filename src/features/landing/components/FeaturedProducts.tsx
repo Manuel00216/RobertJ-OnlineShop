@@ -5,6 +5,7 @@ import type { FeaturedProductView } from "@/features/landing/types/landing.types
 import { getCoverImage } from "@/features/products/types/product.types";
 import type { Product } from "@/features/products/types/product.types";
 import {
+  getProductSoldCounts,
   getSessionUser,
   getShopNamesBySellerIds,
   listFeaturedProducts,
@@ -41,6 +42,13 @@ export async function FeaturedProducts() {
         ).catch(() => new Map<string, string>())
       : new Map<string, string>();
 
+  const soldCounts =
+    products.length > 0
+      ? await getProductSoldCounts(products.map((product) => product.id)).catch(
+          () => new Map<string, number>(),
+        )
+      : new Map<string, number>();
+
   const views: FeaturedProductView[] = products.map((product) => ({
     key: product.id,
     name: product.title,
@@ -62,6 +70,7 @@ export async function FeaturedProducts() {
     currency: product.currency,
     maxQuantity: product.quantity,
     sellerId: product.sellerId,
+    soldCount: soldCounts.get(product.id) ?? 0,
   }));
 
   const user = await getSessionUser();

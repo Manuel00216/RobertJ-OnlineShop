@@ -1024,6 +1024,27 @@ export async function deleteProductImage(
   }
 }
 
+/**
+ * Paid units sold per product, for the catalog's "N sold" badge — via
+ * `get_product_sold_counts` (public/anon-callable, see its migration).
+ * Returns a `productId -> unitsSold` map; products with no paid sales are
+ * simply absent, same empty-input short-circuit as `getShopNamesBySellerIds`.
+ */
+export async function getProductSoldCounts(
+  productIds: string[],
+): Promise<Map<string, number>> {
+  if (productIds.length === 0) return new Map();
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("get_product_sold_counts", {
+    p_product_ids: productIds,
+  });
+
+  if (error) {
+    throw queryError("Failed to load product sales", error);
+  }
+  return new Map((data ?? []).map((row) => [row.product_id, row.units_sold]));
+}
+
 // ============================================================================
 // Wishlist
 // ============================================================================

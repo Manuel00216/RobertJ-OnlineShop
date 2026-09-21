@@ -9,14 +9,9 @@ import { useState } from "react";
 import { ROUTES } from "@/constants/routes";
 import { formatCurrency } from "@/lib/utils/currency";
 import { useCart } from "@/features/cart/hooks/useCart";
+import { LOW_STOCK_THRESHOLD } from "@/features/products/constants/product.constants";
 import { WishlistButton } from "@/features/wishlist/components/WishlistButton";
 import type { WishlistState } from "@/features/wishlist/types/wishlist.types";
-
-/**
- * Below this, "Only N left" surfaces next to the price — matches the wording
- * in the `create_order` stock-check error ("Only % left of %").
- */
-const LOW_STOCK_THRESHOLD = 5;
 
 /** Common shape both the real catalog (`Product`) and the homepage's featured
  * grid (`FeaturedProductView`) map into, so they render one identical tile. */
@@ -42,6 +37,8 @@ export interface ProductTileItem {
   conditionLabel?: string | null;
   /** Null when stock is unknown (e.g. a placeholder with no real product yet). */
   maxQuantity: number | null;
+  /** Paid units sold — see `getProductSoldCounts`. 0 for a product with no paid sales yet (never shown). */
+  soldCount: number;
   /** Add-to-cart payload; null disables quick-add and routes to the catalog instead. */
   addToCart: {
     productId: string;
@@ -229,6 +226,9 @@ export function ProductTile({ item, style }: ProductTileProps) {
             <span className="text-[10px] font-bold text-rj-gold">
               Only {item.maxQuantity} left
             </span>
+          ) : null}
+          {item.soldCount > 0 ? (
+            <span className="text-[10px] text-rj-gray-400">{item.soldCount} sold</span>
           ) : null}
         </div>
       </div>

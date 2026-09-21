@@ -8,6 +8,7 @@ import { ROUTES } from "@/constants/routes";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { formatCurrency } from "@/lib/utils/currency";
 import {
+  getProductSoldCounts,
   getSessionUser,
   getShopNamesBySellerIds,
   listWishlistProductIds,
@@ -72,6 +73,7 @@ function toTileItem(
   wishlistedIds: ReadonlySet<string>,
   isAuthenticated: boolean,
   shopNames: ReadonlyMap<string, string>,
+  soldCounts: ReadonlyMap<string, number>,
 ): ProductTileItem {
   // Real shop name when the seller belongs to one (see
   // `resolve_shop_membership`); falls back to the seller's own profile
@@ -101,6 +103,7 @@ function toTileItem(
         ? PRODUCT_CONDITION_LABELS[product.condition]
         : null,
     maxQuantity: product.quantity,
+    soldCount: soldCounts.get(product.id) ?? 0,
     addToCart: {
       productId: product.id,
       slug: product.slug,
@@ -166,17 +169,19 @@ export async function ProductGrid({
   // fallback) rather than breaking the grid.
   const user = await getSessionUser();
   const sellerIds = [...new Set(products.map((product) => product.sellerId))];
-  const [wishlistedIds, shopNames] = await Promise.all([
+  const productIds = products.map((product) => product.id);
+  const [wishlistedIds, shopNames, soldCounts] = await Promise.all([
     user
       ? listWishlistProductIds(user.id)
           .then((ids) => new Set(ids))
           .catch(() => new Set<string>())
       : Promise.resolve(new Set<string>()),
     getShopNamesBySellerIds(sellerIds).catch(() => new Map<string, string>()),
+    getProductSoldCounts(productIds).catch(() => new Map<string, number>()),
   ]);
 
   const items = products.map((product) =>
-    toTileItem(product, wishlistedIds, user !== null, shopNames),
+    toTileItem(product, wishlistedIds, user !== null, shopNames, soldCounts),
   );
 
   if (viewMode === "list") {

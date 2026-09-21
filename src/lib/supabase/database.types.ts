@@ -1789,6 +1789,13 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      get_product_sold_counts: {
+        Args: { p_product_ids: string[] }
+        Returns: {
+          product_id: string
+          units_sold: number
+        }[]
+      }
       get_variant_stock: {
         Args: { p_variant_ids: string[] }
         Returns: {
