@@ -12,11 +12,16 @@ import { OrderTimeline } from "@/features/orders/components/OrderTimeline";
 import { PaymentStatusBadge } from "@/features/orders/components/PaymentStatusBadge";
 import { SellerShopRow } from "@/features/orders/components/SellerShopRow";
 import { paymentMethodLabel } from "@/features/orders/utils/payment-method-label";
+// Imported directly, not the feature barrel — same reason as
+// `OrderCardActions.tsx`: the barrel also re-exports `PaymentsList`, which
+// pulls in the server-only Xendit client.
+import { PaymentRecoveryPanel } from "@/features/payments/components/PaymentRecoveryPanel";
 import { RequestReturnPanel } from "@/features/returns/components/RequestReturnPanel";
 import { ReturnRequestStatusCard } from "@/features/returns/components/ReturnRequestStatusCard";
 import {
   getActivePaymentForOrder,
   getBuyerOrder,
+  getOrderIdsForCheckoutGroup,
   getReturnEvidenceSignedUrl,
   getReturnRequestForOrder,
   getShopMembershipBySellerIds,
@@ -89,6 +94,26 @@ export default async function OrderDetailPage({
   // to leave it with no refund path at all). Mirrors request_return's own
   // precondition exactly so this entry point never offers something the
   // server would reject.
+  // Same condition `buyer_order_lifecycle` uses for its "to_pay" bucket
+  // (payment_method = 'xendit' AND payment_status IN ('pending','failed')) —
+  // recomputed here rather than reading `lifecycleTab` because `getBuyerOrder`
+  // doesn't populate it (see `Order.lifecycleTab`'s doc comment). Falls back
+  // to GCash when no payment row exists yet, same as `OrderCardActions`.
+  const showPaymentRecovery =
+    order.paymentMethod === "xendit" &&
+    (order.paymentStatus === "pending" || order.paymentStatus === "failed");
+  const recoveryChannel =
+    (activePayment?.paymentChannel as "GCASH" | "PAYMAYA" | "CARD" | null) ?? "GCASH";
+
+  // Reuses the existing checkout-group-membership lookup (already used to
+  // build the post-payment redirect) purely to size the grouping indicator
+  // below — informational only, no behavior change for any channel.
+  const groupSize = order.checkoutGroupId
+    ? await getOrderIdsForCheckoutGroup(order.checkoutGroupId)
+        .then((ids) => ids.length)
+        .catch(() => 1)
+    : 1;
+
   const canRequestReturn =
     order.status === ORDER_STATUS.delivered ||
     (order.status === ORDER_STATUS.cancelled && order.paymentStatus === "paid");
@@ -113,6 +138,29 @@ export default async function OrderDetailPage({
         ) : null}
         <BuyAgainButton order={order} sellerName={shopName} />
       </div>
+
+      {showPaymentRecovery ? (
+        <div className={cn(RJ_CARD, "flex flex-col gap-3 p-5")}>
+          {order.checkoutGroupId && groupSize > 1 ? (
+            <p className="text-xs font-semibold text-rj-gray-500">
+              {groupSize}-shop order — paid together
+            </p>
+          ) : null}
+          {order.checkoutGroupId ? (
+            <PaymentRecoveryPanel
+              checkoutGroupId={order.checkoutGroupId}
+              channel={recoveryChannel}
+              isFailed={order.paymentStatus === "failed"}
+            />
+          ) : (
+            <PaymentRecoveryPanel
+              orderId={order.id}
+              channel={recoveryChannel}
+              isFailed={order.paymentStatus === "failed"}
+            />
+          )}
+        </div>
+      ) : null}
 
       {canRequestReturn ? (
         returnRequest ? (

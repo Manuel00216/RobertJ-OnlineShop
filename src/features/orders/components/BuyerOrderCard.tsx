@@ -6,6 +6,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { RJ_CARD } from "@/components/ui/card";
 import { ROUTES } from "@/constants/routes";
 import type { Order } from "@/features/orders/types/order.types";
+import type { OrderGroupInfo } from "@/features/orders/utils/order-grouping";
 import { formatCurrency } from "@/lib/utils/currency";
 import { cn } from "@/lib/utils/cn";
 
@@ -18,6 +19,8 @@ export interface BuyerOrderCardProps {
   shopName: string;
   /** Null when the seller has no resolvable shop membership — "View Shop" is omitted rather than linking to an unfiltered/broken catalog view. */
   shopId: string | null;
+  /** Null for an ungrouped order, or when its group siblings aren't on this page. Forwarded to `OrderCardActions` for the Card multi-shop grouped-payment UI. */
+  groupInfo?: OrderGroupInfo | null;
 }
 
 const CANCELLED_BY_LABEL: Record<string, string> = {
@@ -34,7 +37,7 @@ const CANCELLED_BY_LABEL: Record<string, string> = {
  * (shared verbatim by the dashboard/seller/admin portals and the account
  * overview) is untouched and keeps its compact single-line layout there.
  */
-export function BuyerOrderCard({ order, shopName, shopId }: BuyerOrderCardProps) {
+export function BuyerOrderCard({ order, shopName, shopId, groupInfo = null }: BuyerOrderCardProps) {
   const lifecycleTab = order.lifecycleTab;
   const cancelledByText =
     order.status === "cancelled" && order.cancelledBy ? CANCELLED_BY_LABEL[order.cancelledBy] : null;
@@ -128,13 +131,13 @@ export function BuyerOrderCard({ order, shopName, shopId }: BuyerOrderCardProps)
 
       {lifecycleTab === "to_pay" ? (
         <div className="relative z-10 border-t border-rj-gray-100 pt-3">
-          <OrderCardActions order={order} lifecycleTab={lifecycleTab} />
+          <OrderCardActions order={order} lifecycleTab={lifecycleTab} groupInfo={groupInfo} />
         </div>
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-rj-gray-100 pt-3">
           <p className="text-xs text-rj-gray-500">{cancelledByText}</p>
           <div className="relative z-10 flex flex-wrap justify-end gap-2">
-            {lifecycleTab ? <OrderCardActions order={order} lifecycleTab={lifecycleTab} /> : null}
+            {lifecycleTab ? <OrderCardActions order={order} lifecycleTab={lifecycleTab} groupInfo={groupInfo} /> : null}
           </div>
         </div>
       )}

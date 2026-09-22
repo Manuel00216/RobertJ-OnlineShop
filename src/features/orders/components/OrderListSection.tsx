@@ -8,6 +8,7 @@ import { ROUTES } from "@/constants/routes";
 import { PaginationControls } from "@/features/products/components/PaginationControls";
 import { buyerOrderListParamsSchema } from "@/features/orders/schemas/order.schema";
 import type { Order, OrderListParams } from "@/features/orders/types/order.types";
+import { computeOrderGroupInfo } from "@/features/orders/utils/order-grouping";
 import { cn } from "@/lib/utils/cn";
 import { getShopMembershipBySellerIds, listBuyerOrders } from "@/lib/supabase/queries";
 import type { PaginatedResult } from "@/types/pagination.types";
@@ -92,6 +93,11 @@ export async function OrderListSection({
     (order.sellerRole === USER_ROLES.seller ? order.sellerName : null) ??
     "RobertJ Seller";
 
+  // Computed from this page's own results — no extra query. Only meaningful
+  // for orders whose group siblings are also on this page, which holds for
+  // the case this exists for (a fresh multi-seller checkout's "To Pay" tab).
+  const groupInfoByOrderId = computeOrderGroupInfo(items);
+
   return (
     <section className="flex flex-col gap-6">
       <p
@@ -107,6 +113,7 @@ export async function OrderListSection({
               order={order}
               shopName={shopLabelFor(order)}
               shopId={shopMembership.get(order.sellerId)?.shopId ?? null}
+              groupInfo={groupInfoByOrderId.get(order.id) ?? null}
             />
           </li>
         ))}

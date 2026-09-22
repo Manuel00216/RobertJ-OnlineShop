@@ -31,6 +31,32 @@ async function resolveRedirectTab(orderIds: string[], buyerId: string): Promise<
 }
 
 /**
+ * Runs the given best-effort Xendit reservation once, and retries it exactly
+ * once more on failure — the common transient case (a momentary DB hiccup)
+ * self-heals immediately instead of ever needing the buyer-facing recovery
+ * path (`orders.payment_method` + `buyer_order_lifecycle`'s "to_pay"
+ * predicate). Still best-effort/non-blocking: order creation must never
+ * fail because of this, and a persistent failure after both attempts is
+ * only logged — the order remains correctly classified "To Pay" via
+ * `payment_method`, so the buyer can always retry from there.
+ */
+async function reserveXenditAttemptWithRetry(
+  fn: () => Promise<unknown>,
+  logLabel: string,
+): Promise<void> {
+  try {
+    await fn();
+  } catch (firstError) {
+    console.error(`${logLabel} failed, retrying once:`, firstError);
+    try {
+      await fn();
+    } catch (secondError) {
+      console.error(`${logLabel} retry also failed:`, secondError);
+    }
+  }
+}
+
+/**
  * Places the buyer's cart — one `create_order` call per seller group. The RPC is
  * atomic per seller and re-prices from the DB, so a group can fail independently
  * (e.g. "Only 2 left of X"). The result reports every created and failed group so
@@ -79,6 +105,7 @@ export async function placeOrderAction(
         shippingAddress,
         shippingFeeCents: CHECKOUT_CONSTANTS.shippingFeeCentsPerSeller,
         notes: parsed.data.notes || null,
+        paymentMethod: parsed.data.paymentMethod,
       });
 
       const created: PlacedOrder[] = group.orders.map((order) => {
@@ -102,15 +129,12 @@ export async function placeOrderAction(
       // orders are already created; a reservation hiccup here doesn't
       // affect them, and the buyer's subsequent Pay Now/Complete Card
       // Payment click retries this same, idempotent reservation anyway.
-      if (parsed.data.xenditChannel) {
-        try {
-          await queries.beginXenditGroupPaymentAttempt(
-            group.checkoutGroupId,
-            parsed.data.xenditChannel,
-          );
-        } catch (error) {
-          console.error("Eager Xendit group payment reservation failed:", error);
-        }
+      const xenditChannel = parsed.data.xenditChannel;
+      if (xenditChannel) {
+        await reserveXenditAttemptWithRetry(
+          () => queries.beginXenditGroupPaymentAttempt(group.checkoutGroupId, xenditChannel),
+          "Eager Xendit group payment reservation",
+        );
       }
 
       revalidatePath(ROUTES.orders, "layout");
@@ -132,6 +156,7 @@ export async function placeOrderAction(
           shippingAddress,
           shippingFeeCents: CHECKOUT_CONSTANTS.shippingFeeCentsPerSeller,
           notes: parsed.data.notes || null,
+          paymentMethod: parsed.data.paymentMethod,
         });
         orderId = order.orderId;
         created.push({
@@ -160,12 +185,12 @@ export async function placeOrderAction(
       // for why this runs for every channel and is isolated from the
       // order-creation try/catch (a reservation hiccup must never mark an
       // already-created order as "failed").
-      if (parsed.data.paymentMethod === "xendit" && parsed.data.xenditChannel) {
-        try {
-          await queries.beginXenditPaymentAttempt(orderId, parsed.data.xenditChannel);
-        } catch (error) {
-          console.error("Eager Xendit payment reservation failed:", error);
-        }
+      const orderXenditChannel = parsed.data.xenditChannel;
+      if (parsed.data.paymentMethod === "xendit" && orderXenditChannel) {
+        await reserveXenditAttemptWithRetry(
+          () => queries.beginXenditPaymentAttempt(orderId, orderXenditChannel),
+          "Eager Xendit payment reservation",
+        );
       }
     }
 

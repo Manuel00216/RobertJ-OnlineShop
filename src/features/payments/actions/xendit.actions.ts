@@ -80,7 +80,15 @@ export async function createXenditEwalletPaymentAction(
         currency: attempt.currency,
         successReturnUrl: returnUrl,
         failureReturnUrl: returnUrl,
-        customer: { id: user.id, givenNames: user.fullName || user.email },
+        // Xendit's inline `customer` object (PAYMAYA only — see
+        // createEwalletPaymentRequest) is a one-time create call: reusing
+        // the same reference_id across separate attempts is rejected as
+        // "already used" on the second attempt — the exact same behavior
+        // already fixed for Card sessions below. `attempt.id` is a fresh
+        // payments row per attempt, so it's unique every time; the buyer's
+        // stable `user.id` is not. GCash is unaffected either way — it
+        // never sends a customer object.
+        customer: { id: attempt.id, givenNames: user.fullName || user.email },
       });
 
       const action = response.actions?.find((a) => a.type === "REDIRECT_CUSTOMER");
@@ -127,22 +135,39 @@ export async function createXenditCardSessionAction(
   if (!order) return fail("Order not found.");
 
   const existingAttempt = await queries.getFinalizedPendingXenditPayment(parsed.data.orderId, "CARD");
-  if (existingAttempt && isStaleXenditAttempt(existingAttempt)) {
-    const reconciliation = await reconcileStaleXenditAttempt(existingAttempt.id, "CARD", existingAttempt);
-    if (reconciliation === "blocked") return fail(RECONCILIATION_RETRY_MESSAGE);
-    if (reconciliation === "already_paid") {
-      return fail("This order has already been paid. Refresh the page to see the updated status.");
+  if (existingAttempt) {
+    if (isStaleXenditAttempt(existingAttempt)) {
+      const reconciliation = await reconcileStaleXenditAttempt(existingAttempt.id, "CARD", existingAttempt);
+      if (reconciliation === "blocked") return fail(RECONCILIATION_RETRY_MESSAGE);
+      if (reconciliation === "already_paid") {
+        return fail("This order has already been paid. Refresh the page to see the updated status.");
+      }
+      // "cleared_for_retry": fall through — beginXenditPaymentAttempt will
+      // start a genuinely fresh attempt (new payments.id => new Xendit
+      // idempotency key => a real new Card session, not the stale one).
+    } else {
+      // Still fresh (not stale): a second session for this same attempt
+      // would reuse its already-registered customer.reference_id (see the
+      // `customer` field below) and fail. Confirmed live against Xendit's
+      // sandbox: calling POST /sessions twice with the same
+      // customer.reference_id returns 409 DUPLICATE_ERROR ("The
+      // reference_id entered has been used before"), even with an
+      // identical Idempotency-Key. Nothing to reconcile yet (not stale),
+      // so stop here with a clear message instead of letting that 409
+      // surface as a confusing "Couldn't start payment" error.
+      return fail(
+        "A card payment is already in progress for this order. Complete the payment form you already opened, or wait a few minutes and try again.",
+      );
     }
-    // "cleared_for_retry": fall through — beginXenditPaymentAttempt will
-    // start a genuinely fresh attempt (new payments.id => new Xendit
-    // idempotency key => a real new Card session, not the stale one).
   }
 
   try {
     // Card sessions carry a short-lived components_sdk_key that can't be
-    // meaningfully reused across requests, so every call mints a fresh
-    // Xendit session — but still against the same idempotently-reserved
-    // `payments` row, so no duplicate row is ever created for one intent.
+    // meaningfully reused across requests, so every call here mints a
+    // fresh Xendit session — safe only because the guard above already
+    // ruled out a still-valid existing session for this exact attempt.
+    // Still reserved against the same idempotently-reserved `payments`
+    // row either way, so no duplicate row is ever created for one intent.
     const attempt = await queries.beginXenditPaymentAttempt(parsed.data.orderId, "CARD");
 
     const returnUrl = `${publicEnv.NEXT_PUBLIC_SITE_URL}${ROUTES.orderDetail(parsed.data.orderId)}?xendit_return=1`;
@@ -239,7 +264,11 @@ export async function createXenditGroupEwalletPaymentAction(
         currency,
         successReturnUrl: returnUrl,
         failureReturnUrl: returnUrl,
-        customer: { id: user.id, givenNames: user.fullName || user.email },
+        // See the single-order action above: `attempt.id` (a fresh payments
+        // row per attempt) instead of the buyer's stable `user.id`, so
+        // PAYMAYA's one-time-create customer reference_id is never reused
+        // across separate group attempts.
+        customer: { id: attempt.id, givenNames: user.fullName || user.email },
       });
 
       const action = response.actions?.find((a) => a.type === "REDIRECT_CUSTOMER");
@@ -289,17 +318,31 @@ export async function createXenditGroupCardSessionAction(
     parsed.data.checkoutGroupId,
     "CARD",
   );
-  if (existingAttempt && isStaleXenditAttempt(existingAttempt)) {
-    const reconciliation = await reconcileStaleXenditAttempt(
-      parsed.data.checkoutGroupId,
-      "CARD",
-      existingAttempt,
-    );
-    if (reconciliation === "blocked") return fail(RECONCILIATION_RETRY_MESSAGE);
-    if (reconciliation === "already_paid") {
-      return fail("This order has already been paid. Refresh the page to see the updated status.");
+  if (existingAttempt) {
+    if (isStaleXenditAttempt(existingAttempt)) {
+      const reconciliation = await reconcileStaleXenditAttempt(
+        parsed.data.checkoutGroupId,
+        "CARD",
+        existingAttempt,
+      );
+      if (reconciliation === "blocked") return fail(RECONCILIATION_RETRY_MESSAGE);
+      if (reconciliation === "already_paid") {
+        return fail("This order has already been paid. Refresh the page to see the updated status.");
+      }
+      // "cleared_for_retry": fall through to a genuinely fresh group attempt.
+    } else {
+      // Still fresh — same collision this guards against in the
+      // single-order action above, just reached more easily here: before
+      // the list-page UI fix (one shared action per group instead of one
+      // per shop), a second order card's "Pay with Card" button would hit
+      // this every time the first click had already succeeded. Kept as a
+      // defense-in-depth guard even with that UI fix in place (e.g. two
+      // separate order-detail tabs for different members of the same
+      // group).
+      return fail(
+        "A card payment is already in progress for this order. Complete the payment form you already opened, or wait a few minutes and try again.",
+      );
     }
-    // "cleared_for_retry": fall through to a genuinely fresh group attempt.
   }
 
   try {

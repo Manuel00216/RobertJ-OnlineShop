@@ -1,6 +1,6 @@
 # Xendit Payment Recovery — Implementation Plan
 
-**Status:** Planning only — nothing in this document has been implemented. No code, database, or migration has been changed. This is the write-up to pick up from tomorrow.
+**Status:** Implemented 2026-09-22. All four migrations (`20260927000000`–`20260927030000`) applied to the live database; `queries.ts`, `checkout.actions.ts`, `order.types.ts`, `database.types.ts`, and the new shared `PaymentRecoveryPanel` component are updated. `lint`/`typecheck`/`build` pass. The real stuck order (`ORD-20260914-000132`) now classifies as `to_pay` live. One additional bug was found and fixed during verification, outside this plan's original stated scope — see the note at the top of `20260927030000_group_payment_retry_partial.sql` (§3c: the group webhook's per-member resolution loop wasn't channel-scoped, so it could mark a stale, never-charged payment row from an abandoned different-channel attempt as `paid`).
 
 **Source:** Read-only audit performed in the prior session (checkout → Xendit creation/redirect → webhook → status → `/orders`). Both root causes below were confirmed against the *live* database (via `pg_get_functiondef`/`information_schema`, not just the migration files — this repo has a documented history of live/repo drift, so live state was treated as the source of truth) and against a real, currently-stuck order.
 

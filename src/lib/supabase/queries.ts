@@ -1497,7 +1497,7 @@ type OrderItemRow = Database["public"]["Tables"]["order_items"]["Row"];
  */
 const ORDER_COLUMNS = `
   id, order_number, buyer_id, seller_id, subtotal_cents, shipping_fee_cents,
-  total_cents, currency, payment_status, order_status, shipping_address, notes,
+  total_cents, currency, payment_status, payment_method, order_status, shipping_address, notes,
   placed_at, paid_at, shipped_at, delivered_at, cancelled_at, checkout_group_id,
   cancellation_reason, cancelled_by,
   buyer:profiles!orders_buyer_id_fkey ( full_name, username ),
@@ -1550,6 +1550,7 @@ function toOrder(row: OrderRowWithItems): Order {
     orderNumber: row.order_number,
     status: row.order_status,
     paymentStatus: row.payment_status,
+    paymentMethod: row.payment_method,
     subtotalCents: row.subtotal_cents,
     shippingFeeCents: row.shipping_fee_cents,
     totalCents: row.total_cents,
@@ -2125,6 +2126,8 @@ export interface CreateOrderInput {
   shippingAddress: Json;
   shippingFeeCents: number;
   notes?: string | null;
+  /** Durable record of buyer intent, written once at insert time — see `create_order`'s `p_payment_method`. Defaults to `'cod'` server-side when omitted. */
+  paymentMethod?: "cod" | "xendit";
 }
 
 /**
@@ -2149,6 +2152,7 @@ export async function createOrder(
     p_shipping_address: input.shippingAddress,
     p_shipping_fee_cents: input.shippingFeeCents,
     p_notes: input.notes ?? undefined,
+    p_payment_method: input.paymentMethod ?? undefined,
   });
 
   if (error) {
@@ -2176,6 +2180,8 @@ export interface CreateOrderGroupInput {
   shippingAddress: Json;
   shippingFeeCents: number;
   notes?: string | null;
+  /** Durable record of buyer intent, written once at insert time for every order in the group — see `create_order_group`'s `p_payment_method`. Defaults to `'cod'` server-side when omitted. */
+  paymentMethod?: "cod" | "xendit";
 }
 
 /**
@@ -2206,6 +2212,7 @@ export async function createOrderGroup(
     p_shipping_address: input.shippingAddress,
     p_shipping_fee_cents: input.shippingFeeCents,
     p_notes: input.notes ?? undefined,
+    p_payment_method: input.paymentMethod ?? undefined,
   });
 
   if (error) {
@@ -2863,12 +2870,17 @@ export async function finalizeXenditGroupPaymentRequest(input: {
 
 /**
  * The authoritative combined amount for a checkout group's specific payment
- * attempt — summed server-side from only that `channelCode`'s payment rows
- * (RLS-scoped to the caller's own orders), never accepted from the client.
- * Scoped by channel so an abandoned attempt on a different channel (the
- * buyer started GCash, then switched to Card without finishing) is never
- * folded into the amount charged. Used immediately before calling Xendit to
- * create the combined payment request/session.
+ * attempt — summed server-side from only that `channelCode`'s still-`pending`
+ * payment rows (RLS-scoped to the caller's own orders), never accepted from
+ * the client. Scoped by channel so an abandoned attempt on a different
+ * channel (the buyer started GCash, then switched to Card without
+ * finishing) is never folded into the amount charged, and scoped to
+ * `status = 'pending'` so an already-paid sibling's row from an earlier,
+ * separate group attempt (see `begin_xendit_group_payment_attempt`'s
+ * per-member eligibility) is never folded in either — summing over every
+ * historical row would overcharge the buyer by exactly that paid sibling's
+ * total. Used immediately before calling Xendit to create the combined
+ * payment request/session.
  */
 export async function getXenditGroupPaymentTotal(
   checkoutGroupId: string,
@@ -2879,7 +2891,8 @@ export async function getXenditGroupPaymentTotal(
     .from(DATABASE_TABLES.PAYMENTS)
     .select("amount_cents, currency")
     .eq("checkout_group_id", checkoutGroupId)
-    .eq("payment_channel", channelCode);
+    .eq("payment_channel", channelCode)
+    .eq("status", "pending");
 
   if (error) {
     throw queryError("Failed to load payment group total", error);

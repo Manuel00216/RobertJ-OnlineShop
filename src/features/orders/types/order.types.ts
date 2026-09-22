@@ -51,6 +51,8 @@ export interface Order {
   orderNumber: string;
   status: OrderStatus;
   paymentStatus: PaymentStatus;
+  /** Durable record of buyer intent at checkout ("cod" | "xendit"), set once at order creation — the source of truth for whether this order can ever reach "To Pay"; see `buyer_order_lifecycle`. */
+  paymentMethod: "cod" | "xendit";
   subtotalCents: number;
   shippingFeeCents: number;
   totalCents: number;

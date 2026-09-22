@@ -434,6 +434,7 @@ export type Database = {
           order_number: string
           order_status: Database["public"]["Enums"]["order_status"]
           paid_at: string | null
+          payment_method: Database["public"]["Enums"]["order_payment_method"]
           payment_status: Database["public"]["Enums"]["payment_status"]
           placed_at: string
           seller_id: string
@@ -458,6 +459,7 @@ export type Database = {
           order_number: string
           order_status?: Database["public"]["Enums"]["order_status"]
           paid_at?: string | null
+          payment_method?: Database["public"]["Enums"]["order_payment_method"]
           payment_status?: Database["public"]["Enums"]["payment_status"]
           placed_at?: string
           seller_id: string
@@ -482,6 +484,7 @@ export type Database = {
           order_number?: string
           order_status?: Database["public"]["Enums"]["order_status"]
           paid_at?: string | null
+          payment_method?: Database["public"]["Enums"]["order_payment_method"]
           payment_status?: Database["public"]["Enums"]["payment_status"]
           placed_at?: string
           seller_id?: string
@@ -1558,6 +1561,7 @@ export type Database = {
           p_checkout_group_id?: string
           p_items: Json
           p_notes?: string
+          p_payment_method?: string
           p_seller_id: string
           p_shipping_address: Json
           p_shipping_fee_cents?: number
@@ -1574,6 +1578,7 @@ export type Database = {
           order_number: string
           order_status: Database["public"]["Enums"]["order_status"]
           paid_at: string | null
+          payment_method: Database["public"]["Enums"]["order_payment_method"]
           payment_status: Database["public"]["Enums"]["payment_status"]
           placed_at: string
           seller_id: string
@@ -1595,6 +1600,7 @@ export type Database = {
         Args: {
           p_groups: Json
           p_notes?: string
+          p_payment_method?: string
           p_shipping_address: Json
           p_shipping_fee_cents?: number
         }
@@ -1610,6 +1616,7 @@ export type Database = {
           order_number: string
           order_status: Database["public"]["Enums"]["order_status"]
           paid_at: string | null
+          payment_method: Database["public"]["Enums"]["order_payment_method"]
           payment_status: Database["public"]["Enums"]["payment_status"]
           placed_at: string
           seller_id: string
@@ -2073,6 +2080,7 @@ export type Database = {
     }
     Enums: {
       gender_type: "male" | "female" | "other"
+      order_payment_method: "cod" | "xendit"
       order_status:
         | "pending"
         | "confirmed"
@@ -2242,6 +2250,7 @@ export const Constants = {
   public: {
     Enums: {
       gender_type: ["male", "female", "other"],
+      order_payment_method: ["cod", "xendit"],
       order_status: [
         "pending",
         "confirmed",
