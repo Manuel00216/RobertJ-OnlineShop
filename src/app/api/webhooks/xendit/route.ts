@@ -47,7 +47,11 @@ export async function POST(request: NextRequest) {
   }
 
   const payload = rawPayload as unknown as XenditPaymentWebhookPayload;
-  const data = payload?.data;
+  // Payment Session events (Card — `payment_session.completed`/`.expired`)
+  // nest under `data` the same way the Payment Request family (GCash/Maya)
+  // does; falls back to the payload's own top level only if `data` is
+  // entirely absent (see XenditPaymentWebhookPayload's doc comment for why).
+  const data = payload?.data ?? payload;
   // Card's underlying payment_request reference_id is Xendit-derived from the
   // payment_session's reference_id we set ({ours}_{xendit-suffix}) rather than
   // reused verbatim — the session can host more than one payment attempt, so
@@ -58,14 +62,31 @@ export async function POST(request: NextRequest) {
   const status = data?.status;
 
   if (!referenceId || !status) {
-    // Not a shape we recognize (e.g. a webhook type we don't subscribe to
-    // handling yet). Acknowledge so Xendit doesn't retry indefinitely, but
-    // don't touch the database at all.
+    // Not a shape we recognize. Logged (unlike before) so a future
+    // occurrence leaves forensic evidence instead of silently vanishing —
+    // this exact gap is why a real, successfully-completed Card payment
+    // (payment_session ps-6ab2412fcdc99285e766685d) went unreconciled for
+    // hours before being found and fixed manually.
+    console.error("[xendit webhook] unrecognized payload shape", {
+      event: payload?.event,
+      hasDataKey: Boolean(payload?.data),
+      dataKeys: data ? Object.keys(data) : null,
+    });
+    // Acknowledge so Xendit doesn't retry indefinitely, but don't touch the
+    // database at all.
     return NextResponse.json({ received: true, note: "unrecognized payload shape" });
   }
 
-  const amountCents =
-    typeof data.request_amount === "number" ? xenditAmountToCents(data.request_amount) : 0;
+  // Payment Session's amount field is `amount`; the Payment Request family
+  // (GCash/Maya) uses `request_amount` — see XenditPaymentWebhookPayload's
+  // doc comment for how this was confirmed.
+  const rawAmount =
+    typeof data.request_amount === "number"
+      ? data.request_amount
+      : typeof data.amount === "number"
+        ? data.amount
+        : undefined;
+  const amountCents = typeof rawAmount === "number" ? xenditAmountToCents(rawAmount) : 0;
 
   const admin = createSupabaseAdminClient();
   const { error } = await admin.rpc("process_xendit_webhook", {

@@ -41,20 +41,51 @@ export interface XenditPaymentSessionResponse {
   [key: string]: unknown;
 }
 
-/** Raw shape of a Xendit `payment.*` webhook body — only the fields we read. */
+/**
+ * Raw shape of a Xendit `payment.*` (Payment Request family — GCash/Maya) or
+ * `payment_session.*` (Payment Session family — Card) webhook body — only
+ * the fields we read.
+ *
+ * `data` matches the documented nested shape for both families
+ * (https://docs.xendit.co/apidocs/webhook-notification-sent-defined-webhook-url-updates-payment-session.md
+ * confirms `payment_session.completed`/`.expired` nest under `data` the same
+ * way the already-working Payment Request family does). The amount field
+ * name differs between families though: Payment Request uses
+ * `request_amount`, Payment Session uses `amount` — confirmed against both
+ * that doc and a live `GET /sessions/{id}` response for a real completed
+ * session (`{"amount":5697,...}`, no `request_amount` field at all).
+ *
+ * The top-level fields below are a fallback only, read when `data` itself is
+ * absent — Payment Session's own REST representation (that same live GET
+ * call) is a *flat* object with no `data` wrapper, and this app has no
+ * confirmed live sample of the Card *webhook* payload specifically (a
+ * `payment_session.completed`/`.expired` event was received in production —
+ * confirmed via Vercel request logs — but its body was never captured, so
+ * this fallback exists for defense against an undocumented flat variant
+ * rather than a proven one).
+ */
 export interface XenditPaymentWebhookPayload {
   event: string;
-  data: {
+  data?: {
     payment_id?: string;
     payment_request_id?: string;
     reference_id?: string;
     status?: string;
     request_amount?: number;
+    amount?: number;
     currency?: string;
     channel_code?: string;
     failure_code?: string;
     [key: string]: unknown;
   };
+  reference_id?: string;
+  status?: string;
+  payment_id?: string;
+  payment_request_id?: string;
+  request_amount?: number;
+  amount?: number;
+  currency?: string;
+  channel_code?: string;
   [key: string]: unknown;
 }
 
