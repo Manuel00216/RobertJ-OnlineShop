@@ -6,6 +6,8 @@ export const ROUTES = {
   categoryDetail: (slug: string) => `/categories/${slug}`,
   cart: "/cart",
   checkout: "/checkout",
+  /** Checkout-owned payment workspace for an existing order — retry, resume, or change payment method. The only place buyer payment initiation is allowed to happen; see docs/payment-ux-architecture-audit.md. */
+  checkoutResume: (orderId: string) => `/checkout/resume/${orderId}`,
   /** Customer account hub (order tracking + overview). See docs/customer-account-architecture-plan.md. */
   account: "/account",
   orders: "/orders",

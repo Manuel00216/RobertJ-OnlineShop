@@ -18,9 +18,11 @@ type PaymentRecoveryPanelProps = (
 
 /**
  * Channel-aware Pay Now / Retry block for a "To Pay" order — a Card session
- * widget for CARD, the existing GCash/Maya retry button otherwise. Shared by
- * the `/orders` list card (`OrderCardActions`) and the order detail page so
- * this branch is defined in exactly one place.
+ * widget for CARD, the existing GCash/Maya retry button otherwise. Used only
+ * by Checkout's payment workspace (`CheckoutResumePanel`) and the checkout
+ * page's own inline Card-completion step (`CheckoutForm`) — never by Orders,
+ * which may only link into Checkout, not render payment actions itself (see
+ * docs/payment-ux-architecture-audit.md).
  */
 export function PaymentRecoveryPanel({ channel, isFailed, ...paymentProps }: PaymentRecoveryPanelProps) {
   if (channel === "CARD") {

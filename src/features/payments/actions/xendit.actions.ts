@@ -9,7 +9,9 @@ import * as queries from "@/lib/supabase/queries";
 import { createEwalletPaymentRequest, createCardPaymentSession } from "@/lib/xendit/client";
 import type { ActionResult } from "@/types/action.types";
 import {
+  CHANNEL_SWITCH_BLOCKED_MESSAGE,
   RECONCILIATION_RETRY_MESSAGE,
+  findFreshOtherChannelAttempt,
   isStaleXenditAttempt,
   reconcileStaleXenditAttempt,
 } from "@/features/payments/lib/xendit-reconciliation";
@@ -60,6 +62,16 @@ export async function createXenditEwalletPaymentAction(
     // fall through, beginXenditPaymentAttempt will correctly start a fresh one.
   }
 
+  // Checkout's "Change Payment Method": block starting THIS channel while a
+  // DIFFERENT channel still has a live attempt that might resolve on its
+  // own — never blindly start a second channel (see
+  // docs/payment-ux-architecture-audit.md §6-7).
+  const otherAttempts = await queries.getOtherFinalizedPendingXenditPayments(
+    parsed.data.orderId,
+    parsed.data.channelCode,
+  );
+  if (findFreshOtherChannelAttempt(otherAttempts)) return fail(CHANNEL_SWITCH_BLOCKED_MESSAGE);
+
   let redirectUrl: string;
   try {
     const attempt = await queries.beginXenditPaymentAttempt(
@@ -72,7 +84,9 @@ export async function createXenditEwalletPaymentAction(
     if (attempt.xenditPaymentRequestId && attempt.checkoutUrl) {
       redirectUrl = attempt.checkoutUrl;
     } else {
-      const returnUrl = `${publicEnv.NEXT_PUBLIC_SITE_URL}${ROUTES.orderDetail(parsed.data.orderId)}?xendit_return=1`;
+      // Bounces back into Checkout's payment workspace, never Orders — the
+      // only place buyer payment initiation/retry is allowed to happen.
+      const returnUrl = `${publicEnv.NEXT_PUBLIC_SITE_URL}${ROUTES.checkoutResume(parsed.data.orderId)}?xendit_return=1`;
       const response = await createEwalletPaymentRequest({
         referenceId: attempt.id,
         channelCode: parsed.data.channelCode,
@@ -161,6 +175,12 @@ export async function createXenditCardSessionAction(
     }
   }
 
+  // Checkout's "Change Payment Method": same cross-channel guard as the
+  // e-wallet action above — block starting Card while GCash/Maya might
+  // still resolve on its own.
+  const otherAttempts = await queries.getOtherFinalizedPendingXenditPayments(parsed.data.orderId, "CARD");
+  if (findFreshOtherChannelAttempt(otherAttempts)) return fail(CHANNEL_SWITCH_BLOCKED_MESSAGE);
+
   try {
     // Card sessions carry a short-lived components_sdk_key that can't be
     // meaningfully reused across requests, so every call here mints a
@@ -170,7 +190,9 @@ export async function createXenditCardSessionAction(
     // row either way, so no duplicate row is ever created for one intent.
     const attempt = await queries.beginXenditPaymentAttempt(parsed.data.orderId, "CARD");
 
-    const returnUrl = `${publicEnv.NEXT_PUBLIC_SITE_URL}${ROUTES.orderDetail(parsed.data.orderId)}?xendit_return=1`;
+    // Bounces back into Checkout's payment workspace, never Orders — the
+    // only place buyer payment initiation/retry is allowed to happen.
+    const returnUrl = `${publicEnv.NEXT_PUBLIC_SITE_URL}${ROUTES.checkoutResume(parsed.data.orderId)}?xendit_return=1`;
     const session = await createCardPaymentSession({
       referenceId: attempt.id,
       amountCents: attempt.amountCents,
@@ -237,6 +259,14 @@ export async function createXenditGroupEwalletPaymentAction(
     // correctly start a fresh combined attempt for the whole group.
   }
 
+  // Checkout's "Change Payment Method": same cross-channel guard as the
+  // single-order action above, scoped to the whole group.
+  const otherAttempts = await queries.getOtherFinalizedPendingXenditGroupPayments(
+    parsed.data.checkoutGroupId,
+    parsed.data.channelCode,
+  );
+  if (findFreshOtherChannelAttempt(otherAttempts)) return fail(CHANNEL_SWITCH_BLOCKED_MESSAGE);
+
   let redirectUrl: string;
   try {
     const attempt = await queries.beginXenditGroupPaymentAttempt(
@@ -251,11 +281,13 @@ export async function createXenditGroupEwalletPaymentAction(
         parsed.data.checkoutGroupId,
         parsed.data.channelCode,
       );
-      // Lands back on the orders list, not a per-checkout confirmation page
-      // (removed) — `buyer_order_lifecycle` reclassifies the group the
+      // Lands back on Checkout's payment workspace (any one member order id
+      // resolves the whole group there — see the resume route), never
+      // Orders — the only place buyer payment initiation/retry is allowed
+      // to happen. `buyer_order_lifecycle` reclassifies the group the
       // instant the webhook lands, so no tab/channel needs to ride in the
       // query string here.
-      const returnUrl = `${publicEnv.NEXT_PUBLIC_SITE_URL}${ROUTES.orders}?xendit_return=1`;
+      const returnUrl = `${publicEnv.NEXT_PUBLIC_SITE_URL}${ROUTES.checkoutResume(attempt.orderId)}?xendit_return=1`;
 
       const response = await createEwalletPaymentRequest({
         referenceId: parsed.data.checkoutGroupId,
@@ -345,15 +377,23 @@ export async function createXenditGroupCardSessionAction(
     }
   }
 
+  // Checkout's "Change Payment Method": same cross-channel guard as the
+  // group e-wallet action above.
+  const otherAttempts = await queries.getOtherFinalizedPendingXenditGroupPayments(
+    parsed.data.checkoutGroupId,
+    "CARD",
+  );
+  if (findFreshOtherChannelAttempt(otherAttempts)) return fail(CHANNEL_SWITCH_BLOCKED_MESSAGE);
+
   try {
     const attempt = await queries.beginXenditGroupPaymentAttempt(parsed.data.checkoutGroupId, "CARD");
     const { amountCents, currency } = await queries.getXenditGroupPaymentTotal(
       parsed.data.checkoutGroupId,
       "CARD",
     );
-    // Lands back on the orders list, not a per-checkout confirmation page
-    // (removed) — same reasoning as the e-wallet action above.
-    const returnUrl = `${publicEnv.NEXT_PUBLIC_SITE_URL}${ROUTES.orders}?xendit_return=1`;
+    // Lands back on Checkout's payment workspace, never Orders — same
+    // reasoning as the group e-wallet action above.
+    const returnUrl = `${publicEnv.NEXT_PUBLIC_SITE_URL}${ROUTES.checkoutResume(attempt.orderId)}?xendit_return=1`;
 
     const session = await createCardPaymentSession({
       referenceId: parsed.data.checkoutGroupId,

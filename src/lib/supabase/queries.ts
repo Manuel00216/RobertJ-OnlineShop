@@ -2963,6 +2963,59 @@ export async function getFinalizedPendingXenditGroupPayment(
 }
 
 /**
+ * Every OTHER channel's still-finalized pending Xendit attempt for this
+ * order — unlike `getFinalizedPendingXenditPayment` (scoped to one channel),
+ * this backs Checkout's "Change Payment Method" guard: before starting a
+ * fresh attempt on a different channel, the caller must confirm no other
+ * channel might still resolve successfully on its own. Only rows that
+ * actually reached Xendit (`xendit_payment_request_id is not null`) are
+ * relevant — a row that never got that far can't resolve independently and
+ * is already superseded the moment a new attempt is reserved.
+ */
+export async function getOtherFinalizedPendingXenditPayments(
+  orderId: string,
+  excludeChannelCode: "GCASH" | "PAYMAYA" | "CARD",
+): Promise<PaymentAttempt[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PAYMENTS)
+    .select("*")
+    .eq("order_id", orderId)
+    .eq("payment_method_type", "xendit")
+    .eq("status", "pending")
+    .not("xendit_payment_request_id", "is", null)
+    .neq("payment_channel", excludeChannelCode)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw queryError("Failed to check for other in-progress payment attempts", error);
+  }
+  return (data ?? []).map((row) => toPaymentAttempt(row as PaymentRow));
+}
+
+/** Group counterpart of `getOtherFinalizedPendingXenditPayments`. */
+export async function getOtherFinalizedPendingXenditGroupPayments(
+  checkoutGroupId: string,
+  excludeChannelCode: "GCASH" | "PAYMAYA" | "CARD",
+): Promise<PaymentAttempt[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.PAYMENTS)
+    .select("*")
+    .eq("checkout_group_id", checkoutGroupId)
+    .eq("payment_method_type", "xendit")
+    .eq("status", "pending")
+    .not("xendit_payment_request_id", "is", null)
+    .neq("payment_channel", excludeChannelCode)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw queryError("Failed to check for other in-progress payment attempts", error);
+  }
+  return (data ?? []).map((row) => toPaymentAttempt(row as PaymentRow));
+}
+
+/**
  * Applies a Xendit status fetched via a synchronous reconciliation check
  * (fix #5A) through the exact same `process_xendit_webhook` RPC the real
  * webhook uses — never duplicates its terminal-state, reference, or amount

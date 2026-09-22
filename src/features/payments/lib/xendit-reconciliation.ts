@@ -35,6 +35,27 @@ export function isStaleXenditAttempt(attempt: PaymentAttempt): boolean {
 
 export type ReconciliationOutcome = "already_paid" | "cleared_for_retry" | "blocked";
 
+/** Buyer-facing message when Checkout's "Change Payment Method" is blocked because a different channel might still resolve on its own. */
+export const CHANNEL_SWITCH_BLOCKED_MESSAGE =
+  "Another payment method is already in progress for this order. Wait for it to resolve, or complete that payment, before switching methods.";
+
+/**
+ * Checkout's "Change Payment Method" guard: given every OTHER channel's
+ * still-pending attempts for this order/group (from
+ * `getOtherFinalizedPendingXenditPayments`/`...Group...`), returns the first
+ * one that isn't stale yet — i.e. might still resolve successfully on its
+ * own. Starting a fresh attempt on a different channel while this exists
+ * would risk both eventually succeeding (a double charge), so callers must
+ * block rather than proceed. Deliberately does not reconcile on the
+ * caller's behalf — a stale-but-unresolved other-channel row is left for
+ * the buyer's own retry of that channel, or the nightly sweep, to resolve.
+ */
+export function findFreshOtherChannelAttempt(
+  others: PaymentAttempt[],
+): PaymentAttempt | null {
+  return others.find((attempt) => !isStaleXenditAttempt(attempt)) ?? null;
+}
+
 /**
  * Before a stale-by-our-clock attempt is treated as abandoned -- whether
  * that means starting a fresh charge (fix #5A) or allowing the order to be

@@ -20,8 +20,7 @@ type PaymentFailedRetryProps = (
    * completed yet (rare — usually only a brief window right after
    * checkout). `failed`: a genuine Xendit-side failure. Only changes the
    * status line above the button — the action (retry the same channel) and
-   * button label are identical either way, matching this order's "Pay Now"
-   * card action on `/orders`.
+   * button label are identical either way.
    */
   status: "pending" | "failed";
 };

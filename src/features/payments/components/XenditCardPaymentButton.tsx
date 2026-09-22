@@ -16,12 +16,13 @@ type XenditCardPaymentButtonProps = (
 ) & {
   /**
    * Starts the session automatically on mount instead of waiting for a
-   * "Pay with Card" click — used only by the checkout flow, so completing a
-   * Card order feels like GCash/Maya's immediate handoff instead of a
-   * separate later action from the order card. Every existing call site
-   * (order list/detail retry) omits this and keeps its current
-   * click-to-start behavior unchanged. If auto-start itself fails, the
-   * manual button still appears (`error` phase) so the buyer isn't stuck.
+   * "Pay with Card" click — used only by `CheckoutForm`'s immediately-after-
+   * placing-the-order step, so completing a Card order feels like GCash/
+   * Maya's immediate handoff instead of a separate later action. Every other
+   * call site (via `PaymentRecoveryPanel` in Checkout's resume workspace)
+   * omits this and keeps its current click-to-start behavior unchanged. If
+   * auto-start itself fails, the manual button still appears (`error`
+   * phase) so the buyer isn't stuck.
    */
   autoStart?: boolean;
   /** Fires once, when the Components widget reports the card form was submitted (`session-complete`). Lets the checkout flow decide what happens next (e.g. move on to Orders) without this component owning any navigation itself. */
