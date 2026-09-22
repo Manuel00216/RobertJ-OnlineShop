@@ -43,10 +43,20 @@ import {
   createXenditEwalletPaymentAction,
   createXenditGroupEwalletPaymentAction,
 } from "@/features/payments/actions/xendit.actions";
+import { XenditCardPaymentButton } from "@/features/payments/components/XenditCardPaymentButton";
 import type { ActionResult } from "@/types/action.types";
 
 type FieldErrors = Record<string, string[] | undefined>;
 type AddressSource = "saved" | "last-order" | "profile" | "new" | "empty";
+/**
+ * Set once Card orders are placed successfully — holds the target for the
+ * inline "complete your card payment" step (see `handlePlaceOrder`'s Card
+ * branch) and where to land once it's done, so this component can render
+ * that step in place of the checkout form instead of navigating away first.
+ */
+type CardPaymentTarget = {
+  ordersUrl: string;
+} & ({ orderId: string; checkoutGroupId?: undefined } | { orderId?: undefined; checkoutGroupId: string });
 
 const EMPTY_ADDRESS: ShippingAddressInput = {
   fullName: "",
@@ -120,6 +130,7 @@ export function CheckoutForm({
   const [xenditChannel, setXenditChannel] = useState<XenditChannel | null>(null);
   const [notes, setNotes] = useState("");
   const [isPending, startTransition] = useTransition();
+  const [cardPaymentTarget, setCardPaymentTarget] = useState<CardPaymentTarget | null>(null);
 
   // Switching back to COD clears any channel choice so a stale selection
   // never lingers if the buyer flips to Online Payment again.
@@ -132,6 +143,47 @@ export function CheckoutForm({
   function handleChannelChange(next: XenditChannel) {
     setXenditChannel(next);
     setFieldErrors((prev) => (prev.xenditChannel ? { ...prev, xenditChannel: undefined } : prev));
+  }
+
+  // Checked ahead of the empty-cart states below: by the time this is set,
+  // `removeMany(checkoutItems)` has already cleared the cart, so those
+  // checks would otherwise show "nothing selected" instead of the payment
+  // step the buyer is mid-way through.
+  if (cardPaymentTarget) {
+    return (
+      <div className={cn(RJ_CARD, "flex flex-col gap-4 p-6")}>
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-rj-gray-600">
+            Order placed
+          </p>
+          <h2 className="mt-1 font-serif text-xl text-rj-black">
+            Complete your card payment
+          </h2>
+          <p className="mt-1 text-sm text-rj-gray-600">
+            Enter your card details below to finish paying for this order.
+          </p>
+        </div>
+        {cardPaymentTarget.orderId !== undefined ? (
+          <XenditCardPaymentButton
+            orderId={cardPaymentTarget.orderId}
+            autoStart
+            onComplete={() => router.push(cardPaymentTarget.ordersUrl)}
+          />
+        ) : (
+          <XenditCardPaymentButton
+            checkoutGroupId={cardPaymentTarget.checkoutGroupId}
+            autoStart
+            onComplete={() => router.push(cardPaymentTarget.ordersUrl)}
+          />
+        )}
+        <Link
+          href={cardPaymentTarget.ordersUrl}
+          className="w-fit text-xs font-semibold text-rj-red-dark hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30"
+        >
+          I&apos;ll pay later from My Orders
+        </Link>
+      </div>
+    );
   }
 
   if (items.length === 0) {
@@ -291,13 +343,22 @@ export function CheckoutForm({
           return;
         }
 
-        // Card needs its embedded widget mounted client-side (can't redirect
-        // like the e-wallet channels, and can't be started from this Server
-        // Action redirect chain either) — its payment session only actually
-        // starts later, from the order's "To Pay" card/detail. The order
-        // already carries "CARD" on its payments row from the eager
-        // reservation, so it lands correctly in To Pay without a query param.
-        router.push(ordersUrl);
+        // Card can't redirect like the e-wallet channels (its embedded
+        // widget must mount client-side, and can't be started from this
+        // Server Action redirect chain), so it can't leave this page the
+        // same way GCash/Maya do above — but for the same "completed during
+        // checkout, not a separate later action" experience, render the
+        // widget here instead of sending the buyer to Orders to find their
+        // order and click "Pay with Card" a second time. The order already
+        // carries "CARD" on its payments row from the eager reservation, so
+        // if the buyer bails out (closes the tab, picks "pay later"), it's
+        // still correctly in To Pay when they come back — same fallback as
+        // before, just no longer the only path.
+        setCardPaymentTarget(
+          checkoutGroupId
+            ? { checkoutGroupId, ordersUrl }
+            : { orderId: created[0].orderId, ordersUrl },
+        );
         return;
       }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -10,9 +10,23 @@ import {
 
 type Phase = "idle" | "loading" | "ready" | "submitting" | "complete" | "expired" | "error";
 
-type XenditCardPaymentButtonProps =
+type XenditCardPaymentButtonProps = (
   | { orderId: string; checkoutGroupId?: undefined }
-  | { orderId?: undefined; checkoutGroupId: string };
+  | { orderId?: undefined; checkoutGroupId: string }
+) & {
+  /**
+   * Starts the session automatically on mount instead of waiting for a
+   * "Pay with Card" click — used only by the checkout flow, so completing a
+   * Card order feels like GCash/Maya's immediate handoff instead of a
+   * separate later action from the order card. Every existing call site
+   * (order list/detail retry) omits this and keeps its current
+   * click-to-start behavior unchanged. If auto-start itself fails, the
+   * manual button still appears (`error` phase) so the buyer isn't stuck.
+   */
+  autoStart?: boolean;
+  /** Fires once, when the Components widget reports the card form was submitted (`session-complete`). Lets the checkout flow decide what happens next (e.g. move on to Orders) without this component owning any navigation itself. */
+  onComplete?: () => void;
+};
 
 /**
  * Card payment via a Xendit Payment Session (mode=COMPONENTS). Raw card data
@@ -27,6 +41,7 @@ type XenditCardPaymentButtonProps =
  * session differs.
  */
 export function XenditCardPaymentButton(props: XenditCardPaymentButtonProps) {
+  const { autoStart = false, onComplete } = props;
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -38,7 +53,7 @@ export function XenditCardPaymentButton(props: XenditCardPaymentButtonProps) {
     };
   }, []);
 
-  async function startCardPayment() {
+  const startCardPayment = useCallback(async () => {
     setError(null);
     setPhase("loading");
 
@@ -73,6 +88,7 @@ export function XenditCardPaymentButton(props: XenditCardPaymentButtonProps) {
 
       components.addEventListener("session-complete", () => {
         setPhase("complete");
+        onComplete?.();
       });
       components.addEventListener("session-expired-or-canceled", () => {
         setPhase("expired");
@@ -81,7 +97,19 @@ export function XenditCardPaymentButton(props: XenditCardPaymentButtonProps) {
       setError("Could not load the card payment form. Please try again.");
       setPhase("error");
     }
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- props.orderId/props.checkoutGroupId are the discriminated pair; stable per mount, and onComplete is read fresh via closure without needing to restart the whole callback identity.
+  }, [props.orderId, props.checkoutGroupId]);
+
+  // Checkout-only: starts the session immediately instead of waiting for a
+  // click. Guarded so it only ever fires once per mount even under
+  // React Strict Mode's double-invoke.
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (autoStart && !autoStartedRef.current) {
+      autoStartedRef.current = true;
+      void startCardPayment();
+    }
+  }, [autoStart, startCardPayment]);
 
   function handleSubmit() {
     setPhase("submitting");
@@ -98,10 +126,13 @@ export function XenditCardPaymentButton(props: XenditCardPaymentButtonProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      {phase === "idle" || phase === "error" ? (
+      {(phase === "idle" && !autoStart) || phase === "error" ? (
         <Button type="button" variant="rjOutline" size="rj" onClick={startCardPayment}>
           Pay with Card
         </Button>
+      ) : null}
+      {phase === "idle" && autoStart ? (
+        <p className="text-xs text-rj-gray-600">Preparing your card payment…</p>
       ) : null}
       {phase === "loading" ? <p className="text-xs text-rj-gray-600">Loading card form…</p> : null}
       <div ref={containerRef} />
