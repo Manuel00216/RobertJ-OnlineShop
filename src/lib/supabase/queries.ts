@@ -1699,7 +1699,9 @@ async function listBuyerOrdersByLifecycleTab(
     throw queryError("Failed to load orders", viewError);
   }
 
-  const orderIds = (viewRows ?? []).map((row) => row.order_id);
+  const orderIds = (viewRows ?? [])
+    .map((row) => row.order_id)
+    .filter((id): id is string => id !== null);
   if (orderIds.length === 0) {
     return { items: [], total: 0, page: params.page, pageSize: params.pageSize, totalPages: 1 };
   }

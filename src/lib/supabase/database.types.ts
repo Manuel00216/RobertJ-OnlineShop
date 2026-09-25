@@ -400,6 +400,13 @@ export type Database = {
             foreignKeyName: "order_items_order_id_fkey"
             columns: ["order_id"]
             isOneToOne: false
+            referencedRelation: "buyer_order_lifecycle"
+            referencedColumns: ["order_id"]
+          },
+          {
+            foreignKeyName: "order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
@@ -624,6 +631,13 @@ export type Database = {
           xendit_payment_request_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "payments_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "buyer_order_lifecycle"
+            referencedColumns: ["order_id"]
+          },
           {
             foreignKeyName: "payments_order_id_fkey"
             columns: ["order_id"]
@@ -1050,6 +1064,13 @@ export type Database = {
             foreignKeyName: "return_requests_order_id_fkey"
             columns: ["order_id"]
             isOneToOne: false
+            referencedRelation: "buyer_order_lifecycle"
+            referencedColumns: ["order_id"]
+          },
+          {
+            foreignKeyName: "return_requests_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
@@ -1265,6 +1286,13 @@ export type Database = {
             foreignKeyName: "stock_adjustments_related_order_id_fkey"
             columns: ["related_order_id"]
             isOneToOne: false
+            referencedRelation: "buyer_order_lifecycle"
+            referencedColumns: ["order_id"]
+          },
+          {
+            foreignKeyName: "stock_adjustments_related_order_id_fkey"
+            columns: ["related_order_id"]
+            isOneToOne: false
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
@@ -1385,10 +1413,24 @@ export type Database = {
       buyer_order_lifecycle: {
         Row: {
           active_payment_channel: string | null
-          buyer_id: string
-          lifecycle_tab: string
-          order_id: string
-          placed_at: string
+          buyer_id: string | null
+          lifecycle_tab: string | null
+          order_id: string | null
+          placed_at: string | null
+        }
+        Insert: {
+          active_payment_channel?: never
+          buyer_id?: string | null
+          lifecycle_tab?: never
+          order_id?: string | null
+          placed_at?: string | null
+        }
+        Update: {
+          active_payment_channel?: never
+          buyer_id?: string | null
+          lifecycle_tab?: never
+          order_id?: string | null
+          placed_at?: string | null
         }
         Relationships: [
           {
@@ -1568,7 +1610,9 @@ export type Database = {
         }
         Returns: {
           buyer_id: string
+          cancellation_reason: string | null
           cancelled_at: string | null
+          cancelled_by: Database["public"]["Enums"]["user_role"] | null
           checkout_group_id: string | null
           created_at: string
           currency: string
@@ -1606,7 +1650,9 @@ export type Database = {
         }
         Returns: {
           buyer_id: string
+          cancellation_reason: string | null
           cancelled_at: string | null
+          cancelled_by: Database["public"]["Enums"]["user_role"] | null
           checkout_group_id: string | null
           created_at: string
           currency: string
@@ -1812,6 +1858,10 @@ export type Database = {
       }
       is_admin: { Args: never; Returns: boolean }
       is_shop_member: { Args: { p_shop_id: string }; Returns: boolean }
+      log_unrecognized_xendit_webhook_payload: {
+        Args: { p_event_type: string; p_raw_payload: Json }
+        Returns: undefined
+      }
       mark_cod_payment_collected: {
         Args: { p_order_id: string }
         Returns: {

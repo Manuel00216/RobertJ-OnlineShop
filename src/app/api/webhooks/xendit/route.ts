@@ -61,19 +61,29 @@ export async function POST(request: NextRequest) {
   const referenceId = data?.reference_id?.split("_")[0];
   const status = data?.status;
 
+  const admin = createSupabaseAdminClient();
+
   if (!referenceId || !status) {
-    // Not a shape we recognize. Logged (unlike before) so a future
-    // occurrence leaves forensic evidence instead of silently vanishing —
-    // this exact gap is why a real, successfully-completed Card payment
-    // (payment_session ps-6ab2412fcdc99285e766685d) went unreconciled for
-    // hours before being found and fixed manually.
+    // Not a shape we recognize. Persisted (unlike before, which only
+    // `console.error`'d a summary) so a future occurrence leaves forensic
+    // evidence instead of silently vanishing — this exact gap is why a real,
+    // successfully-completed Card payment (payment_session
+    // ps-6ab2814c3589faffa4215ef9) went unreconciled for hours before
+    // self-healing via the nightly reconciliation sweep. See
+    // docs/production-card-payment-stuck-audit.md.
     console.error("[xendit webhook] unrecognized payload shape", {
       event: payload?.event,
       hasDataKey: Boolean(payload?.data),
       dataKeys: data ? Object.keys(data) : null,
     });
-    // Acknowledge so Xendit doesn't retry indefinitely, but don't touch the
-    // database at all.
+    const { error: logError } = await admin.rpc("log_unrecognized_xendit_webhook_payload", {
+      p_event_type: typeof payload?.event === "string" ? payload.event : "unknown",
+      p_raw_payload: payload as unknown as Json,
+    });
+    if (logError) {
+      console.error("[xendit webhook] failed to persist unrecognized payload", logError);
+    }
+    // Acknowledge so Xendit doesn't retry indefinitely.
     return NextResponse.json({ received: true, note: "unrecognized payload shape" });
   }
 
@@ -88,7 +98,6 @@ export async function POST(request: NextRequest) {
         : undefined;
   const amountCents = typeof rawAmount === "number" ? xenditAmountToCents(rawAmount) : 0;
 
-  const admin = createSupabaseAdminClient();
   const { error } = await admin.rpc("process_xendit_webhook", {
     p_reference_id: referenceId,
     p_xendit_payment_request_id: data.payment_request_id ?? "",
