@@ -15,6 +15,7 @@ import {
 import {
   advanceOrderStatusSchema,
   cancelOrderSchema,
+  recordShipmentSchema,
 } from "@/features/orders/schemas/order.schema";
 import type { Order } from "@/features/orders/types/order.types";
 
@@ -94,16 +95,36 @@ export async function cancelOrderAction(
   }
 }
 
+/** Revalidates every surface that renders an order's status/tracking. */
+function revalidateOrderSurfaces(orderId: string): void {
+  revalidatePath(ROUTES.adminOrders, "layout");
+  revalidatePath(ROUTES.adminOrderDetail(orderId), "layout");
+  revalidatePath(ROUTES.sellerOrders, "layout");
+  revalidatePath(ROUTES.sellerOrderDetail(orderId), "layout");
+  revalidatePath(ROUTES.orderDetail(orderId), "layout");
+  revalidatePath(ROUTES.orders, "layout");
+}
+
 /**
- * Advances (or cancels) an order's fulfilment status from the dashboard.
- * One action for both: cancelling is just another legal transition target
- * per `ORDER_STATUS_TRANSITIONS`. Revalidates the dashboard list/detail *and*
- * the buyer-facing detail page, so the buyer's already-rendered order view
- * doesn't show a stale status.
+ * Advances (or cancels) an order's fulfilment status from the dashboard — the
+ * single user-facing status write path. One action for every transition:
+ *
+ *  - `shipped`: requires `shipment` (courier + tracking). Routes to the
+ *    `record_order_shipment` RPC, which saves tracking **and** flips the
+ *    status to `shipped` atomically. No parallel shipment action exists.
+ *  - `processing`: after advancing, records a `packed_at` audit timestamp
+ *    (the To Pack item-verification gate is enforced in the UI + the fact
+ *    that only a `confirmed` order can transition here).
+ *  - everything else (`confirmed`, `delivered`, `cancelled`): the existing
+ *    `advanceOrderStatus` path unchanged.
+ *
+ * Revalidates the dashboard list/detail *and* the buyer-facing detail page so
+ * neither side shows a stale status/tracking.
  */
 export async function advanceOrderStatusAction(
   orderId: string,
   newStatus: string,
+  shipment?: { courier: string; trackingNumber: string },
 ): Promise<ActionResult<Order>> {
   const parsed = advanceOrderStatusSchema.safeParse({ orderId, newStatus });
   if (!parsed.success) return fromZodError(parsed.error);
@@ -111,6 +132,30 @@ export async function advanceOrderStatusAction(
   try {
     const user = await queries.requireRole(DASHBOARD_ROLES);
     await queries.requireRateLimit(`advanceOrderStatus:${user.id}`, 30, 60);
+
+    // Shipped carries tracking data and must save it atomically with the
+    // status flip — handled by the record_order_shipment RPC.
+    if (parsed.data.newStatus === "shipped") {
+      const parsedShipment = recordShipmentSchema.safeParse({
+        orderId,
+        courier: shipment?.courier,
+        trackingNumber: shipment?.trackingNumber,
+      });
+      if (!parsedShipment.success) return fromZodError(parsedShipment.error);
+
+      await queries.recordOrderShipment(
+        parsedShipment.data.orderId,
+        parsedShipment.data.courier,
+        parsedShipment.data.trackingNumber,
+      );
+      const order = await queries.getDashboardOrder(
+        parsed.data.orderId,
+        user.role === USER_ROLES.admin ? null : user.id,
+      );
+      if (!order) return fail("Could not load the updated order.");
+      revalidateOrderSurfaces(order.id);
+      return ok(order);
+    }
 
     if (parsed.data.newStatus === "cancelled") {
       const blocked = await blockCancellationIfXenditUnresolved(parsed.data.orderId);
@@ -124,12 +169,14 @@ export async function advanceOrderStatusAction(
       parsed.data.newStatus,
       user.role === USER_ROLES.admin ? null : user.id,
     );
-    revalidatePath(ROUTES.adminOrders, "layout");
-    revalidatePath(ROUTES.adminOrderDetail(order.id), "layout");
-    revalidatePath(ROUTES.sellerOrders, "layout");
-    revalidatePath(ROUTES.sellerOrderDetail(order.id), "layout");
-    revalidatePath(ROUTES.orderDetail(order.id), "layout");
-    revalidatePath(ROUTES.orders, "layout");
+
+    // Ready for Pickup: record the packing audit timestamp (advisory; the
+    // transition above is the authoritative state change).
+    if (parsed.data.newStatus === "processing") {
+      await queries.markOrderPacked(order.id, order.sellerId);
+    }
+
+    revalidateOrderSurfaces(order.id);
     return ok(order);
   } catch (error) {
     return fail(

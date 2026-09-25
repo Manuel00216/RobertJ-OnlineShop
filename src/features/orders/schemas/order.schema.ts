@@ -43,6 +43,26 @@ export const advanceOrderStatusSchema = z.object({
   newStatus: orderStatusSchema,
 });
 
+/**
+ * Courier + tracking captured at "Mark as shipped". Manual entry only (no
+ * courier API) — validated at the action boundary and again inside the
+ * `record_order_shipment` RPC. Lengths mirror the DB CHECK constraints.
+ */
+export const recordShipmentSchema = z.object({
+  orderId: uuidSchema,
+  courier: z
+    .string()
+    .trim()
+    .min(1, "Please enter the courier.")
+    .max(80, "Courier name must be 80 characters or fewer."),
+  trackingNumber: z
+    .string()
+    .trim()
+    .min(1, "Please enter the tracking number.")
+    .max(120, "Tracking number must be 120 characters or fewer."),
+});
+
 export type BuyerOrderListParamsInput = z.input<typeof buyerOrderListParamsSchema>;
 export type CancelOrderInput = z.infer<typeof cancelOrderSchema>;
 export type AdvanceOrderStatusInput = z.infer<typeof advanceOrderStatusSchema>;
+export type RecordShipmentInput = z.infer<typeof recordShipmentSchema>;

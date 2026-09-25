@@ -59,6 +59,7 @@ import {
 import type {
   Order,
   OrderListParams,
+  OrderShipment,
   OrderSummary,
   ShippingAddress,
 } from "@/features/orders/types/order.types";
@@ -2119,6 +2120,102 @@ export async function advanceOrderStatus(
   }
 
   return toOrder(data as OrderRowWithItems);
+}
+
+// ---------------------------------------------------------------------------
+// Order shipments (seller fulfillment: manual courier/tracking, one per order)
+// ---------------------------------------------------------------------------
+
+/** Maps an `order_shipments` row to the camelCase domain model. */
+function toOrderShipment(row: {
+  order_id: string;
+  courier: string | null;
+  tracking_number: string | null;
+  packed_at: string | null;
+}): OrderShipment {
+  return {
+    orderId: row.order_id,
+    courier: row.courier,
+    trackingNumber: row.tracking_number,
+    packedAt: row.packed_at,
+  };
+}
+
+/**
+ * The shipment/tracking record for one order, or null if none exists yet
+ * (e.g. an older order shipped before this feature, or one not yet packed).
+ * RLS scopes visibility to the order's buyer, its seller, or an admin — so
+ * this is safe to call from both the buyer and dashboard order-detail pages.
+ */
+export async function getOrderShipment(
+  orderId: string,
+): Promise<OrderShipment | null> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.ORDER_SHIPMENTS)
+    .select("order_id, courier, tracking_number, packed_at")
+    .eq("order_id", orderId)
+    .maybeSingle();
+
+  if (error) {
+    throw queryError("Failed to load shipment details", error);
+  }
+  if (!data) return null;
+  return toOrderShipment(data);
+}
+
+/**
+ * Records the `packed_at` audit timestamp when the seller verifies items and
+ * moves an order To Pack → Ready for Pickup. Upserts on `order_id` (one row
+ * per order); RLS restricts writes to the order's seller or an admin. The
+ * transition itself is performed separately by `advanceOrderStatus` — this is
+ * an advisory audit write only, deliberately not atomic with it. `sellerId`
+ * is the order's seller (required to satisfy the insert policy on first pack);
+ * for an admin caller, pass the order's seller_id.
+ */
+export async function markOrderPacked(
+  orderId: string,
+  sellerId: string,
+): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from(DATABASE_TABLES.ORDER_SHIPMENTS)
+    .upsert(
+      { order_id: orderId, seller_id: sellerId, packed_at: new Date().toISOString() },
+      { onConflict: "order_id" },
+    );
+
+  if (error) {
+    throw queryError("Failed to record packing", error);
+  }
+}
+
+/**
+ * Atomically saves courier + tracking and advances a `processing` order to
+ * `shipped`, via the `record_order_shipment` RPC (seller/admin only, ownership
+ * + status + payment re-checked inside). Returns the saved shipment.
+ */
+export async function recordOrderShipment(
+  orderId: string,
+  courier: string,
+  trackingNumber: string,
+): Promise<OrderShipment> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("record_order_shipment", {
+    p_order_id: orderId,
+    p_courier: courier,
+    p_tracking_number: trackingNumber,
+  });
+
+  if (error) {
+    throw new Error(mapPostgresError(error, "Could not mark this order shipped."));
+  }
+  return toOrderShipment(data as {
+    order_id: string;
+    courier: string | null;
+    tracking_number: string | null;
+    packed_at: string | null;
+  });
 }
 
 /** One seller-order to create. `shippingAddress` uses the DB's snake_case keys. */

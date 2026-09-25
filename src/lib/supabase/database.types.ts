@@ -426,6 +426,61 @@ export type Database = {
           },
         ]
       }
+      order_shipments: {
+        Row: {
+          courier: string | null
+          created_at: string
+          id: string
+          order_id: string
+          packed_at: string | null
+          seller_id: string
+          tracking_number: string | null
+          updated_at: string
+        }
+        Insert: {
+          courier?: string | null
+          created_at?: string
+          id?: string
+          order_id: string
+          packed_at?: string | null
+          seller_id: string
+          tracking_number?: string | null
+          updated_at?: string
+        }
+        Update: {
+          courier?: string | null
+          created_at?: string
+          id?: string
+          order_id?: string
+          packed_at?: string | null
+          seller_id?: string
+          tracking_number?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_shipments_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: true
+            referencedRelation: "buyer_order_lifecycle"
+            referencedColumns: ["order_id"]
+          },
+          {
+            foreignKeyName: "order_shipments_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: true
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_shipments_seller_id_fkey"
+            columns: ["seller_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       orders: {
         Row: {
           buyer_id: string
@@ -1956,6 +2011,29 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "payments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      record_order_shipment: {
+        Args: {
+          p_courier: string
+          p_order_id: string
+          p_tracking_number: string
+        }
+        Returns: {
+          courier: string | null
+          created_at: string
+          id: string
+          order_id: string
+          packed_at: string | null
+          seller_id: string
+          tracking_number: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "order_shipments"
           isOneToOne: true
           isSetofReturn: false
         }

@@ -7,13 +7,16 @@ import { ConfirmPanel } from "@/components/ui/confirm-panel";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import type { OrderStatus } from "@/constants/status";
 import { advanceOrderStatusAction } from "@/features/orders/actions/order.actions";
+import { ItemVerificationChecklist } from "@/features/orders/components/ItemVerificationChecklist";
+import { ShipmentCaptureForm } from "@/features/orders/components/ShipmentCaptureForm";
 import { ORDER_STATUS_TRANSITIONS } from "@/features/orders/constants/order.constants";
+import type { OrderItem } from "@/features/orders/types/order.types";
 import { cn } from "@/lib/utils/cn";
 
 /** Action-verb phrasing for the forward-advancement button (a noun-phrase status label reads awkwardly as a call-to-action). */
 const ADVANCE_LABELS: Partial<Record<OrderStatus, string>> = {
   confirmed: "Confirm order",
-  processing: "Mark ready for pickup",
+  processing: "Verify items",
   shipped: "Mark as shipped",
   delivered: "Mark as delivered",
 };
@@ -22,6 +25,10 @@ export interface OrderStatusControlProps {
   orderId: string;
   orderNumber: string;
   status: OrderStatus;
+  /** Order lines, used by the To Pack item-verification checklist. */
+  items: OrderItem[];
+  /** Themed (dashboard portal) vs. the buyer light surface — passed to the sub-panels. */
+  themed?: boolean;
   /**
    * True when this is a Xendit order whose payment hasn't succeeded yet —
    * mirrors the server-side guard in `queries.advanceOrderStatus()`. Blocks
@@ -33,17 +40,21 @@ export interface OrderStatusControlProps {
 }
 
 /**
- * Seller/admin fulfilment control for the dashboard order detail page —
- * mirrors `CancelOrderButton`'s confirm/transition/focus-management shape,
- * but driven by `ORDER_STATUS_TRANSITIONS` instead of a single hardcoded
- * target. Offers the next forward step (if any) and, separately,
- * cancellation (if still legal) — both go through the same
- * `advanceOrderStatusAction`, so there's one write path, not two.
+ * Seller/admin fulfilment control for the dashboard order detail page — the
+ * single contextual status action (no parallel status control exists). Driven
+ * by `ORDER_STATUS_TRANSITIONS`, it offers the next forward step and, for two
+ * steps, the data/verification it needs before that step:
+ *  - To Pack → Ready for Pickup: an item-verification checklist gate.
+ *  - Ready for Pickup → Shipped: a courier/tracking capture form (saved
+ *    atomically with the transition via `advanceOrderStatusAction`).
+ * Cancellation (if still legal) goes through the same action — one write path.
  */
 export function OrderStatusControl({
   orderId,
   orderNumber,
   status,
+  items,
+  themed = false,
   paymentRequired = false,
 }: OrderStatusControlProps) {
   const allowed = ORDER_STATUS_TRANSITIONS[status];
@@ -52,23 +63,32 @@ export function OrderStatusControl({
   const blockedByPayment = paymentRequired && nextStatus !== null;
 
   const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [capturingShipment, setCapturingShipment] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const triggerRef = useRef<HTMLButtonElement>(null);
 
-  function advance(target: OrderStatus) {
+  function advance(
+    target: OrderStatus,
+    shipment?: { courier: string; trackingNumber: string },
+  ) {
     setError(null);
     startTransition(async () => {
-      const result = await advanceOrderStatusAction(orderId, target);
+      const result = await advanceOrderStatusAction(orderId, target, shipment);
       if (!result.success) {
         setError(result.error);
         return;
       }
       if (target === "cancelled") setConfirmingCancel(false);
+      if (target === "processing") setVerifying(false);
+      if (target === "shipped") setCapturingShipment(false);
     });
   }
 
   if (!nextStatus && !canCancel) return null;
+
+  const panelOpen = confirmingCancel || verifying || capturingShipment;
 
   return (
     <div className="flex flex-col gap-3">
@@ -83,30 +103,57 @@ export function OrderStatusControl({
         </p>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        {nextStatus && !blockedByPayment ? (
-          <Button
-            type="button"
-            variant="primary"
-            size="rjSm"
-            isLoading={isPending}
-            onClick={() => advance(nextStatus)}
-          >
-            {ADVANCE_LABELS[nextStatus] ?? `Mark as ${nextStatus}`}
-          </Button>
-        ) : null}
+      {!panelOpen ? (
+        <div className="flex flex-wrap gap-2">
+          {nextStatus && !blockedByPayment ? (
+            <Button
+              type="button"
+              variant="primary"
+              size="rjSm"
+              isLoading={isPending}
+              onClick={() => {
+                if (nextStatus === "processing") setVerifying(true);
+                else if (nextStatus === "shipped") setCapturingShipment(true);
+                else advance(nextStatus);
+              }}
+            >
+              {ADVANCE_LABELS[nextStatus] ?? `Mark as ${nextStatus}`}
+            </Button>
+          ) : null}
 
-        {canCancel && !confirmingCancel ? (
-          <button
-            type="button"
-            ref={triggerRef}
-            className={cn(buttonVariants({ variant: "outline", size: "rjSm" }))}
-            onClick={() => setConfirmingCancel(true)}
-          >
-            Cancel order
-          </button>
-        ) : null}
-      </div>
+          {canCancel ? (
+            <button
+              type="button"
+              ref={triggerRef}
+              className={cn(buttonVariants({ variant: "outline", size: "rjSm" }))}
+              onClick={() => setConfirmingCancel(true)}
+            >
+              Cancel order
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {verifying ? (
+        <ItemVerificationChecklist
+          items={items}
+          isPending={isPending}
+          themed={themed}
+          onConfirm={() => advance("processing")}
+          onCancel={() => setVerifying(false)}
+        />
+      ) : null}
+
+      {capturingShipment ? (
+        <ShipmentCaptureForm
+          isPending={isPending}
+          themed={themed}
+          onSubmit={(courier, trackingNumber) =>
+            advance("shipped", { courier, trackingNumber })
+          }
+          onCancel={() => setCapturingShipment(false)}
+        />
+      ) : null}
 
       {confirmingCancel ? (
         <ConfirmPanel

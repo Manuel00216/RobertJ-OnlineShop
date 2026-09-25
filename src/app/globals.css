@@ -293,3 +293,29 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/*
+ * Print isolation for the seller shipping label. When printing, hide every
+ * surface (including the seller portal chrome, which lives in a parent layout
+ * this page can't edit) except the element marked `data-print-root`. Keeps the
+ * label chrome-free without touching the shared layout. Screen view is
+ * unaffected. `.no-print` opts specific on-screen controls out of the printout.
+ */
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+  [data-print-root],
+  [data-print-root] * {
+    visibility: visible !important;
+  }
+  [data-print-root] {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+  .no-print {
+    display: none !important;
+  }
+}

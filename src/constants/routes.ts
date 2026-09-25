@@ -52,6 +52,7 @@ export const ROUTES = {
   sellerInventory: "/seller/inventory",
   sellerOrders: "/seller/orders",
   sellerOrderDetail: (id: string) => `/seller/orders/${id}`,
+  sellerOrderLabel: (id: string) => `/seller/orders/${id}/label`,
   sellerPayments: "/seller/payments",
   sellerReports: "/seller/reports",
   notifications: "/notifications",

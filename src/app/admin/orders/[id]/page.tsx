@@ -61,6 +61,8 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
         orderId={order.id}
         orderNumber={order.orderNumber}
         status={order.status}
+        items={order.items}
+        themed
         paymentRequired={paymentRequired}
       />
 

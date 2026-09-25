@@ -14,6 +14,7 @@ import { OrderSummary } from "@/features/orders/components/OrderSummary";
 import { OrderTimeline } from "@/features/orders/components/OrderTimeline";
 import { PaymentStatusBadge } from "@/features/orders/components/PaymentStatusBadge";
 import { SellerShopRow } from "@/features/orders/components/SellerShopRow";
+import { ShipmentTrackingCard } from "@/features/orders/components/ShipmentTrackingCard";
 import { paymentMethodLabel } from "@/features/orders/utils/payment-method-label";
 import { RequestReturnPanel } from "@/features/returns/components/RequestReturnPanel";
 import { ReturnRequestStatusCard } from "@/features/returns/components/ReturnRequestStatusCard";
@@ -21,6 +22,7 @@ import {
   getActivePaymentForOrder,
   getBuyerOrder,
   getOrderIdsForCheckoutGroup,
+  getOrderShipment,
   getReturnEvidenceSignedUrl,
   getReturnRequestForOrder,
   getShopMembershipBySellerIds,
@@ -127,6 +129,15 @@ export default async function OrderDetailPage({
     ? await getReturnEvidenceSignedUrl(returnRequest.evidencePath).catch(() => null)
     : null;
 
+  // Tracking is only meaningful once shipped; fetched read-only (RLS lets the
+  // buyer see their own order's shipment). Older shipped orders may have no
+  // shipment row — the card handles that gracefully.
+  const showTracking =
+    order.status === ORDER_STATUS.shipped || order.status === ORDER_STATUS.delivered;
+  const shipment = showTracking
+    ? await getOrderShipment(order.id).catch(() => null)
+    : null;
+
   return (
     <article className="flex flex-col gap-8">
       <OrderHeader order={order} />
@@ -137,6 +148,10 @@ export default async function OrderDetailPage({
         ) : null}
         <BuyAgainButton order={order} sellerName={shopName} />
       </div>
+
+      {showTracking ? (
+        <ShipmentTrackingCard shipment={shipment} shippedAt={order.shippedAt} />
+      ) : null}
 
       {needsPayment ? (
         <div className={cn(RJ_CARD, "flex flex-col gap-3 p-5")}>

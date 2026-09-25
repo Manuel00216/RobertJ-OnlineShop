@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { buttonVariants } from "@/components/ui/button";
 import { THEMED_CARD } from "@/components/ui/card";
+import { ROUTES } from "@/constants/routes";
 import { cn } from "@/lib/utils/cn";
 import { OrderHeader } from "@/features/orders/components/OrderHeader";
 import { OrderItemsList } from "@/features/orders/components/OrderItemsList";
@@ -58,12 +61,26 @@ export default async function SellerOrderDetailPage({ params }: SellerOrderDetai
     <article className="flex flex-col gap-8 p-5 lg:p-7">
       <OrderHeader order={order} themed />
       <OrderTimeline status={order.status} themed />
-      <OrderStatusControl
-        orderId={order.id}
-        orderNumber={order.orderNumber}
-        status={order.status}
-        paymentRequired={paymentRequired}
-      />
+      <div className="flex flex-col gap-3">
+        <OrderStatusControl
+          orderId={order.id}
+          orderNumber={order.orderNumber}
+          status={order.status}
+          items={order.items}
+          themed
+          paymentRequired={paymentRequired}
+        />
+        {["processing", "shipped", "delivered"].includes(order.status) ? (
+          <Link
+            href={ROUTES.sellerOrderLabel(order.id)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cn(buttonVariants({ variant: "outline", size: "rjSm" }), "w-fit")}
+          >
+            Print shipping label
+          </Link>
+        ) : null}
+      </div>
 
       {returnRequest ? (
         <div className="flex flex-col gap-3">

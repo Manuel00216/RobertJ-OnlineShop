@@ -45,6 +45,20 @@ export interface OrderItem {
   variantLabel: string | null;
 }
 
+/**
+ * One shipment/tracking record per seller order (`order_shipments`). Written
+ * by the seller/admin only (buyer read-only). `packedAt` is an advisory audit
+ * timestamp set when the seller verifies items and moves To Pack → Ready for
+ * Pickup; `courier`/`trackingNumber` are captured atomically at "Mark as
+ * shipped". The ship date itself lives on `orders.shipped_at`, never here.
+ */
+export interface OrderShipment {
+  orderId: string;
+  courier: string | null;
+  trackingNumber: string | null;
+  packedAt: string | null;
+}
+
 /** Domain model returned by the order service to the rest of the app. */
 export interface Order {
   id: string;
