@@ -217,8 +217,8 @@ export function UserRow({ user, shops }: UserRowProps) {
             }
             description={
               user.isActive
-                ? "They'll be signed out and unable to sign in, place orders, or manage their shop. Their order history, products, and shop data are kept — nothing is deleted."
-                : "They'll be able to sign in and perform actions again."
+                ? "They'll immediately lose the ability to place orders, manage their shop, or perform any account action — any active session stops working the moment they try to act. Their order history, products, and shop data are kept — nothing is deleted."
+                : "They'll be able to perform actions again."
             }
             tone={user.isActive ? "danger" : "neutral"}
             confirmLabel={user.isActive ? "Deactivate" : "Reactivate"}
