@@ -37,5 +37,35 @@ export async function updateSupabaseSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  return { response, user };
+  return {
+    response,
+    user,
+    /**
+     * Whether the signed-in account is active. `is_active` isn't carried in the
+     * JWT, so this is a single-column self-row read. It lives here — rather than
+     * in the `queries.ts` service layer — because middleware can't use the
+     * RSC `cookies()`-bound client the service layer relies on; this reuses the
+     * request-bound client already created above. Callers gate this to protected
+     * routes so public traffic never pays for the round-trip. Fails open only
+     * when the row is missing (e.g. mid-signup), mirroring `getSessionUser()`.
+     */
+    async isAccountActive(): Promise<boolean> {
+      if (!user) return true;
+      const { data } = await supabase
+        .from("profiles")
+        .select("is_active")
+        .eq("id", user.id)
+        .maybeSingle();
+      return data?.is_active ?? true;
+    },
+    /**
+     * Ends the session locally (clears the auth cookies; no global network
+     * revoke — the app-layer guards already reject a deactivated account
+     * server-side) and returns the response carrying the cleared cookies.
+     */
+    async signOut(): Promise<NextResponse> {
+      await supabase.auth.signOut({ scope: "local" });
+      return response;
+    },
+  };
 }

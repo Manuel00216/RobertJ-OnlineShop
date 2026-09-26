@@ -55,6 +55,10 @@ const OAUTH_CALLBACK_ERRORS: Record<string, string> = {
   server_error:
     "We couldn't get an email address from that provider. Please confirm an email on your account there, or sign in with Google or your password instead.",
   auth_callback_failed: "Something went wrong finishing sign-in. Please try again.",
+  // Surfaced when a deactivated account is turned away — from the OAuth callback
+  // (E1) or the protected-route session gate in proxy.ts (E2). Mirrors the
+  // password path's copy in signInAction.
+  deactivated: "Your account has been deactivated. Contact support for assistance.",
 };
 
 export function mapOAuthCallbackError(code: string | null): string | null {

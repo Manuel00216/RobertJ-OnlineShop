@@ -28,7 +28,8 @@ export default async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const { response, user } = await updateSupabaseSession(request);
+  const { response, user, isAccountActive, signOut } =
+    await updateSupabaseSession(request);
 
   // Exact-segment matching: "/account" must not match "/accounting".
   const isProtected = PROTECTED_ROUTE_PREFIXES.some(
@@ -40,6 +41,21 @@ export default async function proxy(request: NextRequest) {
     // Preserve the original path + query so post-login lands where the user left off.
     url.searchParams.set("redirectTo", `${pathname}${request.nextUrl.search}`);
     return withSessionCookies(NextResponse.redirect(url), response);
+  }
+
+  // Deactivated existing session: end it cleanly and redirect to sign-in rather
+  // than let the account meet an error boundary on a protected page. The
+  // `is_active` read is gated to protected routes so public/storefront traffic
+  // never pays for it. Server Actions + protected layouts remain the
+  // authoritative boundary; this is the edge-level, defense-in-depth eviction.
+  if (isProtected && user && !(await isAccountActive())) {
+    const clearedResponse = await signOut();
+    const url = request.nextUrl.clone();
+    url.pathname = ROUTES.signIn;
+    // No redirectTo: a deactivated account has nowhere valid to return to.
+    url.search = "";
+    url.searchParams.set("error", "deactivated");
+    return withSessionCookies(NextResponse.redirect(url), clearedResponse);
   }
 
   const isAuthRoute = AUTH_ROUTES.some(

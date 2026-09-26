@@ -2,6 +2,11 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { ROUTES } from "@/constants/routes";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import {
+  getSessionUser,
+  hasRecoverySession,
+  signOut,
+} from "@/lib/supabase/queries";
 import { isInternalPath } from "@/lib/utils/url";
 
 /**
@@ -32,6 +37,21 @@ export async function GET(request: NextRequest) {
     const supabase = await createSupabaseServerClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
+      // Block deactivated accounts here — the same posture `signInAction` takes
+      // for the password path (a freshly exchanged OAuth session is still a
+      // valid Supabase session at this point). Recovery sessions are exempt so
+      // a deactivated account can still complete a password reset via the
+      // reset-password screen; only the normal sign-in landing is blocked.
+      if (!(await hasRecoverySession())) {
+        const user = await getSessionUser();
+        if (user && !user.isActive) {
+          await signOut();
+          return NextResponse.redirect(
+            `${origin}${ROUTES.signIn}?error=deactivated`,
+          );
+        }
+      }
+
       // Only allow same-origin, absolute-path redirects to avoid open redirects
       // (rejects protocol-relative targets like `//evil.com` too).
       const target = isInternalPath(next) ? next : ROUTES.home;
