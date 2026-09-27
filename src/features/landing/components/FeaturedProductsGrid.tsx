@@ -20,12 +20,15 @@ export interface FeaturedProductsGridProps {
   /** Ids of the current user's saved products; empty for a guest. */
   wishlistedProductIds?: readonly string[];
   isAuthenticated?: boolean;
+  /** Guests + buyers can transact; seller/admin browse read-only (hides quick-add + heart). Defaults to true. */
+  canPurchase?: boolean;
 }
 
 function toTileItem(
   view: FeaturedProductView,
   wishlistedIds: ReadonlySet<string>,
   isAuthenticated: boolean,
+  canPurchase: boolean,
 ): ProductTileItem {
   return {
     key: view.key,
@@ -54,6 +57,7 @@ function toTileItem(
       initialSaved: wishlistedIds.has(view.productId),
       isAuthenticated,
     },
+    canPurchase,
   };
 }
 
@@ -61,6 +65,7 @@ export function FeaturedProductsGrid({
   products,
   wishlistedProductIds = [],
   isAuthenticated = false,
+  canPurchase = true,
 }: FeaturedProductsGridProps) {
   const wishlistedIds = useMemo(
     () => new Set(wishlistedProductIds),
@@ -152,7 +157,7 @@ export function FeaturedProductsGrid({
             {filtered.map((item, i) => (
               <ProductTile
                 key={item.key}
-                item={toTileItem(item, wishlistedIds, isAuthenticated)}
+                item={toTileItem(item, wishlistedIds, isAuthenticated, canPurchase)}
                 style={{
                   animation: inView ? `fadeSlideIn 0.5s ease ${i * 60}ms both` : "none",
                 }}

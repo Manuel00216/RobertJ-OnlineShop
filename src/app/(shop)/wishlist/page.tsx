@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
+import { ROUTES } from "@/constants/routes";
+import type { UserRole } from "@/constants/roles";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { CatalogHeader } from "@/features/products/components/CatalogHeader";
 import { ProductGrid } from "@/features/products/components/ProductGrid";
+import { canPurchase } from "@/lib/auth/permissions";
 import { listWishlistProducts, requireSessionUser } from "@/lib/supabase/queries";
 import type { Product } from "@/features/products/types/product.types";
 
@@ -12,6 +16,8 @@ export const metadata: Metadata = { title: "My Wishlist" };
 export default async function WishlistPage() {
   // `proxy.ts` already guards /wishlist; this is the belt-and-suspenders re-check.
   const user = await requireSessionUser();
+  // Wishlist is buyer-only — seller/admin browse the storefront but don't save.
+  if (!canPurchase(user.role as UserRole)) redirect(ROUTES.home);
 
   let products: Product[] = [];
   let loadError = false;

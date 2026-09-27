@@ -23,6 +23,13 @@ export interface ProductQuantityAndAddToCartProps {
   variants: ProductVariant[];
   /** variantId -> live stock, from `getVariantStock`. A missing id has 0 stock. */
   variantStock: Record<string, number>;
+  /**
+   * Whether the viewer may transact. Defaults to `true` (guests + buyers).
+   * `false` for seller/admin — the variant selectors and stock still render
+   * (read-only browsing), but Add to Cart / Buy Now / Wishlist are hidden,
+   * mirroring the server/RLS purchase block.
+   */
+  canPurchase?: boolean;
 }
 
 function uniqueInOrder(values: (string | null)[]): string[] {
@@ -53,6 +60,7 @@ export function ProductQuantityAndAddToCart({
   shopName,
   variants,
   variantStock,
+  canPurchase = true,
 }: ProductQuantityAndAddToCartProps) {
   const hasVariants = variants.length > 0;
   const colors = useMemo(() => uniqueInOrder(variants.map((v) => v.color)), [variants]);
@@ -240,29 +248,31 @@ export function ProductQuantityAndAddToCart({
           </>
         )}
       </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <AddToCartButton
-          product={product}
-          quantity={clampedQuantity}
-          buttonVariant="rj"
-          className="w-full sm:w-auto"
-          sellerName={shopName}
-          variant={variantInfo}
-        />
-        <BuyNowButton
-          product={product}
-          quantity={clampedQuantity}
-          className="w-full sm:w-auto"
-          sellerName={shopName}
-          variant={variantInfo}
-        />
-        <WishlistButton
-          productId={wishlist.productId}
-          initialSaved={wishlist.initialSaved}
-          isAuthenticated={wishlist.isAuthenticated}
-          variant="pdp"
-        />
-      </div>
+      {canPurchase ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <AddToCartButton
+            product={product}
+            quantity={clampedQuantity}
+            buttonVariant="rj"
+            className="w-full sm:w-auto"
+            sellerName={shopName}
+            variant={variantInfo}
+          />
+          <BuyNowButton
+            product={product}
+            quantity={clampedQuantity}
+            className="w-full sm:w-auto"
+            sellerName={shopName}
+            variant={variantInfo}
+          />
+          <WishlistButton
+            productId={wishlist.productId}
+            initialSaved={wishlist.initialSaved}
+            isAuthenticated={wishlist.isAuthenticated}
+            variant="pdp"
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

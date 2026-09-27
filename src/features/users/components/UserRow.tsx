@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+import Link from "next/link";
 import { useRef, useState, useTransition } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +10,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ConfirmPanel } from "@/components/ui/confirm-panel";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { ROLE_LABELS, USER_ROLES, type UserRole } from "@/constants/roles";
-import { assignSellerShopAction, setUserActiveAction } from "@/features/users/actions/user.actions";
+import { ROUTES } from "@/constants/routes";
+import {
+  assignSellerShopAction,
+  demoteSellerToBuyerAction,
+  setUserActiveAction,
+} from "@/features/users/actions/user.actions";
 import type { AdminUser } from "@/features/users/types/user.types";
 import type { Shop } from "@/features/shops/types/shop.types";
 import { cn } from "@/lib/utils/cn";
@@ -25,6 +32,8 @@ export interface UserRowProps {
   user: AdminUser;
   /** Active shops for the assign dropdown — only admins fetch this, matching the Products/Inventory admin shop-picker precedent. */
   shops: Shop[];
+  /** True if this buyer has an order in a non-terminal state (M2) — shown as a non-blocking warning before promotion, never used to disable the action. */
+  hasActiveOrders?: boolean;
 }
 
 /**
@@ -34,7 +43,7 @@ export interface UserRowProps {
  * reassigns via one atomic action, mirroring `CancelOrderButton`'s
  * confirm-panel shape.
  */
-export function UserRow({ user, shops }: UserRowProps) {
+export function UserRow({ user, shops, hasActiveOrders = false }: UserRowProps) {
   const [assigning, setAssigning] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [selectedShopId, setSelectedShopId] = useState("");
@@ -46,13 +55,27 @@ export function UserRow({ user, shops }: UserRowProps) {
   const [isActivePending, startActiveTransition] = useTransition();
   const activeTriggerRef = useRef<HTMLButtonElement>(null);
 
+  const [confirmingDemote, setConfirmingDemote] = useState(false);
+  const [demoteError, setDemoteError] = useState<string | null>(null);
+  const [isDemotePending, startDemoteTransition] = useTransition();
+  const demoteTriggerRef = useRef<HTMLButtonElement>(null);
+
+  const [avatarFailed, setAvatarFailed] = useState(false);
+
   // A deactivated admin account is a lockout risk the RPC itself refuses
   // (admin_set_user_active rejects any role='admin' target) — hide the
   // control entirely rather than show one that will always fail.
   const canDeactivate = user.role !== USER_ROLES.admin;
   const canAssignShop = user.role !== USER_ROLES.admin;
-  const actionLabel = user.role === USER_ROLES.buyer ? "Promote to Seller" : "Reassign shop";
+  const isPromotingBuyer = user.role === USER_ROLES.buyer;
+  // M3: only a seller is a valid demotion target — the RPC itself rejects
+  // anything else, this just avoids showing a control that would always fail.
+  const canDemote = user.role === USER_ROLES.seller;
+  const actionLabel = isPromotingBuyer ? "Promote to Seller" : "Reassign shop";
+  // M2: advisory only — the RPC still allows the promotion either way.
+  const showActiveOrdersWarning = isPromotingBuyer && hasActiveOrders;
   const selectedShop = shops.find((shop) => shop.id === selectedShopId);
+  const avatarUrl = !avatarFailed ? user.avatarUrl : null;
 
   function handleConfirm() {
     if (!selectedShopId) return;
@@ -66,6 +89,18 @@ export function UserRow({ user, shops }: UserRowProps) {
       setConfirming(false);
       setAssigning(false);
       setSelectedShopId("");
+    });
+  }
+
+  function handleConfirmDemote() {
+    setDemoteError(null);
+    startDemoteTransition(async () => {
+      const result = await demoteSellerToBuyerAction(user.id);
+      if (!result.success) {
+        setDemoteError(result.error);
+        return;
+      }
+      setConfirmingDemote(false);
     });
   }
 
@@ -86,14 +121,29 @@ export function UserRow({ user, shops }: UserRowProps) {
       <CardContent className="flex flex-col gap-3 p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold text-foreground">
-              {getInitials(user.fullName ?? user.email ?? "?")}
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-xs font-bold text-foreground">
+              {avatarUrl ? (
+                <Image
+                  src={avatarUrl}
+                  alt=""
+                  width={40}
+                  height={40}
+                  unoptimized
+                  className="h-full w-full object-cover"
+                  onError={() => setAvatarFailed(true)}
+                />
+              ) : (
+                getInitials(user.fullName ?? user.email ?? "?")
+              )}
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <p className="truncate text-sm font-semibold text-foreground">
+                <Link
+                  href={ROUTES.adminUserDetail(user.id)}
+                  className="truncate rounded-sm text-sm font-semibold text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+                >
                   {user.fullName ?? user.username ?? "Unnamed user"}
-                </p>
+                </Link>
                 <Badge tone={ROLE_TONE[user.role]}>{ROLE_LABELS[user.role]}</Badge>
                 {user.isActive ? null : <Badge tone="danger">Inactive</Badge>}
               </div>
@@ -117,6 +167,17 @@ export function UserRow({ user, shops }: UserRowProps) {
               )
             ) : null}
 
+            {canDemote && !confirmingDemote ? (
+              <button
+                type="button"
+                ref={demoteTriggerRef}
+                className={cn(buttonVariants({ variant: "outline", size: "rjSm" }))}
+                onClick={() => setConfirmingDemote(true)}
+              >
+                Demote to Buyer
+              </button>
+            ) : null}
+
             {canDeactivate && !confirmingActiveChange ? (
               <button
                 type="button"
@@ -133,6 +194,19 @@ export function UserRow({ user, shops }: UserRowProps) {
         </div>
 
         {error ? <ErrorState title="Couldn't assign the shop" message={error} /> : null}
+
+        {assigning && showActiveOrdersWarning ? (
+          <div
+            role="status"
+            className="rounded-2xl border border-warning/40 bg-warning/10 p-4 text-xs text-warning"
+          >
+            <p className="font-semibold">This buyer has an order in progress.</p>
+            <p className="mt-0.5 text-warning/90">
+              Promoting them won&apos;t cancel or transfer it — it stays in their buyer order
+              history as-is. You can still proceed.
+            </p>
+          </div>
+        ) : null}
 
         {assigning ? (
           <div className="rounded-2xl border border-border bg-muted p-4">
@@ -183,7 +257,9 @@ export function UserRow({ user, shops }: UserRowProps) {
                   }
                   description={
                     user.role === USER_ROLES.buyer
-                      ? "They'll gain seller dashboard access, scoped to this shop only."
+                      ? showActiveOrdersWarning
+                        ? "They'll gain seller dashboard access, scoped to this shop only. They still have an order in progress — it's unaffected and stays in their buyer order history."
+                        : "They'll gain seller dashboard access, scoped to this shop only."
                       : "Their previous shop membership will be removed."
                   }
                   tone="neutral"
@@ -197,6 +273,25 @@ export function UserRow({ user, shops }: UserRowProps) {
               </div>
             ) : null}
           </div>
+        ) : null}
+
+        {demoteError ? (
+          <ErrorState title="Couldn't demote this seller" message={demoteError} />
+        ) : null}
+
+        {confirmingDemote ? (
+          <ConfirmPanel
+            label={`Demote ${user.fullName ?? user.email} to Buyer`}
+            title={`Demote ${user.fullName ?? user.email} to Buyer?`}
+            description="They'll immediately lose seller portal access and their shop assignment will be removed. Their existing products, shop, and order history are kept — nothing is deleted. This can be reversed later by promoting them back to Seller."
+            tone="danger"
+            confirmLabel="Demote to Buyer"
+            pendingLabel="Saving…"
+            isPending={isDemotePending}
+            triggerRef={demoteTriggerRef}
+            onConfirm={handleConfirmDemote}
+            onCancel={() => setConfirmingDemote(false)}
+          />
         ) : null}
 
         {activeError ? (

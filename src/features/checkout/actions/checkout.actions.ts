@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { ROUTES } from "@/constants/routes";
+import { USER_ROLES } from "@/constants/roles";
 import { CHECKOUT_CONSTANTS } from "@/features/checkout/constants/checkout.constants";
 import { placeOrderSchema } from "@/features/checkout/schemas/checkout.schema";
 import type {
@@ -69,8 +70,10 @@ export async function placeOrderAction(
   if (!parsed.success) return fromZodError(parsed.error);
 
   try {
-    // Throws when unauthenticated — the action never trusts the client.
-    const user = await queries.requireSessionUser();
+    // Strict role separation: only buyers may purchase. Throws when
+    // unauthenticated or when a seller/admin attempts checkout (the DB's
+    // create_order guard + orders INSERT RLS are the authoritative backstop).
+    const user = await queries.requireRole([USER_ROLES.buyer]);
     // Throttle order creation per buyer, matching the other order mutations
     // (cancel/advance). Guards against order-spam and repeated stock-lock churn.
     await queries.requireRateLimit(`placeOrder:${user.id}`, 10, 60);

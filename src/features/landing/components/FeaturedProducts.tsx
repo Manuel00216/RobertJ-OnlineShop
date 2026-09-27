@@ -1,5 +1,6 @@
-import { USER_ROLES } from "@/constants/roles";
+import { USER_ROLES, type UserRole } from "@/constants/roles";
 import { ROUTES } from "@/constants/routes";
+import { canPurchase } from "@/lib/auth/permissions";
 import { FeaturedProductsGrid } from "@/features/landing/components/FeaturedProductsGrid";
 import type { FeaturedProductView } from "@/features/landing/types/landing.types";
 import { getCoverImage } from "@/features/products/types/product.types";
@@ -85,6 +86,7 @@ export async function FeaturedProducts() {
           products={views}
           wishlistedProductIds={wishlistedProductIds}
           isAuthenticated={user !== null}
+          canPurchase={user === null || canPurchase(user.role as UserRole)}
         />
       </div>
     </section>

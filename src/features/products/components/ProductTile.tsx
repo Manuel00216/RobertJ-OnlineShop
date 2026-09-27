@@ -49,6 +49,14 @@ export interface ProductTileItem {
   /** Wishlist heart payload; null hides the button entirely (e.g. a
    * marketing placeholder with no real product behind it yet). */
   wishlist: WishlistState | null;
+  /**
+   * Whether the viewer may transact. Defaults to `true` (guests + buyers).
+   * Set `false` for seller/admin so the quick-add and wishlist heart are
+   * hidden — they browse the storefront but can't purchase (UX mirror of the
+   * server/RLS block). Storefront browsing (image, name, price, link) is
+   * unaffected.
+   */
+  canPurchase?: boolean;
 }
 
 export interface ProductTileProps {
@@ -163,7 +171,7 @@ export function ProductTile({ item, style }: ProductTileProps) {
         </div>
 
         <div className="absolute right-3 top-3 flex flex-col items-end gap-1.5">
-          {item.wishlist ? (
+          {item.wishlist && item.canPurchase !== false ? (
             <WishlistButton
               productId={item.wishlist.productId}
               initialSaved={item.wishlist.initialSaved}
@@ -178,9 +186,10 @@ export function ProductTile({ item, style }: ProductTileProps) {
           ) : null}
         </div>
 
-        {/* Quick add — hidden once sold out; falls back to routing to the
-            catalog for marketing placeholders with no real product behind them. */}
-        {!isOutOfStock ? (
+        {/* Quick add — hidden once sold out, and hidden entirely for
+            seller/admin (canPurchase === false), who browse but can't buy;
+            falls back to routing to the catalog for marketing placeholders. */}
+        {!isOutOfStock && item.canPurchase !== false ? (
           <div
             className={`absolute inset-x-0 bottom-0 p-3 transition-all duration-300 ${
               hovered ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0"

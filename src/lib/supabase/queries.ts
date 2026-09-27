@@ -23,11 +23,11 @@ import {
   createSupabaseServerClient,
 } from "@/lib/supabase/server";
 import { mapPostgresError } from "@/lib/supabase/postgres-errors";
-import { queryError, rpcError } from "@/lib/supabase/query-error";
+import { curatedRpcError, queryError, rpcError } from "@/lib/supabase/query-error";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { slugify } from "@/lib/utils/format";
 import { toCents } from "@/lib/utils/currency";
-import { toRange, type PaginatedResult } from "@/types/pagination.types";
+import { toRange, type PaginatedResult, type PaginationParams } from "@/types/pagination.types";
 import type { SessionUser } from "@/types/common.types";
 import type {
   CreateProductInput,
@@ -47,6 +47,7 @@ import type {
   RecommendationRule,
 } from "@/features/assistant/types/assistant.types";
 import {
+  ACTIVE_ORDER_STATUSES,
   CANCELLABLE_ORDER_STATUSES,
   ORDER_STATUS_FLOW,
   ORDER_STATUS_TRANSITIONS,
@@ -1986,16 +1987,31 @@ export async function listDashboardOrders(
  * own "orders are NOT touched here" notes) — this mirrors the existing RLS
  * boundary exactly rather than expanding or narrowing it.
  */
+/**
+ * `owner`: `null` = admin (no filter, sees every order); otherwise scoped to
+ * the caller's own orders OR their shop's orders, matching
+ * `listDashboardProducts`'s owner-filter shape — a reassigned shop manager
+ * inherits access to the shop's historical orders (attributed to a
+ * different, possibly former, seller_id) via the shop_id branch, without
+ * rewriting seller_id.
+ */
 export const getDashboardOrder = cache(
-  async (orderId: string, sellerId: string | null): Promise<Order | null> => {
+  async (
+    orderId: string,
+    owner: { sellerId: string; shopId: string | null } | null,
+  ): Promise<Order | null> => {
     const supabase = await createSupabaseServerClient();
     let query = supabase
       .from(DATABASE_TABLES.ORDERS)
       .select(ORDER_COLUMNS)
       .eq("id", orderId);
 
-    if (sellerId) {
-      query = query.eq("seller_id", sellerId);
+    if (owner) {
+      query = query.or(
+        owner.shopId
+          ? `seller_id.eq.${owner.sellerId},shop_id.eq.${owner.shopId}`
+          : `seller_id.eq.${owner.sellerId}`,
+      );
     }
 
     const { data, error } = await query.maybeSingle();
@@ -2007,6 +2023,41 @@ export const getDashboardOrder = cache(
     return data ? toOrder(data as OrderRowWithItems) : null;
   },
 );
+
+/**
+ * Resolves an order's id from its `order_number` (exact match), scoped to the
+ * seller/shop for non-admins. Used by the barcode scanner to open the
+ * seller's own order after decoding — read-only, returns only the id (never
+ * row data), and `null` for a nonexistent OR non-owned order so the caller
+ * can show one generic, non-enumerating message. RLS backs the scoping too.
+ * `owner`: same shape as `getDashboardOrder`.
+ */
+export async function getDashboardOrderByNumber(
+  orderNumber: string,
+  owner: { sellerId: string; shopId: string | null } | null,
+): Promise<{ id: string } | null> {
+  const supabase = await createSupabaseServerClient();
+  let query = supabase
+    .from(DATABASE_TABLES.ORDERS)
+    .select("id")
+    .eq("order_number", orderNumber);
+
+  if (owner) {
+    query = query.or(
+      owner.shopId
+        ? `seller_id.eq.${owner.sellerId},shop_id.eq.${owner.shopId}`
+        : `seller_id.eq.${owner.sellerId}`,
+    );
+  }
+
+  const { data, error } = await query.maybeSingle();
+
+  if (error) {
+    throw queryError("Failed to look up order", error);
+  }
+
+  return data ? { id: data.id } : null;
+}
 
 /**
  * Advances (or cancels) an order's fulfilment status from the dashboard.
@@ -2030,23 +2081,29 @@ export const getDashboardOrder = cache(
  * actually `payment_method_type = 'xendit'`.
  */
 /**
- * `sellerId`: the caller's own id for a non-admin request (`null` = admin,
- * no extra filter). Orders aren't shop-scoped, so unlike the product
- * functions above this is a plain equality filter, not an OR. Defense-in-
- * depth alongside RLS — see the 2026-08-20 audit.
+ * `owner`: the caller's own scope for a non-admin request (`null` = admin,
+ * no extra filter) — same shape as `getDashboardOrder`'s, letting a
+ * reassigned shop manager advance a shop order they didn't originally sell.
+ * Defense-in-depth alongside RLS — see the 2026-08-20 audit.
  */
 export async function advanceOrderStatus(
   orderId: string,
   newStatus: OrderStatus,
-  sellerId: string | null,
+  owner: { sellerId: string; shopId: string | null } | null,
 ): Promise<Order> {
   const supabase = await createSupabaseServerClient();
+
+  const ownerFilter = owner
+    ? owner.shopId
+      ? `seller_id.eq.${owner.sellerId},shop_id.eq.${owner.shopId}`
+      : `seller_id.eq.${owner.sellerId}`
+    : null;
 
   let readQuery = supabase
     .from(DATABASE_TABLES.ORDERS)
     .select("order_status, payment_status")
     .eq("id", orderId);
-  if (sellerId) readQuery = readQuery.eq("seller_id", sellerId);
+  if (ownerFilter) readQuery = readQuery.or(ownerFilter);
 
   const { data: existing, error: readError } = await readQuery.maybeSingle();
 
@@ -2097,7 +2154,7 @@ export async function advanceOrderStatus(
     newStatus === "cancelled"
       ? {
           cancelled_at: new Date().toISOString(),
-          cancelled_by: (sellerId ? "seller" : "admin") as "seller" | "admin",
+          cancelled_by: (owner ? "seller" : "admin") as "seller" | "admin",
         }
       : {};
 
@@ -2106,7 +2163,7 @@ export async function advanceOrderStatus(
     .update({ order_status: newStatus, ...cancellationFields })
     .eq("id", orderId)
     .eq("order_status", currentStatus);
-  if (sellerId) writeQuery = writeQuery.eq("seller_id", sellerId);
+  if (ownerFilter) writeQuery = writeQuery.or(ownerFilter);
 
   const { data, error } = await writeQuery.select(ORDER_COLUMNS).maybeSingle();
 
@@ -3710,20 +3767,45 @@ function toAdminActionLogEntry(row: AdminActionLogRowWithJoins): AdminActionLogE
  * already gates SELECT to `is_admin()`, matching the "no manual filter"
  * pattern elsewhere in this file). Deliberately narrow: only whatever the
  * opted-in RPCs actually write (`admin_assign_seller_shop`,
- * `admin_set_user_active`, `decide_return`) — this reads what exists, it is
- * not a place to add retroactive logging for unrelated actions.
+ * `admin_demote_seller_to_buyer`, `admin_set_user_active`, `decide_return`)
+ * — this reads what exists, it is not a place to add retroactive logging
+ * for unrelated actions.
+ *
+ * L3: paginated + optionally filtered by `action`, mirroring
+ * `listDashboardOrders`'s exact shape (`{ count: "exact" }` + `.range()`).
+ * Ordering (`created_at desc`) and the underlying records are unchanged —
+ * only how much of the list is fetched at once.
  */
-export async function listAdminActionLog(): Promise<AdminActionLogEntry[]> {
+export async function listAdminActionLog(
+  params: PaginationParams & { action?: string },
+): Promise<PaginatedResult<AdminActionLogEntry>> {
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase
+
+  let query = supabase
     .from(DATABASE_TABLES.ADMIN_ACTION_LOG)
-    .select(ADMIN_ACTION_LOG_COLUMNS)
-    .order("created_at", { ascending: false });
+    .select(ADMIN_ACTION_LOG_COLUMNS, { count: "exact" });
+
+  if (params.action) {
+    query = query.eq("action", params.action);
+  }
+
+  query = query.order("created_at", { ascending: false });
+
+  const { from, to } = toRange(params);
+  const { data, error, count } = await query.range(from, to);
 
   if (error) {
     throw queryError("Failed to load audit log", error);
   }
-  return (data ?? []).map((row) => toAdminActionLogEntry(row as AdminActionLogRowWithJoins));
+
+  const total = count ?? 0;
+  return {
+    items: (data ?? []).map((row) => toAdminActionLogEntry(row as AdminActionLogRowWithJoins)),
+    total,
+    page: params.page,
+    pageSize: params.pageSize,
+    totalPages: Math.max(1, Math.ceil(total / params.pageSize)),
+  };
 }
 
 // ============================================================================
@@ -4182,6 +4264,15 @@ export async function listShopsWithMembers(): Promise<ShopWithMember[]> {
 // ============================================================================
 
 /**
+ * L4: the exact `errcode`s `admin_assign_seller_shop`, `admin_demote_seller_to_buyer`,
+ * and `admin_set_user_active` are documented to `raise exception ... using errcode`
+ * with — see each RPC's own migration. Shared by their three query wrappers below
+ * so `curatedRpcError` only ever surfaces one of these RPCs' own curated business
+ * messages, never an unrelated raw Postgres error.
+ */
+const ADMIN_USER_RPC_SAFE_ERROR_CODES = ["42501", "22023", "P0002"] as const;
+
+/**
  * Every user, admin-only, via the `admin_list_users` RPC — the sole path to
  * see email (never otherwise joinable from `public.profiles`; mirrors
  * `get_my_profile()`'s shape but admin- rather than self-scoped). Authorization
@@ -4211,6 +4302,44 @@ export async function listAdminUsers(): Promise<AdminUser[]> {
 }
 
 /**
+ * Single user for the admin detail/drill-in view (L1). Reuses
+ * `listAdminUsers()` — already admin-gated via the `admin_list_users` RPC —
+ * and finds the match, rather than adding a new by-id RPC: the admin-managed
+ * user list is small, so this keeps the admin-user read surface to the one
+ * existing RPC instead of a second, broader API.
+ */
+export async function getAdminUserById(userId: string): Promise<AdminUser | null> {
+  const users = await listAdminUsers();
+  return users.find((user) => user.id === userId) ?? null;
+}
+
+/**
+ * Which of the given buyer ids currently have an order in a non-terminal
+ * state — used only to warn an admin before promoting a buyer to seller
+ * (M2), never to block it. Scoped to the caller-supplied ids (the current
+ * page of buyers) rather than a full-table scan. Relies on the existing
+ * `orders` SELECT RLS (admin reads every row); no RPC needed.
+ */
+export async function listBuyerIdsWithActiveOrders(
+  buyerIds: string[],
+): Promise<Set<string>> {
+  if (buyerIds.length === 0) return new Set();
+
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.ORDERS)
+    .select("buyer_id")
+    .in("buyer_id", buyerIds)
+    .in("order_status", ACTIVE_ORDER_STATUSES);
+
+  if (error) {
+    throw queryError("Failed to check buyers' active orders", error);
+  }
+
+  return new Set((data ?? []).map((row) => row.buyer_id));
+}
+
+/**
  * Promotes a buyer to seller and/or (re)assigns their shop via the
  * `admin_assign_seller_shop` RPC — the sole write path (no direct UPDATE
  * grant exists for writing another user's `profiles.role`, and RLS never
@@ -4228,7 +4357,36 @@ export async function assignSellerShop(
   });
 
   if (error) {
-    throw rpcError("Could not assign the seller to a shop.", error);
+    // L4: only trust the RPC's own curated codes (42501/22023/P0002) — see
+    // that RPC's `raise ... using errcode` calls — anything else falls
+    // back to a safe generic message instead of leaking raw Postgres text.
+    throw curatedRpcError(
+      "Could not assign the seller to a shop.",
+      error,
+      ADMIN_USER_RPC_SAFE_ERROR_CODES,
+    );
+  }
+}
+
+/**
+ * Reversibly demotes a seller back to buyer via the
+ * `admin_demote_seller_to_buyer` RPC — the sole write path (M3). Atomic:
+ * role change + shop membership removal + audit log row, one transaction.
+ * Never touches products/orders; the RPC itself rejects any non-seller
+ * target.
+ */
+export async function demoteSellerToBuyer(userId: string): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("admin_demote_seller_to_buyer", {
+    p_user_id: userId,
+  });
+
+  if (error) {
+    throw curatedRpcError(
+      "Could not demote this seller to buyer.",
+      error,
+      ADMIN_USER_RPC_SAFE_ERROR_CODES,
+    );
   }
 }
 
@@ -4251,8 +4409,13 @@ export async function setUserActive(
 
   if (error) {
     // admin_set_user_active RAISEs curated messages ("Cannot deactivate an
-    // admin", "You cannot deactivate your own account") — preserve them.
-    throw rpcError("Could not update the user's status.", error);
+    // admin", "You cannot deactivate your own account") — preserve only
+    // those (L4), not any other Postgres error this RPC didn't intend.
+    throw curatedRpcError(
+      "Could not update the user's status.",
+      error,
+      ADMIN_USER_RPC_SAFE_ERROR_CODES,
+    );
   }
 }
 

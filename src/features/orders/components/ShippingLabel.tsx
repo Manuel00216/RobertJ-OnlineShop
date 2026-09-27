@@ -1,4 +1,5 @@
 import { formatDate } from "@/lib/utils/date";
+import { Barcode128 } from "@/features/orders/components/Barcode128";
 import type { Order, OrderShipment } from "@/features/orders/types/order.types";
 
 export interface ShippingLabelProps {
@@ -39,6 +40,9 @@ export function ShippingLabel({ order, shipment, shopName }: ShippingLabelProps)
         </p>
         <p className="text-xl font-bold">{order.orderNumber}</p>
         <p className="text-xs text-gray-600">Placed {formatDate(order.placedAt)}</p>
+        <div className="mt-3">
+          <Barcode128 value={order.orderNumber} />
+        </div>
       </div>
 
       <div className="mt-4 border-t border-gray-300 pt-3">

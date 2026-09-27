@@ -6,6 +6,7 @@ import { ShippingLabel } from "@/features/orders/components/ShippingLabel";
 import {
   getDashboardOrder,
   getOrderShipment,
+  getOwnShopId,
   getShopMembershipBySellerIds,
   requireSessionUser,
 } from "@/lib/supabase/queries";
@@ -19,20 +20,20 @@ export async function generateMetadata({
 }: SellerOrderLabelPageProps): Promise<Metadata> {
   const { id } = await params;
   const user = await requireSessionUser();
-  const order = await getDashboardOrder(id, user.id);
+  const order = await getDashboardOrder(id, { sellerId: user.id, shopId: await getOwnShopId(user.id) });
   return { title: order ? `Label ${order.orderNumber}` : "Label not found" };
 }
 
 /**
- * Seller shipping-label print view. Scoped to the seller's own order via
- * `getDashboardOrder(id, user.id)` (RLS backs this too). The `data-print-root`
- * wrapper is what the print stylesheet keeps; everything else (portal chrome,
- * the print button) is hidden when printing.
+ * Seller shipping-label print view. Scoped to the seller's own order or shop
+ * via `getDashboardOrder(id, owner)` (RLS backs this too). The
+ * `data-print-root` wrapper is what the print stylesheet keeps; everything
+ * else (portal chrome, the print button) is hidden when printing.
  */
 export default async function SellerOrderLabelPage({ params }: SellerOrderLabelPageProps) {
   const { id } = await params;
   const user = await requireSessionUser();
-  const order = await getDashboardOrder(id, user.id);
+  const order = await getDashboardOrder(id, { sellerId: user.id, shopId: await getOwnShopId(user.id) });
 
   if (!order) notFound();
 

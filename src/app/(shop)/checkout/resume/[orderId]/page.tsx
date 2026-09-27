@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 
 import { ROUTES } from "@/constants/routes";
+import type { UserRole } from "@/constants/roles";
 import { CheckoutResumePanel } from "@/features/checkout/components/CheckoutResumePanel";
 import type { XenditChannel } from "@/features/checkout/schemas/checkout.schema";
+import { canPurchase } from "@/lib/auth/permissions";
 import * as queries from "@/lib/supabase/queries";
 
 export const metadata: Metadata = { title: "Complete Payment" };
@@ -21,6 +23,8 @@ interface CheckoutResumePageProps {
 export default async function CheckoutResumePage({ params }: CheckoutResumePageProps) {
   const { orderId } = await params;
   const user = await queries.requireSessionUser();
+  // Buyer-only payment workspace — seller/admin can't initiate/resume payment.
+  if (!canPurchase(user.role as UserRole)) redirect(ROUTES.home);
   const order = await queries.getBuyerOrder(orderId, user.id);
 
   if (!order) notFound();

@@ -6,11 +6,10 @@ import {
   FILTER_CHIP_ACTIVE_THEMED as CHIP_ACTIVE,
   FILTER_CHIP_IDLE_THEMED as CHIP_IDLE,
 } from "@/components/ui/filter-chip";
-import { ROLE_LABELS, USER_ROLES, type UserRole } from "@/constants/roles";
+import { ROLE_LABELS } from "@/constants/roles";
+import { FILTERABLE_USER_ROLES } from "@/features/users/constants/user.constants";
 
-/** All/Buyers/Sellers chips for the admin Users list — mirrors `OrderStatusFilter`'s shape. Admin accounts are never buyer/seller-promotable, so they're excluded from this filter entirely (still visible under "All"). */
-const FILTERABLE_ROLES: readonly UserRole[] = [USER_ROLES.buyer, USER_ROLES.seller];
-
+/** All/Buyers/Sellers/Administrators chips for the admin Users list — mirrors `OrderStatusFilter`'s shape. */
 export function UserRoleFilter() {
   const router = useRouter();
   const pathname = usePathname();
@@ -38,7 +37,7 @@ export function UserRoleFilter() {
       >
         All
       </button>
-      {FILTERABLE_ROLES.map((role) => (
+      {FILTERABLE_USER_ROLES.map((role) => (
         <button
           key={role}
           type="button"

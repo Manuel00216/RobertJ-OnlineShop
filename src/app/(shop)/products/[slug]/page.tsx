@@ -3,9 +3,10 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { Truck } from "lucide-react";
 
-import { USER_ROLES } from "@/constants/roles";
+import { USER_ROLES, type UserRole } from "@/constants/roles";
 import { ROUTES } from "@/constants/routes";
 import { PRODUCT_CONDITION_LABELS } from "@/constants/status";
+import { canPurchase } from "@/lib/auth/permissions";
 import { formatCurrency } from "@/lib/utils/currency";
 import { absoluteUrl } from "@/lib/utils/url";
 import { CHECKOUT_CONSTANTS } from "@/features/checkout";
@@ -191,6 +192,7 @@ export default async function ProductDetailPage({
             shopName={shopName}
             variants={variants}
             variantStock={variantStock}
+            canPurchase={user === null || canPurchase(user.role as UserRole)}
           />
 
           {/* Secondary info — condition/location tags and the free-text

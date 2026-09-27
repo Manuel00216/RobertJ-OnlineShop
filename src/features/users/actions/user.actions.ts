@@ -9,6 +9,7 @@ import * as queries from "@/lib/supabase/queries";
 import type { ActionResult } from "@/types/action.types";
 import {
   assignSellerShopSchema,
+  demoteSellerToBuyerSchema,
   setUserActiveSchema,
 } from "@/features/users/schemas/user.schema";
 
@@ -36,6 +37,35 @@ export async function assignSellerShopAction(
   } catch (error) {
     return fail(
       error instanceof Error ? error.message : "Could not assign the shop.",
+    );
+  }
+}
+
+/**
+ * Reversibly demotes a seller back to buyer and drops their shop
+ * membership (M3) — delegates to `queries.demoteSellerToBuyer`, which calls
+ * the `admin_demote_seller_to_buyer` RPC (the sole write path; that RPC
+ * itself re-checks admin authorization and rejects any non-seller target,
+ * mirroring `assignSellerShopAction`'s posture). Historical products/orders
+ * are untouched; promoting the account back to Seller later restores full
+ * seller capability.
+ */
+export async function demoteSellerToBuyerAction(
+  userId: string,
+): Promise<ActionResult<null>> {
+  const parsed = demoteSellerToBuyerSchema.safeParse({ userId });
+  if (!parsed.success) return fromZodError(parsed.error);
+
+  try {
+    const admin = await queries.requireRole(ADMIN_ONLY_ROLES);
+    await queries.requireRateLimit(`demoteSellerToBuyer:${admin.id}`, 20, 60);
+    await queries.demoteSellerToBuyer(parsed.data.userId);
+    revalidatePath(ROUTES.adminUsers);
+    revalidatePath(ROUTES.adminShops);
+    return ok(null);
+  } catch (error) {
+    return fail(
+      error instanceof Error ? error.message : "Could not demote this seller to buyer.",
     );
   }
 }

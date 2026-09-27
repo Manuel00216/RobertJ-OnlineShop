@@ -6,6 +6,7 @@ import { DashboardOrdersPanel } from "@/features/orders/components/DashboardOrde
 import { OrderSearchInput } from "@/features/orders/components/OrderSearchInput";
 import { OrderSkeletons } from "@/features/orders/components/OrderSkeletons";
 import { OrderStatusFilter } from "@/features/orders/components/OrderStatusFilter";
+import { ScanBarcodeButton } from "@/features/orders/components/ScanBarcodeButton";
 
 export const metadata: Metadata = { title: "Orders — Seller Portal" };
 
@@ -19,9 +20,14 @@ export default async function SellerOrdersPage({ searchParams }: SellerOrdersPag
   return (
     <div className="flex flex-col gap-6 p-5 lg:p-7">
       <div className="flex flex-col gap-4">
-        <Suspense fallback={null}>
-          <OrderSearchInput themed />
-        </Suspense>
+        <div className="flex items-center gap-2">
+          <div className="flex-1">
+            <Suspense fallback={null}>
+              <OrderSearchInput themed />
+            </Suspense>
+          </div>
+          <ScanBarcodeButton />
+        </div>
         <Suspense fallback={null}>
           <OrderStatusFilter themed />
         </Suspense>

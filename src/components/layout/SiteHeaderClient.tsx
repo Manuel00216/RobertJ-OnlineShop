@@ -15,6 +15,7 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { CartPreview } from "@/features/cart/components/CartPreview";
 import { NotificationBell } from "@/features/notifications/components/NotificationBell";
 import { searchProductSuggestionsAction } from "@/features/products/actions/product.actions";
+import { USER_ROLES } from "@/constants/roles";
 import type { Category } from "@/features/categories/types/category.types";
 import type { BuyerActivityEvent } from "@/features/notifications/types/notification.types";
 import type { SessionUser } from "@/types/common.types";
@@ -38,6 +39,14 @@ export interface SiteHeaderClientProps {
  */
 export function SiteHeaderClient({ user, categories, notifications }: SiteHeaderClientProps) {
   const router = useRouter();
+
+  // Strict role separation: only guests and buyers shop. Seller/admin can
+  // browse the read-only storefront but can't transact and have no buyer
+  // account, so buyer-only header controls — the cart preview and the buyer
+  // notification bell — are hidden for them. Guests + buyers keep both. UX
+  // mirror only; the real boundaries are the transaction-route guards, the
+  // buyer-account layout guard, and the cart/order/wishlist RLS.
+  const canShop = !user || user.role === USER_ROLES.buyer;
 
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -229,9 +238,9 @@ export function SiteHeaderClient({ user, categories, notifications }: SiteHeader
             <Search className="h-4 w-4 text-rj-black" aria-hidden="true" />
           </button>
 
-          <NotificationBell events={notifications} />
+          {canShop ? <NotificationBell events={notifications} /> : null}
 
-          <CartPreview />
+          {canShop ? <CartPreview /> : null}
 
           {user ? (
             <AccountMenu user={user} />

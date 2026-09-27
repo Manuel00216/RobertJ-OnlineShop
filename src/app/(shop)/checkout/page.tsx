@@ -1,15 +1,22 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
+import { ROUTES } from "@/constants/routes";
+import type { UserRole } from "@/constants/roles";
 import { CheckoutForm } from "@/features/checkout/components/CheckoutForm";
 import { CHECKOUT_CONSTANTS } from "@/features/checkout/constants/checkout.constants";
 import type { ShippingAddressInput } from "@/features/checkout/schemas/checkout.schema";
 import { addressToShippingInput } from "@/features/checkout/utils/addressMapping";
+import { canPurchase } from "@/lib/auth/permissions";
 import * as queries from "@/lib/supabase/queries";
 
 export const metadata: Metadata = { title: "Checkout" };
 
 export default async function CheckoutPage() {
   const user = await queries.requireSessionUser();
+  // Buyer-only transaction route — seller/admin are redirected to the public
+  // storefront (they can browse, not purchase). Backstopped by create_order/RLS.
+  if (!canPurchase(user.role as UserRole)) redirect(ROUTES.home);
 
   // Prefill priority: default saved address -> last order's address ->
   // profile name/phone -> empty form. Each fetch degrades independently

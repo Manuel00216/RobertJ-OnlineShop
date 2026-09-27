@@ -67,6 +67,14 @@ export const CANCELLABLE_ORDER_STATUSES: readonly OrderStatus[] = [
   "confirmed",
 ];
 
+/** Non-terminal states — the order still requires seller/buyer action. Used by the admin Users list to warn before promoting a buyer with in-flight orders. */
+export const ACTIVE_ORDER_STATUSES: readonly OrderStatus[] = [
+  "pending",
+  "confirmed",
+  "processing",
+  "shipped",
+];
+
 /**
  * Legal next states for a seller/admin advancing (or cancelling) an order
  * from the dashboard. The DB trigger permits the seller to set `order_status`

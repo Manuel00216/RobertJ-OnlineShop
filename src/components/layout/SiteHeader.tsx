@@ -1,3 +1,4 @@
+import { USER_ROLES } from "@/constants/roles";
 import { SiteHeaderClient } from "@/components/layout/SiteHeaderClient";
 import {
   getBuyerActivityFeed,
@@ -5,12 +6,18 @@ import {
   getSessionUser,
   listActiveCategories,
 } from "@/lib/supabase/queries";
+import type { SessionUser } from "@/types/common.types";
 import type { BuyerActivityEvent } from "@/features/notifications/types/notification.types";
 
-/** Guests, and buyers who turned Order Updates off, see no notifications — mirrors the `/notifications` page's own gate. */
-async function loadNotifications(userId: string | undefined): Promise<BuyerActivityEvent[]> {
-  if (!userId) return [];
-  const preferences = await getMyBuyerPreferences(userId).catch(() => null);
+/**
+ * Buyer notifications only. Guests and buyers who turned Order Updates off see
+ * none (mirrors the `/notifications` page's own gate); seller/admin are not
+ * buyers, so the feed is never even loaded for them — no buyer notification
+ * data reaches their client payload, and the bell is hidden client-side.
+ */
+async function loadNotifications(user: SessionUser | null): Promise<BuyerActivityEvent[]> {
+  if (!user || user.role !== USER_ROLES.buyer) return [];
+  const preferences = await getMyBuyerPreferences(user.id).catch(() => null);
   if (preferences !== null && !preferences.orderUpdates) return [];
   return getBuyerActivityFeed().catch(() => []);
 }
@@ -26,7 +33,7 @@ export async function SiteHeader() {
     getSessionUser(),
     listActiveCategories().catch(() => []),
   ]);
-  const notifications = await loadNotifications(user?.id);
+  const notifications = await loadNotifications(user);
 
   return <SiteHeaderClient user={user} categories={categories} notifications={notifications} />;
 }

@@ -2,10 +2,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
-import { USER_ROLES } from "@/constants/roles";
+import { USER_ROLES, type UserRole } from "@/constants/roles";
 import { PRODUCT_CONDITION, PRODUCT_CONDITION_LABELS } from "@/constants/status";
 import { ROUTES } from "@/constants/routes";
 import { EmptyState } from "@/components/feedback/EmptyState";
+import { canPurchase } from "@/lib/auth/permissions";
 import { formatCurrency } from "@/lib/utils/currency";
 import {
   getProductSoldCounts,
@@ -74,6 +75,7 @@ function toTileItem(
   isAuthenticated: boolean,
   shopNames: ReadonlyMap<string, string>,
   soldCounts: ReadonlyMap<string, number>,
+  canPurchase: boolean,
 ): ProductTileItem {
   // Real shop name when the seller belongs to one (see
   // `resolve_shop_membership`); falls back to the seller's own profile
@@ -118,6 +120,7 @@ function toTileItem(
       initialSaved: wishlistedIds.has(product.id),
       isAuthenticated,
     },
+    canPurchase,
   };
 }
 
@@ -180,8 +183,11 @@ export async function ProductGrid({
     getProductSoldCounts(productIds).catch(() => new Map<string, number>()),
   ]);
 
+  // Guests + buyers can transact; seller/admin browse read-only, so their
+  // tiles hide the quick-add and wishlist heart.
+  const viewerCanPurchase = user === null || canPurchase(user.role as UserRole);
   const items = products.map((product) =>
-    toTileItem(product, wishlistedIds, user !== null, shopNames, soldCounts),
+    toTileItem(product, wishlistedIds, user !== null, shopNames, soldCounts, viewerCanPurchase),
   );
 
   if (viewMode === "list") {

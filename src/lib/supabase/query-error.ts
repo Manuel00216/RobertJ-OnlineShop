@@ -55,3 +55,26 @@ export function rpcError(context: string, error: unknown): Error {
   console.error(`[queries] ${context}`, e);
   return new Error(e.message && e.message.trim().length > 0 ? e.message : context);
 }
+
+/**
+ * Like `rpcError`, but only trusts the RPC's raised `.message` when its
+ * error code is in `allowedCodes` — the exact `errcode`s that specific RPC
+ * is documented to `RAISE EXCEPTION ... using errcode = '…'` with for its
+ * own curated, user-facing business messages (e.g. "Only sellers can be
+ * demoted to buyer"). Any other code — an unexpected constraint violation,
+ * a connection error, an internal Postgres failure — falls back to
+ * `context` instead of leaking raw Postgres text. `rpcError` alone trusts
+ * every RPC-raised message unconditionally, which is only safe for an RPC
+ * that truly never raises anything else; this is for ones where that
+ * guarantee needs to be explicit rather than assumed.
+ */
+export function curatedRpcError(
+  context: string,
+  error: unknown,
+  allowedCodes: readonly string[],
+): Error {
+  const e = extract(error);
+  console.error(`[queries] ${context}`, e);
+  const trusted = e.code != null && allowedCodes.includes(String(e.code));
+  return new Error(trusted && e.message && e.message.trim().length > 0 ? e.message : context);
+}

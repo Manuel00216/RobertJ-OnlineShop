@@ -16,6 +16,7 @@ import {
   advanceOrderStatusSchema,
   cancelOrderSchema,
   recordShipmentSchema,
+  scanOrderNumberSchema,
 } from "@/features/orders/schemas/order.schema";
 import type { Order } from "@/features/orders/types/order.types";
 
@@ -150,7 +151,9 @@ export async function advanceOrderStatusAction(
       );
       const order = await queries.getDashboardOrder(
         parsed.data.orderId,
-        user.role === USER_ROLES.admin ? null : user.id,
+        user.role === USER_ROLES.admin
+          ? null
+          : { sellerId: user.id, shopId: await queries.getOwnShopId(user.id) },
       );
       if (!order) return fail("Could not load the updated order.");
       revalidateOrderSurfaces(order.id);
@@ -162,12 +165,14 @@ export async function advanceOrderStatusAction(
       if (blocked) return blocked;
     }
 
-    // Defense-in-depth beyond RLS: a non-admin's own seller_id is enforced
-    // again here.
+    // Defense-in-depth beyond RLS: a non-admin's own seller_id/shop_id is
+    // enforced again here.
     const order = await queries.advanceOrderStatus(
       parsed.data.orderId,
       parsed.data.newStatus,
-      user.role === USER_ROLES.admin ? null : user.id,
+      user.role === USER_ROLES.admin
+        ? null
+        : { sellerId: user.id, shopId: await queries.getOwnShopId(user.id) },
     );
 
     // Ready for Pickup: record the packing audit timestamp (advisory; the
@@ -182,5 +187,36 @@ export async function advanceOrderStatusAction(
     return fail(
       error instanceof Error ? error.message : "Could not update the order.",
     );
+  }
+}
+
+/**
+ * Resolves a scanned RobertJ order barcode (`order_number`) to the seller's own
+ * order id so the client can open the existing order-detail page. Read-only —
+ * it changes no order/inventory/payment/shipment state and is NOT a fulfilment
+ * write path. Seller-scoped: a nonexistent OR another seller's order both
+ * return the same generic failure (no existence disclosure). Rate-limited to
+ * blunt scan-enumeration.
+ */
+export async function resolveSellerOrderByNumberAction(
+  orderNumber: string,
+): Promise<ActionResult<{ orderId: string }>> {
+  const parsed = scanOrderNumberSchema.safeParse({ orderNumber });
+  if (!parsed.success) return fromZodError(parsed.error);
+
+  try {
+    const user = await queries.requireRole([USER_ROLES.seller]);
+    await queries.requireRateLimit(`scanOrder:${user.id}`, 30, 60);
+
+    const order = await queries.getDashboardOrderByNumber(
+      parsed.data.orderNumber,
+      { sellerId: user.id, shopId: await queries.getOwnShopId(user.id) },
+    );
+    if (!order) {
+      return fail("Order not found, or it isn't in your shop.");
+    }
+    return ok({ orderId: order.id });
+  } catch {
+    return fail("Could not look up that order. Please try again.");
   }
 }

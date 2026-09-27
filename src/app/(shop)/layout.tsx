@@ -2,12 +2,17 @@ import { SiteFooter } from "@/components/layout/SiteFooter";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 
 /**
- * Application chrome for the transactional side of the app (products, cart,
- * sign-in, …). The marketing/landing surface uses its own full-bleed layout,
- * so this header/footer no longer live in the root layout. `bg-rj-white` is
- * explicit here (mirroring `(marketing)/layout.tsx`) — the app is light-only
- * by design (see `globals.css`), so this just keeps the surface pinned to
- * the brand palette rather than the generic `bg-background` token.
+ * Application chrome for the transactional/buyer side of the app (products,
+ * cart, sign-in, …). The marketing/landing surface uses its own full-bleed
+ * layout, so this header/footer no longer live in the root layout.
+ *
+ * Role separation is enforced per-surface, NOT by a blanket redirect here:
+ * seller/admin may freely browse the read-only storefront (products,
+ * categories, product details), so this layout stays open to every role and
+ * guest. The buyer-only *transaction* routes (cart, checkout, checkout/resume,
+ * wishlist) each guard themselves (redirecting seller/admin), and the buyer
+ * transaction controls are hidden for seller/admin in the header/tiles/PDP.
+ * The authoritative boundary remains the server actions + `create_order`/RLS.
  */
 export default function ShopLayout({
   children,

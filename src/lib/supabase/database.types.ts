@@ -434,6 +434,7 @@ export type Database = {
           order_id: string
           packed_at: string | null
           seller_id: string
+          shop_id: string | null
           tracking_number: string | null
           updated_at: string
         }
@@ -444,6 +445,7 @@ export type Database = {
           order_id: string
           packed_at?: string | null
           seller_id: string
+          shop_id?: string | null
           tracking_number?: string | null
           updated_at?: string
         }
@@ -454,6 +456,7 @@ export type Database = {
           order_id?: string
           packed_at?: string | null
           seller_id?: string
+          shop_id?: string | null
           tracking_number?: string | null
           updated_at?: string
         }
@@ -477,6 +480,13 @@ export type Database = {
             columns: ["seller_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_shipments_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
             referencedColumns: ["id"]
           },
         ]
@@ -503,6 +513,7 @@ export type Database = {
           shipped_at: string | null
           shipping_address: Json
           shipping_fee_cents: number
+          shop_id: string | null
           subtotal_cents: number
           total_cents: number
           updated_at: string
@@ -528,6 +539,7 @@ export type Database = {
           shipped_at?: string | null
           shipping_address: Json
           shipping_fee_cents?: number
+          shop_id?: string | null
           subtotal_cents: number
           total_cents: number
           updated_at?: string
@@ -553,6 +565,7 @@ export type Database = {
           shipped_at?: string | null
           shipping_address?: Json
           shipping_fee_cents?: number
+          shop_id?: string | null
           subtotal_cents?: number
           total_cents?: number
           updated_at?: string
@@ -570,6 +583,13 @@ export type Database = {
             columns: ["seller_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
             referencedColumns: ["id"]
           },
         ]
@@ -1059,6 +1079,7 @@ export type Database = {
           seller_decided_by: string | null
           seller_decision_note: string | null
           seller_id: string
+          shop_id: string | null
           status: Database["public"]["Enums"]["return_status"]
           updated_at: string
         }
@@ -1078,6 +1099,7 @@ export type Database = {
           seller_decided_by?: string | null
           seller_decision_note?: string | null
           seller_id: string
+          shop_id?: string | null
           status?: Database["public"]["Enums"]["return_status"]
           updated_at?: string
         }
@@ -1097,6 +1119,7 @@ export type Database = {
           seller_decided_by?: string | null
           seller_decision_note?: string | null
           seller_id?: string
+          shop_id?: string | null
           status?: Database["public"]["Enums"]["return_status"]
           updated_at?: string
         }
@@ -1148,6 +1171,13 @@ export type Database = {
             columns: ["seller_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "return_requests_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
             referencedColumns: ["id"]
           },
         ]
@@ -1549,6 +1579,31 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      admin_demote_seller_to_buyer: {
+        Args: { p_user_id: string }
+        Returns: {
+          avatar_url: string | null
+          bio: string | null
+          created_at: string
+          date_of_birth: string | null
+          full_name: string | null
+          gender: Database["public"]["Enums"]["gender_type"] | null
+          id: string
+          is_active: boolean
+          payment_qr_url: string | null
+          phone: string | null
+          role: Database["public"]["Enums"]["user_role"]
+          updated_at: string
+          username: string | null
+          username_changed_at: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "profiles"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       admin_list_users: {
         Args: never
         Returns: {
@@ -1684,6 +1739,7 @@ export type Database = {
           shipped_at: string | null
           shipping_address: Json
           shipping_fee_cents: number
+          shop_id: string | null
           subtotal_cents: number
           total_cents: number
           updated_at: string
@@ -1724,6 +1780,7 @@ export type Database = {
           shipped_at: string | null
           shipping_address: Json
           shipping_fee_cents: number
+          shop_id: string | null
           subtotal_cents: number
           total_cents: number
           updated_at: string
@@ -1757,6 +1814,7 @@ export type Database = {
           seller_decided_by: string | null
           seller_decision_note: string | null
           seller_id: string
+          shop_id: string | null
           status: Database["public"]["Enums"]["return_status"]
           updated_at: string
         }
@@ -2028,6 +2086,7 @@ export type Database = {
           order_id: string
           packed_at: string | null
           seller_id: string
+          shop_id: string | null
           tracking_number: string | null
           updated_at: string
         }
@@ -2137,6 +2196,7 @@ export type Database = {
           seller_decided_by: string | null
           seller_decision_note: string | null
           seller_id: string
+          shop_id: string | null
           status: Database["public"]["Enums"]["return_status"]
           updated_at: string
         }
@@ -2173,6 +2233,7 @@ export type Database = {
           seller_decided_by: string | null
           seller_decision_note: string | null
           seller_id: string
+          shop_id: string | null
           status: Database["public"]["Enums"]["return_status"]
           updated_at: string
         }

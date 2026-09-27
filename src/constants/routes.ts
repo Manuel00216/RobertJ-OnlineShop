@@ -41,6 +41,7 @@ export const ROUTES = {
   adminReports: "/admin/reports",
   /** Admin-only sections — distinct from the (nonexistent) `shops` table. */
   adminUsers: "/admin/users",
+  adminUserDetail: (id: string) => `/admin/users/${id}`,
   adminShops: "/admin/shops",
   adminAuditLog: "/admin/audit-log",
   adminSettings: "/admin/settings",

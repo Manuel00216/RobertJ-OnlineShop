@@ -1,5 +1,6 @@
 "use server";
 
+import { USER_ROLES } from "@/constants/roles";
 import { fail, fromZodError, ok } from "@/lib/utils/result";
 import { getClientIp } from "@/lib/utils/request";
 import * as queries from "@/lib/supabase/queries";
@@ -108,9 +109,14 @@ export async function getSimilarProductsAction(
 // localStorage) are entirely untouched by these; nothing wires them up yet.
 // ============================================================================
 
-/** Shared guard for every cart mutation below — mirrors `guardAddressMutation`. */
+/**
+ * Shared guard for every cart mutation below — mirrors `guardAddressMutation`.
+ * Strict role separation: only buyers may persist a cart (RLS on
+ * `carts`/`cart_items` is the authoritative backstop). Public cart *reads*
+ * (availability/recommendations) stay guest-accessible and are not gated here.
+ */
 async function guardCartMutation() {
-  const user = await queries.requireSessionUser();
+  const user = await queries.requireRole([USER_ROLES.buyer]);
   await queries.requireRateLimit(`cart:${user.id}`, 20, 60);
   return user;
 }

@@ -19,11 +19,17 @@ const BASE_MENU_ITEMS = [
   { href: ROUTES.orders, label: "Orders" },
 ] as const;
 
-/** Links straight to the user's own portal — Admin and Seller each have a dedicated dashboard, not a shared one. */
+/**
+ * Buyers get the shopping menu (My Account, Orders). Seller/Admin are not
+ * buyers — their dropdown is ONLY their dashboard (+ the shared Sign out
+ * below); the buyer-specific My Account / Orders entries are omitted so the
+ * menu never implies buyer functionality they can't use. Each has a dedicated
+ * portal, not a shared one.
+ */
 function getMenuItems(role: UserRole) {
   if (!canViewDashboard(role)) return BASE_MENU_ITEMS;
   const dashboardHref = role === USER_ROLES.admin ? ROUTES.adminDashboard : ROUTES.sellerDashboard;
-  return [...BASE_MENU_ITEMS, { href: dashboardHref, label: "Dashboard" }];
+  return [{ href: dashboardHref, label: "Dashboard" }];
 }
 
 /**

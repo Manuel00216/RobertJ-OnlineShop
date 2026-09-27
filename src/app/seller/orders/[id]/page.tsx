@@ -18,6 +18,7 @@ import { ReturnRequestStatusCard } from "@/features/returns/components/ReturnReq
 import { RespondToReturnPanel } from "@/features/returns/components/RespondToReturnPanel";
 import {
   getDashboardOrder,
+  getOwnShopId,
   getReturnEvidenceSignedUrl,
   getReturnRequestForOrder,
   hasXenditPaymentAttempt,
@@ -34,7 +35,7 @@ export async function generateMetadata({
 }: SellerOrderDetailPageProps): Promise<Metadata> {
   const { id } = await params;
   const user = await requireSessionUser();
-  const order = await getDashboardOrder(id, user.id);
+  const order = await getDashboardOrder(id, { sellerId: user.id, shopId: await getOwnShopId(user.id) });
   return { title: order ? `${order.orderNumber} — Seller Portal` : "Order not found" };
 }
 
@@ -42,7 +43,7 @@ export async function generateMetadata({
 export default async function SellerOrderDetailPage({ params }: SellerOrderDetailPageProps) {
   const { id } = await params;
   const user = await requireSessionUser();
-  const order = await getDashboardOrder(id, user.id);
+  const order = await getDashboardOrder(id, { sellerId: user.id, shopId: await getOwnShopId(user.id) });
 
   if (!order) notFound();
 
