@@ -21,9 +21,13 @@ export interface CartItem {
   maxQuantity: number;
   /**
    * Carried so checkout can group the cart by seller. The schema models one
-   * order per seller, so a mixed cart becomes several orders.
+   * order per seller, so a mixed cart becomes several orders. Null only for
+   * a server-authoritative (signed-in) cart line whose product's seller
+   * account has since been permanently deleted — `groupCartBySeller`/
+   * checkout treat such a line as unavailable, matching `create_order`'s
+   * server-side guard.
    */
-  sellerId: string;
+  sellerId: string | null;
   /**
    * Seller display name, carried so checkout can label order groups. Older
    * carts may lack it (localStorage migration note) — treat as null.

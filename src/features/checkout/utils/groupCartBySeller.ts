@@ -7,11 +7,16 @@ import type { CheckoutGroup } from "@/features/checkout/types/checkout.types";
  * Splits a cart into one group per seller — the schema models one order per
  * seller (see `docs/database.md` §3.2), so a mixed cart becomes several orders.
  * Pure and deterministic so it stays testable. Older carts without `sellerName`
- * fall back to a neutral label.
+ * fall back to a neutral label. A line whose `sellerId` is null (the
+ * product's seller account has since been permanently deleted — see
+ * `admin_hard_delete_seller_account`) is dropped: there is no seller left to
+ * place that order against, and `create_order`'s existing `is_active` guard
+ * would reject it anyway.
  */
 export function groupCartBySeller(items: CartItem[]): CheckoutGroup[] {
   const bySeller = new Map<string, CartItem[]>();
   for (const item of items) {
+    if (!item.sellerId) continue;
     const list = bySeller.get(item.sellerId) ?? [];
     list.push(item);
     bySeller.set(item.sellerId, list);

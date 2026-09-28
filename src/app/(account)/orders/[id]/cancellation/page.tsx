@@ -44,10 +44,12 @@ export default async function OrderCancellationPage({ params }: OrderCancellatio
   if (!order || order.status !== "cancelled") notFound();
 
   const [shopMembership, activePayment] = await Promise.all([
-    getShopMembershipBySellerIds([order.sellerId]).catch(() => new Map()),
+    getShopMembershipBySellerIds(order.sellerId ? [order.sellerId] : []).catch(
+      () => new Map(),
+    ),
     getActivePaymentForOrder(order.id).catch(() => null),
   ]);
-  const membership = shopMembership.get(order.sellerId) ?? null;
+  const membership = (order.sellerId ? shopMembership.get(order.sellerId) : null) ?? null;
   const shopLabel =
     membership?.shopName ??
     (order.sellerRole === USER_ROLES.seller ? order.sellerName : null) ??

@@ -36,11 +36,16 @@ export async function FeaturedProducts() {
     products = [];
   }
 
+  const sellerIds = [
+    ...new Set(
+      products
+        .map((product) => product.sellerId)
+        .filter((id): id is string => id !== null),
+    ),
+  ];
   const shopNames =
-    products.length > 0
-      ? await getShopNamesBySellerIds(
-          [...new Set(products.map((product) => product.sellerId))],
-        ).catch(() => new Map<string, string>())
+    sellerIds.length > 0
+      ? await getShopNamesBySellerIds(sellerIds).catch(() => new Map<string, string>())
       : new Map<string, string>();
 
   const soldCounts =
@@ -56,7 +61,7 @@ export async function FeaturedProducts() {
     // See ProductGrid.tsx's toTileItem for why sellerName is gated
     // on role: only a genuine `seller` account is ever a real shop owner.
     shop:
-      shopNames.get(product.sellerId) ??
+      (product.sellerId ? shopNames.get(product.sellerId) : null) ??
       (product.sellerRole === USER_ROLES.seller ? product.sellerName : null) ??
       "RobertJ Seller",
     priceCents: product.priceCents,

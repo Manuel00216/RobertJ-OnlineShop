@@ -38,10 +38,13 @@ export default async function SellerOrderLabelPage({ params }: SellerOrderLabelP
   if (!order) notFound();
 
   const shipment = await getOrderShipment(order.id).catch(() => null);
-  const membership = await getShopMembershipBySellerIds([order.sellerId]).catch(
-    () => new Map<string, { shopId: string; shopName: string }>(),
-  );
-  const shopName = membership.get(order.sellerId)?.shopName ?? order.sellerName ?? null;
+  const membership = await getShopMembershipBySellerIds(
+    order.sellerId ? [order.sellerId] : [],
+  ).catch(() => new Map<string, { shopId: string; shopName: string }>());
+  const shopName =
+    (order.sellerId ? membership.get(order.sellerId)?.shopName : null) ??
+    order.sellerName ??
+    null;
 
   return (
     <div className="flex flex-col items-center gap-6 p-5 lg:p-7">

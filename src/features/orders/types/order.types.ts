@@ -76,8 +76,9 @@ export interface Order {
   buyerId: string;
   /** Buyer display name (full name, falling back to username), or null — shown on the dashboard, not the buyer's own view. */
   buyerName: string | null;
-  sellerId: string;
-  /** Seller display name (full name, falling back to username), or null. */
+  /** Null when the seller account has since been permanently deleted (see `admin_hard_delete_seller_account`) — the order itself survives. */
+  sellerId: string | null;
+  /** Seller display name (full name, falling back to username), or "Former Seller" once the account is gone, or null. */
   sellerName: string | null;
   /**
    * The `seller_id` profile's current role — see `Product.sellerRole` for

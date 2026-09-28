@@ -84,12 +84,16 @@ export async function OrderListSection({
 
   // Resolved once for the whole page, not per card — avoids an N+1 shop
   // lookup across potentially many orders from different sellers.
-  const sellerIds = [...new Set(items.map((order) => order.sellerId))];
+  const sellerIds = [
+    ...new Set(
+      items.map((order) => order.sellerId).filter((id): id is string => id !== null),
+    ),
+  ];
   const shopMembership = await getShopMembershipBySellerIds(sellerIds).catch(
     () => new Map<string, { shopId: string; shopName: string }>(),
   );
   const shopLabelFor = (order: Order) =>
-    shopMembership.get(order.sellerId)?.shopName ??
+    (order.sellerId ? shopMembership.get(order.sellerId)?.shopName : null) ??
     (order.sellerRole === USER_ROLES.seller ? order.sellerName : null) ??
     "RobertJ Seller";
 
@@ -112,7 +116,7 @@ export async function OrderListSection({
             <BuyerOrderCard
               order={order}
               shopName={shopLabelFor(order)}
-              shopId={shopMembership.get(order.sellerId)?.shopId ?? null}
+              shopId={(order.sellerId ? shopMembership.get(order.sellerId)?.shopId : null) ?? null}
               groupInfo={groupInfoByOrderId.get(order.id) ?? null}
             />
           </li>

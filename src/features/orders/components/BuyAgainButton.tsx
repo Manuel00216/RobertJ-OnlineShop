@@ -26,6 +26,12 @@ export function BuyAgainButton({ order, sellerName }: BuyAgainButtonProps) {
   const router = useRouter();
   const { addItem } = useCart();
 
+  // Nothing to re-add if the seller account has since been permanently
+  // deleted — there's no one to place a new order against (see
+  // AddToCartButton's identical guard).
+  if (!order.sellerId) return null;
+  const sellerId = order.sellerId;
+
   const reorderableItems = order.items.filter((item) => item.productSlug !== null);
   if (reorderableItems.length === 0) return null;
 
@@ -44,7 +50,7 @@ export function BuyAgainButton({ order, sellerName }: BuyAgainButtonProps) {
         currency: order.currency,
         quantity: item.quantity,
         maxQuantity: item.quantity,
-        sellerId: order.sellerId,
+        sellerId,
         sellerName: resolvedSellerName,
       });
     }

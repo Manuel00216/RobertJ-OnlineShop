@@ -45,13 +45,17 @@ function toTileItem(
     maxQuantity: view.maxQuantity,
     soldCount: view.soldCount,
     // Every view is a real, purchasable product — see FeaturedProductView.
-    addToCart: {
-      productId: view.productId,
-      slug: view.slug,
-      sellerId: view.sellerId,
-      // Marketing quick-add has no seller name; checkout falls back to "Seller".
-      sellerName: null,
-    },
+    // Null when the seller account has since been permanently deleted,
+    // disabling quick-add (same guard as ProductGrid.tsx's toTileItem).
+    addToCart: view.sellerId
+      ? {
+          productId: view.productId,
+          slug: view.slug,
+          sellerId: view.sellerId,
+          // Marketing quick-add has no seller name; checkout falls back to "Seller".
+          sellerName: null,
+        }
+      : null,
     wishlist: {
       productId: view.productId,
       initialSaved: wishlistedIds.has(view.productId),

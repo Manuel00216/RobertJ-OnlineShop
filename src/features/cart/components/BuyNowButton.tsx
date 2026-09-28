@@ -44,9 +44,12 @@ export function BuyNowButton({
   const isOutOfStock = hasVariants
     ? variant === null || variant.stock <= 0
     : product.quantity <= 0;
+  // See AddToCartButton's identical guard: a permanently-deleted seller's
+  // product can't be checked out against.
+  const hasNoSeller = product.sellerId === null;
 
   function handleBuyNow() {
-    if (hasVariants && !variant) return;
+    if ((hasVariants && !variant) || !product.sellerId) return;
     setIsPending(true);
     addItem({
       productId: product.id,
@@ -72,7 +75,7 @@ export function BuyNowButton({
       variant="rjOutline"
       size="rj"
       className={className}
-      disabled={isOutOfStock || isPending}
+      disabled={isOutOfStock || isPending || hasNoSeller}
       isLoading={isPending}
       onClick={handleBuyNow}
     >

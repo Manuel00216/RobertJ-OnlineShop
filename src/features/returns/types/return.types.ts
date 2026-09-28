@@ -16,7 +16,8 @@ export interface ReturnRequest {
   orderItemTitle: string | null;
   buyerId: string;
   buyerName: string | null;
-  sellerId: string;
+  /** Null when the seller account has since been permanently deleted (see `admin_hard_delete_seller_account`) — the return request itself survives. */
+  sellerId: string | null;
   reason: string;
   /** Storage path in the payment-receipts bucket — resolve via `getReturnEvidenceSignedUrl`, never render directly. */
   evidencePath: string | null;

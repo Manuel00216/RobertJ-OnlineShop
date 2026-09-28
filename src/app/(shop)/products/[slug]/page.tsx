@@ -55,13 +55,13 @@ export default async function ProductDetailPage({
   const isWishlisted = user
     ? await isProductWishlisted(user.id, product.id).catch(() => false)
     : false;
-  const shopNames = await getShopNamesBySellerIds([product.sellerId]).catch(
-    () => new Map<string, string>(),
-  );
+  const shopNames = await getShopNamesBySellerIds(
+    product.sellerId ? [product.sellerId] : [],
+  ).catch(() => new Map<string, string>());
   // See ProductGrid.tsx's toTileItem for why sellerName is gated on role:
   // only a genuine `seller` account is ever a real shop owner.
   const shopName =
-    shopNames.get(product.sellerId) ??
+    (product.sellerId ? shopNames.get(product.sellerId) : null) ??
     (product.sellerRole === USER_ROLES.seller ? product.sellerName : null);
   const reviewSummary = await listProductReviews(product.id).catch(() => ({
     reviews: [],

@@ -56,9 +56,14 @@ export function AddToCartButton({
   const isOutOfStock = hasVariants
     ? variant === null || variant.stock <= 0
     : product.quantity <= 0;
+  // A product whose seller account has since been permanently deleted has no
+  // one to check out with — create_order's is_active guard already refuses
+  // it server-side, so this button is disabled up front rather than letting
+  // the buyer hit a failed checkout.
+  const hasNoSeller = product.sellerId === null;
 
   function handleAdd() {
-    if (hasVariants && !variant) return;
+    if ((hasVariants && !variant) || !product.sellerId) return;
     addItem({
       productId: product.id,
       variantId: variant?.id,
@@ -79,21 +84,23 @@ export function AddToCartButton({
   }
 
   const rj = buttonVariant === "rj";
-  const label = isOutOfStock
-    ? hasVariants && variant === null
-      ? "Select options"
-      : "Sold out"
-    : justAdded
-      ? "Added to cart"
-      : "Add to cart";
+  const label = hasNoSeller
+    ? "Unavailable"
+    : isOutOfStock
+      ? hasVariants && variant === null
+        ? "Select options"
+        : "Sold out"
+      : justAdded
+        ? "Added to cart"
+        : "Add to cart";
 
   return (
     <Button
       type="button"
-      variant={isOutOfStock ? "outline" : rj ? "rj" : "primary"}
+      variant={isOutOfStock || hasNoSeller ? "outline" : rj ? "rj" : "primary"}
       size={rj ? "rj" : "md"}
       className={className}
-      disabled={isOutOfStock}
+      disabled={isOutOfStock || hasNoSeller}
       onClick={handleAdd}
     >
       <span aria-live="polite">{label}</span>

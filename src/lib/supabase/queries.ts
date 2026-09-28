@@ -142,6 +142,23 @@ const PRODUCT_COLUMNS = `
   category:categories!products_category_id_fkey ( name, slug )
 `;
 
+/**
+ * Display fallback for a seller identity that has been permanently deleted
+ * (`admin_hard_delete_seller_account` sets `seller_id` to null via the FK's
+ * `on delete set null` — see 20260928054321_seller_hard_delete_support.sql).
+ * `sellerId` is the raw column, not the joined profile, so this is reachable
+ * even though the join itself already resolves to `null` in that case.
+ */
+const FORMER_SELLER_LABEL = "Former Seller";
+function sellerDisplayName(
+  sellerId: string | null,
+  seller: Pick<ProfileRow, "full_name" | "username"> | null | undefined,
+): string | null {
+  if (seller?.full_name) return seller.full_name;
+  if (seller?.username) return seller.username;
+  return sellerId ? null : FORMER_SELLER_LABEL;
+}
+
 type ProductRowWithImages = Omit<ProductRow, "search_vector"> & {
   product_images: Pick<
     ProductImageRow,
@@ -178,7 +195,7 @@ function toProduct(row: ProductRowWithImages): Product {
     categoryName: row.category?.name ?? null,
     categorySlug: row.category?.slug ?? null,
     sellerId: row.seller_id,
-    sellerName: row.seller?.full_name ?? row.seller?.username ?? null,
+    sellerName: sellerDisplayName(row.seller_id, row.seller),
     // Only a genuine `seller` is ever a shop owner — a product whose
     // `seller_id` resolves to an admin or (legacy/demoted) buyer profile has
     // no shop to display, and showing that account's personal name in its
@@ -898,6 +915,13 @@ export async function getProductOwnerInfo(
   if (!data) {
     throw new Error("Product not found.");
   }
+  // `product_variants.seller_id` stays NOT NULL by design — a product whose
+  // seller account has since been permanently deleted (`seller_id` set null
+  // by `admin_hard_delete_seller_account`) has no valid owner left to
+  // attribute a new variant to.
+  if (!data.seller_id) {
+    throw new Error("This product's seller account no longer exists.");
+  }
   return { sellerId: data.seller_id, shopId: data.shop_id };
 }
 
@@ -1562,7 +1586,7 @@ function toOrder(row: OrderRowWithItems): Order {
     buyerId: row.buyer_id,
     buyerName: row.buyer?.full_name ?? row.buyer?.username ?? null,
     sellerId: row.seller_id,
-    sellerName: row.seller?.full_name ?? row.seller?.username ?? null,
+    sellerName: sellerDisplayName(row.seller_id, row.seller),
     sellerRole: (row.seller?.role as UserRole | undefined) ?? null,
     items: (row.order_items ?? []).map((item) => ({
       id: item.id,
@@ -2232,7 +2256,7 @@ export async function getOrderShipment(
  */
 export async function markOrderPacked(
   orderId: string,
-  sellerId: string,
+  sellerId: string | null,
 ): Promise<void> {
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase
@@ -2316,7 +2340,7 @@ export async function createOrder(
     // "Product X is not available") — preserve them; log the raw error.
     throw rpcError("Could not place this order.", error);
   }
-  if (!data) {
+  if (!data || !data.seller_id) {
     throw new Error("Could not create the order.");
   }
 
@@ -2380,11 +2404,16 @@ export async function createOrderGroup(
 
   return {
     checkoutGroupId: data[0].checkout_group_id,
-    orders: data.map((order) => ({
-      orderId: order.id,
-      orderNumber: order.order_number,
-      sellerId: order.seller_id,
-    })),
+    orders: data.map((order) => {
+      if (!order.seller_id) {
+        throw new Error("Could not create the order.");
+      }
+      return {
+        orderId: order.id,
+        orderNumber: order.order_number,
+        sellerId: order.seller_id,
+      };
+    }),
   };
 }
 
@@ -3991,6 +4020,9 @@ export async function getFeaturedShops(limit = 4): Promise<FeaturedShopView[]> {
 
   const countsBySeller = new Map<string, number>();
   for (const row of productsResult.data ?? []) {
+    // A product whose seller account has since been permanently deleted has
+    // no shop_users membership left to attribute it to — skip it here.
+    if (!row.seller_id) continue;
     countsBySeller.set(
       row.seller_id,
       (countsBySeller.get(row.seller_id) ?? 0) + 1,
@@ -5493,7 +5525,7 @@ type CartItemRowWithJoins = CartItemRow & {
     slug: string;
     price_cents: number;
     currency: string;
-    seller_id: string;
+    seller_id: string | null;
     product_images: { url: string }[];
     seller: Pick<ProfileRow, "full_name" | "username" | "role"> | null;
   } | null;
@@ -5516,7 +5548,7 @@ export interface CartLineItem {
   /** Variant price override, else the product's own price — always live, never stored. */
   unitPriceCents: number;
   currency: string;
-  sellerId: string;
+  sellerId: string | null;
   sellerName: string | null;
   sellerRole: UserRole | null;
   variantLabel: string | null;
@@ -5544,7 +5576,7 @@ function toCartLineItem(row: CartItemRowWithJoins): CartLineItem | null {
     unitPriceCents: row.variant?.price_cents ?? row.product.price_cents,
     currency: row.product.currency,
     sellerId: row.product.seller_id,
-    sellerName: row.product.seller?.full_name ?? row.product.seller?.username ?? null,
+    sellerName: sellerDisplayName(row.product.seller_id, row.product.seller),
     sellerRole: (row.product.seller?.role as UserRole | undefined) ?? null,
     variantLabel: row.variant
       ? [row.variant.color, row.variant.size].filter(Boolean).join(" / ") || null

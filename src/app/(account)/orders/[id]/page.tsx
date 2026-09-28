@@ -60,10 +60,10 @@ export default async function OrderDetailPage({
   // never an admin's or a demoted account's personal name. Uses the
   // membership variant (not `getShopNamesBySellerIds`) because "View Shop"
   // needs the real `shopId` to filter the catalog, not just a display name.
-  const shopMembership = await getShopMembershipBySellerIds([order.sellerId]).catch(
-    () => new Map<string, { shopId: string; shopName: string }>(),
-  );
-  const membership = shopMembership.get(order.sellerId) ?? null;
+  const shopMembership = await getShopMembershipBySellerIds(
+    order.sellerId ? [order.sellerId] : [],
+  ).catch(() => new Map<string, { shopId: string; shopName: string }>());
+  const membership = (order.sellerId ? shopMembership.get(order.sellerId) : null) ?? null;
   const shopName =
     membership?.shopName ??
     (order.sellerRole === USER_ROLES.seller ? order.sellerName : null);

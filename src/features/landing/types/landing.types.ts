@@ -67,7 +67,8 @@ export interface FeaturedProductView {
   slug: string;
   currency: string;
   maxQuantity: number;
-  sellerId: string;
+  /** Null when the product's seller account has since been permanently deleted — disables quick-add. */
+  sellerId: string | null;
   /** Paid units sold — see `getProductSoldCounts`. */
   soldCount: number;
 }

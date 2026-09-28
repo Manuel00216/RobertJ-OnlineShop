@@ -29,8 +29,9 @@ export interface Product {
   categoryName: string | null;
   /** Category slug from the joined categories row (for linking), or null. */
   categorySlug: string | null;
-  sellerId: string;
-  /** Seller's display name (full name, falling back to username), or null. */
+  /** Null when the product's original seller account has since been permanently deleted (see `admin_hard_delete_seller_account`) — the product itself survives so its order_items keep a valid reference. */
+  sellerId: string | null;
+  /** Seller's display name (full name, falling back to username), or "Former Seller" once the account is gone, or null. */
   sellerName: string | null;
   /**
    * The `seller_id` profile's current role. Only `seller` is ever a genuine

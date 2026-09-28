@@ -85,7 +85,7 @@ function toTileItem(
   // account's personal name on the storefront, so it goes straight to the
   // generic label instead.
   const shopName =
-    shopNames.get(product.sellerId) ??
+    (product.sellerId ? shopNames.get(product.sellerId) : null) ??
     (product.sellerRole === USER_ROLES.seller ? product.sellerName : null) ??
     "RobertJ Seller";
 
@@ -106,15 +106,20 @@ function toTileItem(
         : null,
     maxQuantity: product.quantity,
     soldCount: soldCounts.get(product.id) ?? 0,
-    addToCart: {
-      productId: product.id,
-      slug: product.slug,
-      sellerId: product.sellerId,
-      // Same resolved label as `shopName` above — the cart/checkout must
-      // show the same "who sold this" identity as the catalog, not the raw
-      // personal name (see the shop-name fix this mirrors).
-      sellerName: shopName,
-    },
+    // Null when the product's seller account has since been permanently
+    // deleted — disables quick-add the same way a placeholder-with-no-product
+    // already does, matching AddToCartButton/BuyNowButton's own guard.
+    addToCart: product.sellerId
+      ? {
+          productId: product.id,
+          slug: product.slug,
+          sellerId: product.sellerId,
+          // Same resolved label as `shopName` above — the cart/checkout must
+          // show the same "who sold this" identity as the catalog, not the raw
+          // personal name (see the shop-name fix this mirrors).
+          sellerName: shopName,
+        }
+      : null,
     wishlist: {
       productId: product.id,
       initialSaved: wishlistedIds.has(product.id),
@@ -171,7 +176,11 @@ export async function ProductGrid({
   // Either failing degrades gracefully (no hearts saved / seller-name
   // fallback) rather than breaking the grid.
   const user = await getSessionUser();
-  const sellerIds = [...new Set(products.map((product) => product.sellerId))];
+  const sellerIds = [
+    ...new Set(
+      products.map((product) => product.sellerId).filter((id): id is string => id !== null),
+    ),
+  ];
   const productIds = products.map((product) => product.id);
   const [wishlistedIds, shopNames, soldCounts] = await Promise.all([
     user

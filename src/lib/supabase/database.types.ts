@@ -433,7 +433,7 @@ export type Database = {
           id: string
           order_id: string
           packed_at: string | null
-          seller_id: string
+          seller_id: string | null
           shop_id: string | null
           tracking_number: string | null
           updated_at: string
@@ -444,7 +444,7 @@ export type Database = {
           id?: string
           order_id: string
           packed_at?: string | null
-          seller_id: string
+          seller_id?: string | null
           shop_id?: string | null
           tracking_number?: string | null
           updated_at?: string
@@ -455,7 +455,7 @@ export type Database = {
           id?: string
           order_id?: string
           packed_at?: string | null
-          seller_id?: string
+          seller_id?: string | null
           shop_id?: string | null
           tracking_number?: string | null
           updated_at?: string
@@ -509,7 +509,7 @@ export type Database = {
           payment_method: Database["public"]["Enums"]["order_payment_method"]
           payment_status: Database["public"]["Enums"]["payment_status"]
           placed_at: string
-          seller_id: string
+          seller_id: string | null
           shipped_at: string | null
           shipping_address: Json
           shipping_fee_cents: number
@@ -535,7 +535,7 @@ export type Database = {
           payment_method?: Database["public"]["Enums"]["order_payment_method"]
           payment_status?: Database["public"]["Enums"]["payment_status"]
           placed_at?: string
-          seller_id: string
+          seller_id?: string | null
           shipped_at?: string | null
           shipping_address: Json
           shipping_fee_cents?: number
@@ -561,7 +561,7 @@ export type Database = {
           payment_method?: Database["public"]["Enums"]["order_payment_method"]
           payment_status?: Database["public"]["Enums"]["payment_status"]
           placed_at?: string
-          seller_id?: string
+          seller_id?: string | null
           shipped_at?: string | null
           shipping_address?: Json
           shipping_fee_cents?: number
@@ -842,7 +842,7 @@ export type Database = {
           published_at: string | null
           quantity: number
           search_vector: unknown
-          seller_id: string
+          seller_id: string | null
           shop_id: string | null
           slug: string
           status: Database["public"]["Enums"]["product_status"]
@@ -864,7 +864,7 @@ export type Database = {
           published_at?: string | null
           quantity?: number
           search_vector?: unknown
-          seller_id: string
+          seller_id?: string | null
           shop_id?: string | null
           slug: string
           status?: Database["public"]["Enums"]["product_status"]
@@ -886,7 +886,7 @@ export type Database = {
           published_at?: string | null
           quantity?: number
           search_vector?: unknown
-          seller_id?: string
+          seller_id?: string | null
           shop_id?: string | null
           slug?: string
           status?: Database["public"]["Enums"]["product_status"]
@@ -1078,7 +1078,7 @@ export type Database = {
           seller_decided_at: string | null
           seller_decided_by: string | null
           seller_decision_note: string | null
-          seller_id: string
+          seller_id: string | null
           shop_id: string | null
           status: Database["public"]["Enums"]["return_status"]
           updated_at: string
@@ -1098,7 +1098,7 @@ export type Database = {
           seller_decided_at?: string | null
           seller_decided_by?: string | null
           seller_decision_note?: string | null
-          seller_id: string
+          seller_id?: string | null
           shop_id?: string | null
           status?: Database["public"]["Enums"]["return_status"]
           updated_at?: string
@@ -1118,7 +1118,7 @@ export type Database = {
           seller_decided_at?: string | null
           seller_decided_by?: string | null
           seller_decision_note?: string | null
-          seller_id?: string
+          seller_id?: string | null
           shop_id?: string | null
           status?: Database["public"]["Enums"]["return_status"]
           updated_at?: string
@@ -1604,6 +1604,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      admin_hard_delete_seller_account: {
+        Args: { p_reason?: string; p_user_id: string }
+        Returns: Json
+      }
       admin_list_users: {
         Args: never
         Returns: {
@@ -1735,7 +1739,7 @@ export type Database = {
           payment_method: Database["public"]["Enums"]["order_payment_method"]
           payment_status: Database["public"]["Enums"]["payment_status"]
           placed_at: string
-          seller_id: string
+          seller_id: string | null
           shipped_at: string | null
           shipping_address: Json
           shipping_fee_cents: number
@@ -1776,7 +1780,7 @@ export type Database = {
           payment_method: Database["public"]["Enums"]["order_payment_method"]
           payment_status: Database["public"]["Enums"]["payment_status"]
           placed_at: string
-          seller_id: string
+          seller_id: string | null
           shipped_at: string | null
           shipping_address: Json
           shipping_fee_cents: number
@@ -1813,7 +1817,7 @@ export type Database = {
           seller_decided_at: string | null
           seller_decided_by: string | null
           seller_decision_note: string | null
-          seller_id: string
+          seller_id: string | null
           shop_id: string | null
           status: Database["public"]["Enums"]["return_status"]
           updated_at: string
@@ -2085,7 +2089,7 @@ export type Database = {
           id: string
           order_id: string
           packed_at: string | null
-          seller_id: string
+          seller_id: string | null
           shop_id: string | null
           tracking_number: string | null
           updated_at: string
@@ -2195,7 +2199,7 @@ export type Database = {
           seller_decided_at: string | null
           seller_decided_by: string | null
           seller_decision_note: string | null
-          seller_id: string
+          seller_id: string | null
           shop_id: string | null
           status: Database["public"]["Enums"]["return_status"]
           updated_at: string
@@ -2232,7 +2236,7 @@ export type Database = {
           seller_decided_at: string | null
           seller_decided_by: string | null
           seller_decision_note: string | null
-          seller_id: string
+          seller_id: string | null
           shop_id: string | null
           status: Database["public"]["Enums"]["return_status"]
           updated_at: string
