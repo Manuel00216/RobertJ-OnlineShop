@@ -10,6 +10,7 @@ export const STOCK_ADJUSTMENT_REASON = {
   correction: "correction",
   sale: "sale",
   cancellationRestock: "cancellation_restock",
+  returnRestock: "return_restock",
   shrinkage: "shrinkage",
   other: "other",
 } as const satisfies Record<string, StockAdjustmentReason>;
@@ -20,14 +21,16 @@ export const STOCK_ADJUSTMENT_REASON_LABELS: Record<StockAdjustmentReason, strin
   correction: "Correction",
   sale: "Sale",
   cancellation_restock: "Order cancelled",
+  return_restock: "Return confirmed sellable",
   shrinkage: "Shrinkage",
   other: "Other",
 };
 
 /**
  * Reasons a seller/admin may pick when manually adjusting stock from the
- * dashboard. `initial_stock`, `sale`, and `cancellation_restock` are
- * system-driven only — `adjust_stock` rejects them if submitted manually.
+ * dashboard. `initial_stock`, `sale`, `cancellation_restock`, and
+ * `return_restock` are system-driven only — `adjust_stock` rejects them if
+ * submitted manually.
  */
 export const MANUAL_STOCK_ADJUSTMENT_REASONS: readonly StockAdjustmentReason[] = [
   STOCK_ADJUSTMENT_REASON.restock,

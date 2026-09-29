@@ -9,13 +9,16 @@ import * as queries from "@/lib/supabase/queries";
 import { createRefund } from "@/lib/xendit/client";
 import type { Json } from "@/lib/supabase/database.types";
 import type { ActionResult } from "@/types/action.types";
+import { revalidateOrderSurfaces } from "@/features/orders";
 import {
   decideReturnSchema,
+  recordReturnItemConditionSchema,
   requestReturnSchema,
   respondToReturnSchema,
 } from "@/features/returns/schemas/return.schema";
 import type {
   AdminReturnDecision,
+  ReturnItemCondition,
   SellerReturnDecision,
 } from "@/features/returns/types/return.types";
 
@@ -54,8 +57,10 @@ export async function requestReturnAction(
       evidencePath,
     );
 
-    revalidatePath(ROUTES.orderDetail(parsed.data.orderId));
-    revalidatePath(ROUTES.orders, "layout");
+    // A newly filed return is visible to the seller/admin too (their order
+    // detail page, plus the admin queue), not just the buyer.
+    await revalidateOrderSurfaces(parsed.data.orderId);
+    revalidatePath(ROUTES.adminReturns);
     return ok(null);
   } catch (error) {
     return fail(
@@ -80,13 +85,14 @@ export async function respondToReturnAction(
 
   try {
     await queries.requireRole(DASHBOARD_ROLES);
-    await queries.respondToReturn(
+    const { orderId } = await queries.respondToReturn(
       parsed.data.returnId,
       parsed.data.decision,
       parsed.data.note ?? null,
     );
-    revalidatePath(ROUTES.adminOrders);
-    revalidatePath(ROUTES.sellerOrders);
+    // The buyer sees the seller's response on their own order page too, not
+    // just seller/admin surfaces.
+    await revalidateOrderSurfaces(orderId);
     revalidatePath(ROUTES.adminReturns);
     return ok(null);
   } catch (error) {
@@ -124,7 +130,7 @@ export async function decideReturnAction(
 
   try {
     await queries.requireRole(DASHBOARD_ROLES);
-    await queries.decideReturn(
+    const { orderId } = await queries.decideReturn(
       parsed.data.returnId,
       parsed.data.decision,
       parsed.data.note ?? null,
@@ -157,13 +163,47 @@ export async function decideReturnAction(
       }
     }
 
+    // The buyer sees the refund/rejection on their own order page too, not
+    // just seller/admin surfaces.
     revalidatePath(ROUTES.adminReturns);
-    revalidatePath(ROUTES.adminOrders);
-    revalidatePath(ROUTES.sellerOrders);
+    await revalidateOrderSurfaces(orderId);
     return ok(null);
   } catch (error) {
     return fail(
       error instanceof Error ? error.message : "Could not decide this return request.",
+    );
+  }
+}
+
+/**
+ * The order's own seller (or admin) records whether a refunded return's
+ * item is actually sellable — a separate, deliberate step from
+ * `decideReturnAction`: approval never restocks by itself. Authorization is
+ * enforced inside `record_return_item_condition` itself (own order's
+ * seller_id, shop member, or admin); `requireRole` here is defense-in-depth,
+ * not the primary boundary.
+ */
+export async function recordReturnItemConditionAction(
+  returnId: string,
+  condition: ReturnItemCondition,
+  note?: string,
+): Promise<ActionResult<null>> {
+  const parsed = recordReturnItemConditionSchema.safeParse({ returnId, condition, note });
+  if (!parsed.success) return fail("Invalid request.");
+
+  try {
+    await queries.requireRole(DASHBOARD_ROLES);
+    const { orderId } = await queries.recordReturnItemCondition(
+      parsed.data.returnId,
+      parsed.data.condition,
+      parsed.data.note ?? null,
+    );
+    await revalidateOrderSurfaces(orderId);
+    revalidatePath(ROUTES.adminReturns);
+    return ok(null);
+  } catch (error) {
+    return fail(
+      error instanceof Error ? error.message : "Could not record this item's condition.",
     );
   }
 }

@@ -11,6 +11,7 @@ import { OrderTimeline } from "@/features/orders/components/OrderTimeline";
 import { PaymentStatusBadge } from "@/features/orders/components/PaymentStatusBadge";
 import { ShippingAddressCard } from "@/features/orders/components/ShippingAddressCard";
 import { MarkCodCollectedButton } from "@/features/payments/components/MarkCodCollectedButton";
+import { RecordReturnConditionPanel } from "@/features/returns/components/RecordReturnConditionPanel";
 import { ReturnRequestStatusCard } from "@/features/returns/components/ReturnRequestStatusCard";
 import { RespondToReturnPanel } from "@/features/returns/components/RespondToReturnPanel";
 import {
@@ -71,6 +72,11 @@ export default async function AdminOrderDetailPage({ params }: AdminOrderDetailP
           <ReturnRequestStatusCard request={returnRequest} evidenceUrl={returnEvidenceUrl} themed />
           {returnRequest.status === RETURN_STATUS.pending ? (
             <RespondToReturnPanel returnId={returnRequest.id} />
+          ) : null}
+          {returnRequest.status === RETURN_STATUS.refunded &&
+          !returnRequest.restockedAt &&
+          !returnRequest.markedUnsellableAt ? (
+            <RecordReturnConditionPanel returnId={returnRequest.id} />
           ) : null}
         </div>
       ) : null}

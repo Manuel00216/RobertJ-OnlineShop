@@ -128,7 +128,7 @@ export function OrderStatusControl({
               className={cn(buttonVariants({ variant: "outline", size: "rjSm" }))}
               onClick={() => setConfirmingCancel(true)}
             >
-              Cancel order
+              {status === "shipped" ? "Report failed delivery" : "Cancel order"}
             </button>
           ) : null}
         </div>
@@ -157,12 +157,24 @@ export function OrderStatusControl({
 
       {confirmingCancel ? (
         <ConfirmPanel
-          label={`Cancel order ${orderNumber}`}
-          title={`Cancel order ${orderNumber}?`}
-          description="This can't be undone. Stock is restocked automatically."
+          label={
+            status === "shipped"
+              ? `Report failed delivery for order ${orderNumber}`
+              : `Cancel order ${orderNumber}`
+          }
+          title={
+            status === "shipped"
+              ? `Report failed delivery for order ${orderNumber}?`
+              : `Cancel order ${orderNumber}?`
+          }
+          description={
+            status === "shipped"
+              ? "Use this when the delivery failed, was refused, or was returned to sender. This can't be undone. Stock is restocked automatically; payment status is unaffected."
+              : "This can't be undone. Stock is restocked automatically."
+          }
           tone="danger"
-          confirmLabel="Yes, cancel order"
-          pendingLabel="Cancelling…"
+          confirmLabel={status === "shipped" ? "Yes, report failed delivery" : "Yes, cancel order"}
+          pendingLabel={status === "shipped" ? "Reporting…" : "Cancelling…"}
           cancelLabel="Keep order"
           isPending={isPending}
           triggerRef={triggerRef}

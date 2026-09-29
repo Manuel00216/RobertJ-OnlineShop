@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils/cn";
 import { ROUTES } from "@/constants/routes";
 import { BuyAgainButton } from "@/features/orders/components/BuyAgainButton";
 import { CancelOrderButton } from "@/features/orders/components/CancelOrderButton";
+import { DeliveryResolutionChoice } from "@/features/orders/components/DeliveryResolutionChoice";
 import { OrderHeader } from "@/features/orders/components/OrderHeader";
 import { OrderItemsList } from "@/features/orders/components/OrderItemsList";
 import { OrderSummary } from "@/features/orders/components/OrderSummary";
@@ -16,7 +17,7 @@ import { PaymentStatusBadge } from "@/features/orders/components/PaymentStatusBa
 import { SellerShopRow } from "@/features/orders/components/SellerShopRow";
 import { ShipmentTrackingCard } from "@/features/orders/components/ShipmentTrackingCard";
 import { paymentMethodLabel } from "@/features/orders/utils/payment-method-label";
-import { RequestReturnPanel } from "@/features/returns/components/RequestReturnPanel";
+import { ReportProblemPanel } from "@/features/returns/components/ReportProblemPanel";
 import { ReturnRequestStatusCard } from "@/features/returns/components/ReturnRequestStatusCard";
 import {
   getActivePaymentForOrder,
@@ -125,6 +126,17 @@ export default async function OrderDetailPage({
   const returnRequest = canRequestReturn
     ? await getReturnRequestForOrder(order.id).catch(() => null)
     : null;
+
+  // Delivered + nothing already filed + not yet confirmed received: the
+  // buyer gets the paired "everything's fine" / "something's wrong" choice
+  // (DeliveryResolutionChoice). Once they confirm receipt, the order is
+  // resolved and neither path is offered again. A cancelled-but-paid order
+  // has no "Confirm Received" counterpart, so it goes straight to the
+  // report form.
+  const showDeliveryResolution =
+    order.status === ORDER_STATUS.delivered &&
+    !returnRequest &&
+    !order.buyerConfirmedReceivedAt;
   const returnEvidenceUrl = returnRequest?.evidencePath
     ? await getReturnEvidenceSignedUrl(returnRequest.evidencePath).catch(() => null)
     : null;
@@ -178,9 +190,11 @@ export default async function OrderDetailPage({
       {canRequestReturn ? (
         returnRequest ? (
           <ReturnRequestStatusCard request={returnRequest} evidenceUrl={returnEvidenceUrl} />
-        ) : (
-          <RequestReturnPanel orderId={order.id} />
-        )
+        ) : showDeliveryResolution ? (
+          <DeliveryResolutionChoice orderId={order.id} orderNumber={order.orderNumber} />
+        ) : order.status === ORDER_STATUS.cancelled ? (
+          <ReportProblemPanel orderId={order.id} />
+        ) : null
       ) : null}
 
       <SellerShopRow shopName={shopName} shopId={membership?.shopId ?? null} />

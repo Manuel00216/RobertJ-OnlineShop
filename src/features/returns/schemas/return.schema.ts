@@ -44,6 +44,14 @@ export const decideReturnSchema = z.object({
   note: z.string().trim().max(500, "Note is too long.").optional(),
 });
 
+/** Payload for the seller/admin's post-refund "is this item sellable?" step. */
+export const recordReturnItemConditionSchema = z.object({
+  returnId: uuidSchema,
+  condition: z.enum(["sellable", "not_sellable"]),
+  note: z.string().trim().max(500, "Note is too long.").optional(),
+});
+
 export type RequestReturnInput = z.infer<typeof requestReturnSchema>;
 export type RespondToReturnInput = z.infer<typeof respondToReturnSchema>;
 export type DecideReturnInput = z.infer<typeof decideReturnSchema>;
+export type RecordReturnItemConditionInput = z.infer<typeof recordReturnItemConditionSchema>;

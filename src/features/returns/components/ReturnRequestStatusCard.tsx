@@ -115,6 +115,16 @@ export async function ReturnRequestStatusCard({
           Refunded {formatCurrency(request.refundAmountCents, request.currency)}
         </p>
       ) : null}
+
+      {request.restockedAt ? (
+        <p className={cn("mt-2 text-xs", muted)}>
+          <span className={cn("font-semibold", ink)}>Item condition:</span> confirmed sellable — stock restored.
+        </p>
+      ) : request.markedUnsellableAt ? (
+        <p className={cn("mt-2 text-xs", muted)}>
+          <span className={cn("font-semibold", ink)}>Item condition:</span> not sellable — stock not restored.
+        </p>
+      ) : null}
     </section>
   );
 }

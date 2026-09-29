@@ -34,6 +34,7 @@ import type {
   UpdateProductInput,
 } from "@/features/products/schemas/product.schema";
 import type {
+  DashboardProductListParams,
   Product,
   ProductImage,
   ProductListParams,
@@ -67,7 +68,11 @@ import type {
 import type { UpdateProfileInput } from "@/features/account/schemas/account.schema";
 import type { OAuthProvider } from "@/features/auth/schemas/auth.schema";
 import type { BuyerPreferences, Profile } from "@/features/account/types/account.types";
-import type { Payment, PaymentAttempt } from "@/features/payments/types/payment.types";
+import type {
+  DashboardPaymentListParams,
+  Payment,
+  PaymentAttempt,
+} from "@/features/payments/types/payment.types";
 import type { Shop, ShopWithMember } from "@/features/shops/types/shop.types";
 import type { AdminUser } from "@/features/users/types/user.types";
 import type { AdjustStockInput } from "@/features/inventory/schemas/inventory.schema";
@@ -75,12 +80,17 @@ import type { AddressInput } from "@/features/addresses/schemas/address.schema";
 import type { Address } from "@/features/addresses/types/address.types";
 import {
   getStockStatus,
+  type DashboardInventoryListParams,
   type InventoryItem,
   type StockAdjustment,
 } from "@/features/inventory/types/inventory.types";
+import { DEFAULT_LOW_STOCK_THRESHOLD } from "@/features/inventory/constants/inventory.constants";
 import type {
+  CategoryRevenue,
   OrderStatusCount,
   ReportGranularity,
+  RepeatCustomerStats,
+  RestockPriorityItem,
   SalesSummary,
   SalesTrendPoint,
   TopProduct,
@@ -93,6 +103,7 @@ import type { BuyerActivityEvent } from "@/features/notifications/types/notifica
 import type {
   AdminReturnDecision,
   PendingXenditRefund,
+  ReturnItemCondition,
   ReturnRequest,
   SellerReturnDecision,
 } from "@/features/returns/types/return.types";
@@ -1525,7 +1536,7 @@ const ORDER_COLUMNS = `
   id, order_number, buyer_id, seller_id, subtotal_cents, shipping_fee_cents,
   total_cents, currency, payment_status, payment_method, order_status, shipping_address, notes,
   placed_at, paid_at, shipped_at, delivered_at, cancelled_at, checkout_group_id,
-  cancellation_reason, cancelled_by,
+  cancellation_reason, cancelled_by, buyer_confirmed_received_at,
   buyer:profiles!orders_buyer_id_fkey ( full_name, username ),
   seller:profiles!orders_seller_id_fkey ( full_name, username, role ),
   order_items (
@@ -1609,6 +1620,7 @@ function toOrder(row: OrderRowWithItems): Order {
     checkoutGroupId: row.checkout_group_id,
     cancellationReason: row.cancellation_reason,
     cancelledBy: row.cancelled_by,
+    buyerConfirmedReceivedAt: row.buyer_confirmed_received_at,
   };
 }
 
@@ -1855,6 +1867,25 @@ export const getBuyerOrder = cache(
 );
 
 /**
+ * Buyer confirms receipt of one of their own delivered orders — the sole
+ * write path for `orders.buyer_confirmed_received_at`. Ownership, the
+ * `delivered`-only precondition, and the "only once" rule are all
+ * re-enforced inside the `confirm_order_received` RPC (and again by the
+ * `enforce_order_update_rules` trigger as defense-in-depth) — this function
+ * just calls it.
+ */
+export async function confirmOrderReceived(orderId: string): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("confirm_order_received", {
+    p_order_id: orderId,
+  });
+
+  if (error) {
+    throw new Error(mapPostgresError(error, "Could not confirm receipt of this order."));
+  }
+}
+
+/**
  * Overview-hub payload: an exact per-status count (7 head-only queries, no row
  * transfer) plus the 5 most recent orders.
  */
@@ -1966,6 +1997,10 @@ export async function listDashboardOrders(
 ): Promise<PaginatedResult<Order>> {
   const supabase = await createSupabaseServerClient();
 
+  if (params.attentionOnly) {
+    return listDashboardOrdersNeedingAttention(supabase, params);
+  }
+
   let query = supabase
     .from(DATABASE_TABLES.ORDERS)
     .select(ORDER_COLUMNS, { count: "exact" });
@@ -1975,6 +2010,12 @@ export async function listDashboardOrders(
   }
   if (params.status) {
     query = query.eq("order_status", params.status);
+  }
+  if (params.paymentMethod) {
+    query = query.eq("payment_method", params.paymentMethod);
+  }
+  if (params.dateRange) {
+    query = query.gte("placed_at", dateRangeBoundary(params.dateRange));
   }
 
   query = query.order("placed_at", { ascending: false });
@@ -1994,6 +2035,132 @@ export async function listDashboardOrders(
     pageSize: params.pageSize,
     totalPages: Math.max(1, Math.ceil(total / params.pageSize)),
   };
+}
+
+/** Converts a dashboard date-range filter into a `placed_at` lower bound. "Today" is midnight UTC — an approximation, not a site-timezone boundary. */
+function dateRangeBoundary(range: "today" | "7d" | "30d"): string {
+  const now = new Date();
+  if (range === "today") {
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
+  }
+  const days = range === "7d" ? 7 : 30;
+  return new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+/**
+ * "Needs attention" spans two disjoint conditions — pending orders that
+ * aren't blocked on an unpaid online payment, and COD orders that are
+ * shipped/delivered but the cash hasn't been marked collected — see
+ * `isOrderNeedingAttention()`. Expressed as two flat queries OR'd together
+ * in application code rather than one nested `and()`-inside-`or()` filter
+ * string: PostgREST supports that syntax, but every other filter in this
+ * file is a flat `.eq()`/`.or()` chain, and a compound boolean expression is
+ * exactly where a hand-written filter string is easiest to get subtly wrong
+ * for financial/order data. Each side is capped at `ATTENTION_SCAN_LIMIT` —
+ * generous for one seller's (or one admin's) actionable backlog.
+ */
+const ATTENTION_SCAN_LIMIT = 500;
+
+async function listDashboardOrdersNeedingAttention(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  params: OrderListParams,
+): Promise<PaginatedResult<Order>> {
+  let needsConfirmation = supabase
+    .from(DATABASE_TABLES.ORDERS)
+    .select(ORDER_COLUMNS)
+    .eq("order_status", ORDER_STATUS.pending)
+    .or(`payment_method.eq.cod,payment_status.eq.${PAYMENT_STATUS.paid}`);
+  let codAwaitingCollection = supabase
+    .from(DATABASE_TABLES.ORDERS)
+    .select(ORDER_COLUMNS)
+    .eq("payment_method", "cod")
+    .eq("payment_status", PAYMENT_STATUS.pending)
+    .in("order_status", [ORDER_STATUS.shipped, ORDER_STATUS.delivered]);
+
+  if (params.search) {
+    needsConfirmation = needsConfirmation.ilike("order_number", `%${params.search}%`);
+    codAwaitingCollection = codAwaitingCollection.ilike("order_number", `%${params.search}%`);
+  }
+  if (params.paymentMethod) {
+    needsConfirmation = needsConfirmation.eq("payment_method", params.paymentMethod);
+    codAwaitingCollection = codAwaitingCollection.eq("payment_method", params.paymentMethod);
+  }
+  if (params.dateRange) {
+    const boundary = dateRangeBoundary(params.dateRange);
+    needsConfirmation = needsConfirmation.gte("placed_at", boundary);
+    codAwaitingCollection = codAwaitingCollection.gte("placed_at", boundary);
+  }
+
+  const [confirmResult, codResult] = await Promise.all([
+    needsConfirmation.order("placed_at", { ascending: false }).limit(ATTENTION_SCAN_LIMIT),
+    codAwaitingCollection.order("placed_at", { ascending: false }).limit(ATTENTION_SCAN_LIMIT),
+  ]);
+
+  if (confirmResult.error) throw queryError("Failed to load orders", confirmResult.error);
+  if (codResult.error) throw queryError("Failed to load orders", codResult.error);
+
+  const merged = [...(confirmResult.data ?? []), ...(codResult.data ?? [])]
+    .map((row) => toOrder(row as OrderRowWithItems))
+    .sort((a, b) => (a.placedAt < b.placedAt ? 1 : -1));
+
+  const total = merged.length;
+  const from = (params.page - 1) * params.pageSize;
+  return {
+    items: merged.slice(from, from + params.pageSize),
+    total,
+    page: params.page,
+    pageSize: params.pageSize,
+    totalPages: Math.max(1, Math.ceil(total / params.pageSize)),
+  };
+}
+
+/**
+ * Exact counts for the dashboard's "Needs attention" summary strip — same
+ * two conditions as `listDashboardOrdersNeedingAttention`, but a `head`
+ * count-only query instead of fetching rows.
+ */
+export async function getOrderAttentionCounts(): Promise<{
+  needsConfirmation: number;
+  codAwaitingCollection: number;
+}> {
+  const supabase = await createSupabaseServerClient();
+  const [confirmResult, codResult] = await Promise.all([
+    supabase
+      .from(DATABASE_TABLES.ORDERS)
+      .select("id", { count: "exact", head: true })
+      .eq("order_status", ORDER_STATUS.pending)
+      .or(`payment_method.eq.cod,payment_status.eq.${PAYMENT_STATUS.paid}`),
+    supabase
+      .from(DATABASE_TABLES.ORDERS)
+      .select("id", { count: "exact", head: true })
+      .eq("payment_method", "cod")
+      .eq("payment_status", PAYMENT_STATUS.pending)
+      .in("order_status", [ORDER_STATUS.shipped, ORDER_STATUS.delivered]),
+  ]);
+
+  if (confirmResult.error) throw queryError("Failed to load order counts", confirmResult.error);
+  if (codResult.error) throw queryError("Failed to load order counts", codResult.error);
+
+  return {
+    needsConfirmation: confirmResult.count ?? 0,
+    codAwaitingCollection: codResult.count ?? 0,
+  };
+}
+
+/**
+ * Bulk-export counterpart to `listDashboardOrders` — same filters, no page
+ * cap (bounded by `EXPORT_ROW_LIMIT` instead). Kept conservative (rather than
+ * a larger "everything matching" number) since some PostgREST deployments
+ * cap `.range()` at a configured max-rows value regardless of what's asked
+ * for.
+ */
+const EXPORT_ROW_LIMIT = 1000;
+
+export async function listOrdersForExport(
+  params: Omit<OrderListParams, "page" | "pageSize">,
+): Promise<Order[]> {
+  const result = await listDashboardOrders({ ...params, page: 1, pageSize: EXPORT_ROW_LIMIT });
+  return result.items;
 }
 
 /**
@@ -2891,12 +3058,20 @@ type PaymentRow = Database["public"]["Tables"]["payments"]["Row"];
  * `PRODUCT_COLUMNS`/`ORDER_COLUMNS` — parsed at the type level, must not be
  * interpolated.
  */
+/**
+ * `order` is joined with `!inner` (not the default left join) so
+ * `.ilike("order.order_number", …)` can filter the parent (payments) rows by
+ * it — PostgREST only applies an embedded-resource filter to the top-level
+ * result set when that embed is an inner join. Every payment row has an
+ * order (`payments.order_id` is `NOT NULL`), so this never narrows results
+ * on its own.
+ */
 const PAYMENT_COLUMNS = `
   id, order_id, receipt_path, failure_reason, payment_method_type,
   payment_channel, checkout_url, expires_at, amount_cents,
   currency, status, verified_by, verified_at, created_at,
   xendit_payment_request_id, checkout_group_id,
-  order:orders!payments_order_id_fkey (
+  order:orders!payments_order_id_fkey!inner (
     order_number,
     buyer:profiles!orders_buyer_id_fkey ( full_name, username )
   )
@@ -3260,6 +3435,41 @@ export interface XenditCancellationCandidate {
  * *same* combined charge, so they're collapsed to one candidate per channel
  * rather than reconciling the same Xendit payment request multiple times.
  */
+/**
+ * Shared by `getFinalizedPendingXenditAttemptsForCancellation` and its admin
+ * (no-session) counterpart below: collapses raw payment rows into one
+ * reconciliation candidate per channel — one row per channel for a single
+ * order, or one row per channel across every order sharing a
+ * `checkout_group_id` (every member row for one channel represents the same
+ * combined charge, so they're never reconciled twice).
+ */
+function toXenditCancellationCandidates(
+  rows: PaymentRow[],
+  checkoutGroupId: string | null,
+): XenditCancellationCandidate[] {
+  if (!checkoutGroupId) {
+    return rows
+      .filter((row): row is PaymentRow & { payment_channel: string } => row.payment_channel !== null)
+      .map((row) => ({
+        referenceId: row.id,
+        channelCode: row.payment_channel as "GCASH" | "PAYMAYA" | "CARD",
+        attempt: toPaymentAttempt(row),
+      }));
+  }
+
+  const oneRowPerChannel = new Map<string, PaymentRow>();
+  for (const row of rows) {
+    if (row.payment_channel && !oneRowPerChannel.has(row.payment_channel)) {
+      oneRowPerChannel.set(row.payment_channel, row);
+    }
+  }
+  return [...oneRowPerChannel.entries()].map(([channelCode, row]) => ({
+    referenceId: checkoutGroupId,
+    channelCode: channelCode as "GCASH" | "PAYMAYA" | "CARD",
+    attempt: toPaymentAttempt(row),
+  }));
+}
+
 export async function getFinalizedPendingXenditAttemptsForCancellation(
   orderId: string,
 ): Promise<XenditCancellationCandidate[]> {
@@ -3291,29 +3501,101 @@ export async function getFinalizedPendingXenditAttemptsForCancellation(
     throw queryError("Failed to check for existing payment attempts", error);
   }
 
-  const rows = (data ?? []) as PaymentRow[];
+  return toXenditCancellationCandidates((data ?? []) as PaymentRow[], order.checkout_group_id);
+}
 
-  if (!order.checkout_group_id) {
-    return rows
-      .filter((row): row is PaymentRow & { payment_channel: string } => row.payment_channel !== null)
-      .map((row) => ({
-        referenceId: row.id,
-        channelCode: row.payment_channel as "GCASH" | "PAYMAYA" | "CARD",
-        attempt: toPaymentAttempt(row),
-      }));
+/**
+ * Same shape as `getFinalizedPendingXenditAttemptsForCancellation`, for the
+ * abandoned-order expiry sweep (the xendit-reconciliation cron's second
+ * pass) — no authenticated caller exists in that context, so this must use
+ * the admin client, same reasoning as `getStaleXenditPaymentsForReconciliationSweep`.
+ */
+export async function getFinalizedPendingXenditAttemptsForOrderAdmin(
+  orderId: string,
+  checkoutGroupId: string | null,
+): Promise<XenditCancellationCandidate[]> {
+  const admin = createSupabaseAdminClient();
+
+  const baseQuery = admin
+    .from(DATABASE_TABLES.PAYMENTS)
+    .select("*")
+    .eq("payment_method_type", "xendit")
+    .eq("status", "pending")
+    .not("xendit_payment_request_id", "is", null);
+
+  const { data, error } = checkoutGroupId
+    ? await baseQuery.eq("checkout_group_id", checkoutGroupId)
+    : await baseQuery.eq("order_id", orderId);
+
+  if (error) {
+    throw queryError("Failed to check for existing payment attempts", error);
   }
 
-  const oneRowPerChannel = new Map<string, PaymentRow>();
-  for (const row of rows) {
-    if (row.payment_channel && !oneRowPerChannel.has(row.payment_channel)) {
-      oneRowPerChannel.set(row.payment_channel, row);
-    }
+  return toXenditCancellationCandidates((data ?? []) as PaymentRow[], checkoutGroupId);
+}
+
+export interface AbandonedXenditOrderCandidate {
+  orderId: string;
+  orderNumber: string;
+  checkoutGroupId: string | null;
+}
+
+/**
+ * TD-9: orders placed with `payment_method = 'xendit'`, still `order_status
+ * = 'pending'` (the only status an unpaid Xendit order can ever be in —
+ * `advanceOrderStatus` refuses to move it forward while unpaid), and
+ * `payment_status` still `pending`/`failed`, past the abandonment
+ * threshold — the "buyer never returned to retry or cancel" case. Includes
+ * orders that never even reached Xendit (no `payments` row at all), which
+ * `getStaleXenditPaymentsForReconciliationSweep` can't see since it only
+ * reads rows with a real `xendit_payment_request_id`.
+ */
+export async function getAbandonedXenditOrdersForExpiry(
+  thresholdHours: number,
+  fetchLimit: number,
+): Promise<AbandonedXenditOrderCandidate[]> {
+  const admin = createSupabaseAdminClient();
+  const cutoff = new Date(Date.now() - thresholdHours * 60 * 60 * 1000).toISOString();
+
+  const { data, error } = await admin
+    .from(DATABASE_TABLES.ORDERS)
+    .select("id, order_number, checkout_group_id")
+    .eq("payment_method", "xendit")
+    .eq("order_status", "pending")
+    .in("payment_status", ["pending", "failed"])
+    .lte("placed_at", cutoff)
+    .order("placed_at", { ascending: true })
+    .limit(fetchLimit);
+
+  if (error) {
+    throw queryError("Failed to load abandoned Xendit orders for expiry", error);
   }
-  return [...oneRowPerChannel.entries()].map(([channelCode, row]) => ({
-    referenceId: order.checkout_group_id as string,
-    channelCode: channelCode as "GCASH" | "PAYMAYA" | "CARD",
-    attempt: toPaymentAttempt(row),
+
+  return (data ?? []).map((row) => ({
+    orderId: row.id,
+    orderNumber: row.order_number,
+    checkoutGroupId: row.checkout_group_id,
   }));
+}
+
+/**
+ * System-actor cancellation of an abandoned, unpaid Xendit order — the sole
+ * write path for the auto-expiry sweep. Calls `expire_unpaid_xendit_order`,
+ * which re-derives every precondition itself (still pending, still unpaid,
+ * still Xendit, actually past the threshold) rather than trusting the
+ * caller; this function is not the authorization boundary, the RPC is.
+ * `orders_restock_on_cancel` fires exactly as it does for a buyer/seller/
+ * admin cancellation — same trigger, no parallel restock path.
+ */
+export async function expireAbandonedXenditOrder(orderId: string): Promise<void> {
+  const admin = createSupabaseAdminClient();
+  const { error } = await admin.rpc("expire_unpaid_xendit_order", {
+    p_order_id: orderId,
+  });
+
+  if (error) {
+    throw rpcError("Could not auto-cancel this abandoned order.", error);
+  }
 }
 
 /** Same shape as `XenditCancellationCandidate` — named separately because it's produced system-wide for the passive reconciliation sweep (phase #4A), not for one specific order/group's cancellation check. */
@@ -3425,36 +3707,94 @@ export async function getPaymentReceiptSignedUrl(path: string): Promise<string> 
 }
 
 /**
- * Recent payments for the read-only payment history view. No manual
- * `seller_id` filtering here — RLS alone restricts visible rows to the
- * caller's own orders-as-seller, or all rows for an admin (same "RLS is the
- * primary boundary" pattern as everywhere else in this file). Xendit
+ * Paginated/filtered payment history for the Seller/Admin dashboard. No
+ * manual `seller_id` filtering here — RLS alone restricts visible rows to
+ * the caller's own orders-as-seller, or all rows for an admin (same "RLS is
+ * the primary boundary" pattern as everywhere else in this file). Xendit
  * payments settle themselves via webhook — nothing here requires manual
  * action, unlike the retired QR verification queue.
  *
- * Phase 4B: optional `status` filter (same "no manual scoping, just an
- * optional `.eq`" shape as `listReturnRequests`) — lets the Admin payments
- * view narrow to e.g. `pending` without any new query function.
+ * `staleOnly` (Admin-only) narrows to still-pending Xendit attempts older
+ * than a fixed 30-minute fallback window — a conservative proxy for
+ * `isStaleXenditAttempt()`'s real per-row logic (which also considers each
+ * attempt's own `expiresAt`). PostgREST filters compare a column against a
+ * literal, not another column, so the exact per-row check isn't expressible
+ * here; the row's own "stale" badge in the UI still uses the precise
+ * `isStaleXenditAttempt()` — this filter only narrows the SQL query and may
+ * occasionally disagree with that badge at the margin.
  */
-export async function listPaymentHistory(limit = 50, status?: PaymentStatus): Promise<Payment[]> {
+export async function listPaymentHistory(
+  params: DashboardPaymentListParams,
+): Promise<PaginatedResult<Payment>> {
   const supabase = await createSupabaseServerClient();
   let query = supabase
     .from(DATABASE_TABLES.PAYMENTS)
-    .select(PAYMENT_COLUMNS)
-    .order("created_at", { ascending: false })
-    .limit(limit);
+    .select(PAYMENT_COLUMNS, { count: "exact" });
 
-  if (status) {
-    query = query.eq("status", status);
+  if (params.search) {
+    const term = params.search.replace(/[,()]/g, " ").trim();
+    if (term) query = query.ilike("order.order_number", `%${term}%`);
+  }
+  if (params.status) {
+    query = query.eq("status", params.status);
+  }
+  if (params.paymentMethodType) {
+    query = query.eq("payment_method_type", params.paymentMethodType);
+  }
+  if (params.staleOnly) {
+    const staleBoundary = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    query = query
+      .eq("payment_method_type", "xendit")
+      .eq("status", PAYMENT_STATUS.pending)
+      .not("xendit_payment_request_id", "is", null)
+      .lt("created_at", staleBoundary);
   }
 
-  const { data, error } = await query;
+  query = query.order("created_at", { ascending: false });
+
+  const { from, to } = toRange(params);
+  const { data, error, count } = await query.range(from, to);
 
   if (error) {
     throw queryError("Failed to load payment history", error);
   }
 
-  return (data ?? []).map((row) => toPayment(row as PaymentRowWithOrder));
+  const total = count ?? 0;
+  return {
+    items: (data ?? []).map((row) => toPayment(row as PaymentRowWithOrder)),
+    total,
+    page: params.page,
+    pageSize: params.pageSize,
+    totalPages: Math.max(1, Math.ceil(total / params.pageSize)),
+  };
+}
+
+/**
+ * Exact count for the Admin Payments dashboard's "Needs reconciliation"
+ * summary strip — same conservative 30-minute proxy `listPaymentHistory`'s
+ * `staleOnly` filter uses, see its doc comment.
+ */
+export async function getStalePaymentCount(): Promise<number> {
+  const supabase = await createSupabaseServerClient();
+  const staleBoundary = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+  const { count, error } = await supabase
+    .from(DATABASE_TABLES.PAYMENTS)
+    .select("id", { count: "exact", head: true })
+    .eq("payment_method_type", "xendit")
+    .eq("status", PAYMENT_STATUS.pending)
+    .not("xendit_payment_request_id", "is", null)
+    .lt("created_at", staleBoundary);
+
+  if (error) throw queryError("Failed to load payment counts", error);
+  return count ?? 0;
+}
+
+/** Bulk-export counterpart to `listPaymentHistory` — same filters, no page cap. */
+export async function listPaymentsForExport(
+  params: Omit<DashboardPaymentListParams, "page" | "pageSize">,
+): Promise<Payment[]> {
+  const result = await listPaymentHistory({ ...params, page: 1, pageSize: EXPORT_ROW_LIMIT });
+  return result.items;
 }
 
 // ============================================================================
@@ -3471,7 +3811,7 @@ const RETURN_REQUEST_COLUMNS = `
   id, order_id, order_item_id, buyer_id, seller_id, reason, evidence_path, status,
   seller_decision_note, seller_decided_at, seller_decided_by,
   admin_decision_note, admin_decided_at, admin_decided_by,
-  refund_amount_cents, created_at, updated_at,
+  refund_amount_cents, restocked_at, marked_unsellable_at, condition_note, created_at, updated_at,
   order:orders!return_requests_order_id_fkey ( order_number, currency ),
   buyer:profiles!return_requests_buyer_id_fkey ( full_name, username ),
   order_item:order_items!return_requests_order_item_id_fkey ( product_title )
@@ -3503,6 +3843,9 @@ function toReturnRequest(row: ReturnRequestRowWithJoins): ReturnRequest {
     adminDecisionNote: row.admin_decision_note,
     adminDecidedAt: row.admin_decided_at,
     refundAmountCents: row.refund_amount_cents,
+    restockedAt: row.restocked_at,
+    markedUnsellableAt: row.marked_unsellable_at,
+    conditionNote: row.condition_note,
     createdAt: row.created_at,
   };
 }
@@ -3579,9 +3922,9 @@ export async function respondToReturn(
   returnId: string,
   decision: SellerReturnDecision,
   note: string | null,
-): Promise<void> {
+): Promise<{ orderId: string }> {
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.rpc("respond_to_return", {
+  const { data, error } = await supabase.rpc("respond_to_return", {
     p_return_id: returnId,
     p_decision: decision,
     p_note: note ?? undefined,
@@ -3590,6 +3933,7 @@ export async function respondToReturn(
   if (error) {
     throw new Error(mapPostgresError(error, "Could not respond to this return request."));
   }
+  return { orderId: (data as { order_id: string }).order_id };
 }
 
 /**
@@ -3605,9 +3949,9 @@ export async function decideReturn(
   returnId: string,
   decision: AdminReturnDecision,
   note: string | null,
-): Promise<void> {
+): Promise<{ orderId: string }> {
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.rpc("decide_return", {
+  const { data, error } = await supabase.rpc("decide_return", {
     p_return_id: returnId,
     p_decision: decision,
     p_note: note ?? undefined,
@@ -3616,6 +3960,34 @@ export async function decideReturn(
   if (error) {
     throw new Error(mapPostgresError(error, "Could not decide this return request."));
   }
+  return { orderId: (data as { order_id: string }).order_id };
+}
+
+/**
+ * The order's own seller (or shop member) or an admin records whether a
+ * refunded return's item is actually sellable — the sole write path for
+ * `return_requests.restocked_at`/`marked_unsellable_at`. Only 'sellable'
+ * restocks inventory (via `record_return_item_condition`'s own
+ * `restock_on_order_cancel`-mirrored logic); 'not_sellable' just closes out
+ * the step. Deliberately a separate step from `decideReturn` — restocking
+ * does not happen automatically on refund approval.
+ */
+export async function recordReturnItemCondition(
+  returnId: string,
+  condition: ReturnItemCondition,
+  note: string | null,
+): Promise<{ orderId: string }> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("record_return_item_condition", {
+    p_return_id: returnId,
+    p_condition: condition,
+    p_note: note ?? undefined,
+  });
+
+  if (error) {
+    throw new Error(mapPostgresError(error, "Could not record this item's condition."));
+  }
+  return { orderId: (data as { order_id: string }).order_id };
 }
 
 /**
@@ -4537,6 +4909,119 @@ export async function listDashboardProducts(
 }
 
 /**
+ * Paginated/filtered counterpart to `listDashboardProducts` — powers the
+ * Products table (search/status/category + page). Kept as a separate
+ * function rather than changing `listDashboardProducts`'s signature: that
+ * one is also called unpaginated by `SellerKpiRow`/`AdminKpiRow` for a plain
+ * total count, which this would have broken.
+ */
+export async function listDashboardProductsPage(
+  owner: { sellerId: string; shopId: string | null } | null,
+  params: DashboardProductListParams,
+): Promise<PaginatedResult<Product>> {
+  const supabase = await createSupabaseServerClient();
+  let query = supabase
+    .from(DATABASE_TABLES.PRODUCTS)
+    .select(PRODUCT_COLUMNS, { count: "exact" });
+
+  if (owner) {
+    query = query.or(
+      owner.shopId
+        ? `seller_id.eq.${owner.sellerId},shop_id.eq.${owner.shopId}`
+        : `seller_id.eq.${owner.sellerId}`,
+    );
+  }
+  if (params.search) {
+    const term = params.search.replace(/[,()]/g, " ").trim();
+    if (term) query = query.ilike("title", `%${term}%`);
+  }
+  if (params.status) {
+    query = query.eq("status", params.status);
+  }
+  if (params.categoryId) {
+    query = query.eq("category_id", params.categoryId);
+  }
+
+  query = query.order("created_at", { ascending: false });
+
+  const { from, to } = toRange(params);
+  const { data, error, count } = await query.range(from, to);
+
+  if (error) {
+    throw queryError("Failed to load products", error);
+  }
+
+  const total = count ?? 0;
+  return {
+    items: (data ?? []).map((row) => toProduct(row as ProductRowWithImages)),
+    total,
+    page: params.page,
+    pageSize: params.pageSize,
+    totalPages: Math.max(1, Math.ceil(total / params.pageSize)),
+  };
+}
+
+/**
+ * Applies one status to every id in `ids` at once (dashboard bulk action).
+ * Same owner-scoping precedent as `updateProduct`/`archiveProduct`: `owner`
+ * is `null` for an admin (no filter), otherwise the caller's own products or
+ * their shop's. Returns only the ids that actually matched (already-foreign
+ * ids in `ids` are silently dropped, matching `.in()`'s normal behaviour).
+ */
+export async function bulkUpdateProductStatus(
+  ids: string[],
+  status: ProductStatus,
+  owner: { sellerId: string; shopId: string | null } | null,
+): Promise<string[]> {
+  const supabase = await createSupabaseServerClient();
+  let query = supabase
+    .from(DATABASE_TABLES.PRODUCTS)
+    .update({ status })
+    .in("id", ids);
+
+  if (owner) {
+    query = query.or(
+      owner.shopId
+        ? `seller_id.eq.${owner.sellerId},shop_id.eq.${owner.shopId}`
+        : `seller_id.eq.${owner.sellerId}`,
+    );
+  }
+
+  const { data, error } = await query.select("id");
+  if (error) {
+    throw queryError("Failed to update products", error);
+  }
+  return (data ?? []).map((row) => row.id);
+}
+
+/** Same shape as `bulkUpdateProductStatus`, for the category-reassignment bulk action. */
+export async function bulkAssignProductCategory(
+  ids: string[],
+  categoryId: string,
+  owner: { sellerId: string; shopId: string | null } | null,
+): Promise<string[]> {
+  const supabase = await createSupabaseServerClient();
+  let query = supabase
+    .from(DATABASE_TABLES.PRODUCTS)
+    .update({ category_id: categoryId })
+    .in("id", ids);
+
+  if (owner) {
+    query = query.or(
+      owner.shopId
+        ? `seller_id.eq.${owner.sellerId},shop_id.eq.${owner.shopId}`
+        : `seller_id.eq.${owner.sellerId}`,
+    );
+  }
+
+  const { data, error } = await query.select("id");
+  if (error) {
+    throw queryError("Failed to update products", error);
+  }
+  return (data ?? []).map((row) => row.id);
+}
+
+/**
  * Admin-only: assigns a shop to a legacy/unassigned product (`shop_id`
  * currently `null`). Relies on `is_admin()` in RLS — the caller's admin
  * status is the actual authorization boundary, not this function.
@@ -4703,6 +5188,75 @@ export async function listDashboardInventory(): Promise<InventoryItem[]> {
   }
 
   return (data ?? []).map((row) => toInventoryItem(row as InventoryRowWithJoins));
+}
+
+/**
+ * Paginated/filtered counterpart to `listDashboardInventory` — powers the
+ * Inventory table (search/stock-status + page). Kept separate rather than
+ * changing `listDashboardInventory`'s signature: that one is also called
+ * unpaginated by `getLowStockReport` (KPI tiles, low-stock report), which
+ * this would have broken.
+ *
+ * The stock-status filter compares `quantity` against the *default*
+ * low-stock threshold (`DEFAULT_LOW_STOCK_THRESHOLD`), not each row's own
+ * `low_stock_threshold` column — PostgREST filters take a literal value, not
+ * another column, so a per-row threshold comparison isn't expressible here
+ * without a database view/RPC. Every row is created with the same default
+ * today (there's no UI to change it per-row), so this matches
+ * `getStockStatus()` exactly in practice; if a per-row override is ever
+ * introduced, this filter needs to move into a computed column or RPC.
+ */
+export async function listDashboardInventoryPage(
+  params: DashboardInventoryListParams,
+): Promise<PaginatedResult<InventoryItem>> {
+  const supabase = await createSupabaseServerClient();
+
+  // `!inner` so `.ilike("product.title", …)` can filter the parent
+  // (inventory) rows by the joined product's title — PostgREST only applies
+  // an embedded-resource filter to the top-level result set when that embed
+  // is an inner join. Every inventory row has a product, so this never
+  // narrows results on its own.
+  let query = supabase
+    .from(DATABASE_TABLES.INVENTORY)
+    .select(
+      `
+        id, product_id, variant_id, shop_id, quantity, low_stock_threshold, created_at, updated_at,
+        product:products!inventory_product_id_fkey!inner ( title, slug, status ),
+        shop:shops!inventory_shop_id_fkey ( name ),
+        variant:product_variants!inventory_variant_id_fkey ( sku, color, size )
+      `,
+      { count: "exact" },
+    );
+
+  if (params.search) {
+    const term = params.search.replace(/[,()]/g, " ").trim();
+    if (term) query = query.ilike("product.title", `%${term}%`);
+  }
+  if (params.stockStatus === "out_of_stock") {
+    query = query.lte("quantity", 0);
+  } else if (params.stockStatus === "low_stock") {
+    query = query.gt("quantity", 0).lte("quantity", DEFAULT_LOW_STOCK_THRESHOLD);
+  } else if (params.stockStatus === "in_stock") {
+    query = query.gt("quantity", DEFAULT_LOW_STOCK_THRESHOLD);
+  }
+
+  query = query.order("updated_at", { ascending: false });
+
+  const { from, to } = toRange(params);
+  const { data, error, count } = await query.range(from, to);
+
+  if (error) {
+    throw queryError("Failed to load inventory", error);
+  }
+
+  const total = count ?? 0;
+  return {
+    items: (data ?? []).map((row) => toInventoryItem(row as InventoryRowWithJoins)),
+    total,
+    page: params.page,
+    pageSize: params.pageSize,
+    totalPages: Math.max(1, Math.ceil(total / params.pageSize)),
+  };
 }
 
 /**
@@ -5187,6 +5741,201 @@ export async function getLowStockReport(): Promise<InventoryItem[]> {
   return items
     .filter((item) => item.stockStatus !== "in_stock")
     .sort((a, b) => a.quantity - b.quantity);
+}
+
+type RestockOrderRow = {
+  payment_status: PaymentStatus;
+  order_items: Array<{
+    product_id: string;
+    variant_id: string | null;
+    quantity: number;
+    subtotal_cents: number;
+  }>;
+};
+
+/**
+ * Cross-references the caller's low/out-of-stock items (see
+ * `getLowStockReport`) with their sales in `[from, to]`, ranked by revenue
+ * earned — "your best-seller is about to run out." Seller Dashboard/Reports
+ * only. Relies on RLS alone for the `orders`/`order_items` read, same "RLS is
+ * the primary boundary" pattern as `listDashboardOrders`.
+ */
+export async function getRestockPriorityReport(
+  from: string,
+  to: string,
+  limit = 5,
+): Promise<RestockPriorityItem[]> {
+  const lowStockItems = await getLowStockReport();
+  if (lowStockItems.length === 0) return [];
+
+  const supabase = await createSupabaseServerClient();
+  const productIds = Array.from(new Set(lowStockItems.map((item) => item.productId)));
+
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.ORDERS)
+    .select(
+      `
+        payment_status,
+        order_items!inner ( product_id, variant_id, quantity, subtotal_cents )
+      `,
+    )
+    .in("order_items.product_id", productIds)
+    .gte("placed_at", `${from}T00:00:00Z`)
+    .lte("placed_at", `${to}T23:59:59Z`);
+
+  if (error) {
+    throw queryError("Failed to load restock priority", error);
+  }
+
+  const key = (productId: string, variantId: string | null) => `${productId}:${variantId ?? ""}`;
+  const perVariant = new Map<string, { units: number; revenueCents: number }>();
+
+  for (const order of (data ?? []) as RestockOrderRow[]) {
+    for (const item of order.order_items) {
+      if (!productIds.includes(item.product_id)) continue;
+      const k = key(item.product_id, item.variant_id);
+      const entry = perVariant.get(k) ?? { units: 0, revenueCents: 0 };
+      entry.units += item.quantity;
+      if (order.payment_status === PAYMENT_STATUS.paid) entry.revenueCents += item.subtotal_cents;
+      perVariant.set(k, entry);
+    }
+  }
+
+  return lowStockItems
+    .map((item) => {
+      const stats = perVariant.get(key(item.productId, item.variantId)) ?? { units: 0, revenueCents: 0 };
+      return {
+        productId: item.productId,
+        variantId: item.variantId,
+        productTitle: item.productTitle,
+        variantLabel: item.variantLabel,
+        quantity: item.quantity,
+        stockStatus: item.stockStatus,
+        unitsSoldInRange: stats.units,
+        revenueCentsInRange: stats.revenueCents,
+      };
+    })
+    .sort((a, b) => b.revenueCentsInRange - a.revenueCentsInRange)
+    .slice(0, limit);
+}
+
+type CategoryRevenueOrderRow = {
+  order_items: Array<{
+    quantity: number;
+    subtotal_cents: number;
+    product: {
+      category_id: string | null;
+      category: { name: string } | null;
+    } | null;
+  }>;
+};
+
+/**
+ * Revenue/units rollup per category for paid orders in `[from, to]`. Seller
+ * Reports only. Relies on RLS alone, same pattern as `getRestockPriorityReport`.
+ */
+export async function getRevenueByCategory(from: string, to: string): Promise<CategoryRevenue[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.ORDERS)
+    .select(
+      `
+        order_items!inner (
+          quantity, subtotal_cents,
+          product:products!order_items_product_id_fkey (
+            category_id,
+            category:categories!products_category_id_fkey ( name )
+          )
+        )
+      `,
+    )
+    .eq("payment_status", PAYMENT_STATUS.paid)
+    .gte("placed_at", `${from}T00:00:00Z`)
+    .lte("placed_at", `${to}T23:59:59Z`);
+
+  if (error) {
+    throw queryError("Failed to load revenue by category", error);
+  }
+
+  const perCategory = new Map<string, { name: string; revenueCents: number; units: number }>();
+  for (const order of (data ?? []) as CategoryRevenueOrderRow[]) {
+    for (const item of order.order_items) {
+      const categoryId = item.product?.category_id ?? "uncategorized";
+      const categoryName = item.product?.category?.name ?? "Uncategorized";
+      const entry = perCategory.get(categoryId) ?? { name: categoryName, revenueCents: 0, units: 0 };
+      entry.revenueCents += item.subtotal_cents;
+      entry.units += item.quantity;
+      perCategory.set(categoryId, entry);
+    }
+  }
+
+  return Array.from(perCategory.entries())
+    .map(([categoryId, v]) => ({
+      categoryId: categoryId === "uncategorized" ? null : categoryId,
+      categoryName: v.name,
+      revenueCents: v.revenueCents,
+      unitsSold: v.units,
+    }))
+    .sort((a, b) => b.revenueCents - a.revenueCents);
+}
+
+/** Safety cap on the unbounded per-buyer history scan below — generous for one seller's real buyer base. */
+const REPEAT_CUSTOMER_HISTORY_LIMIT = 5000;
+
+/**
+ * Returning- vs. new-buyer split for orders placed in `[from, to]` — a
+ * buyer counts as "returning" if they have more than one order with this
+ * seller across all time (not just within the range). Seller Dashboard only.
+ * Two round trips, both relying on RLS alone: the range itself, then every
+ * historical order (any date) for just the buyers found in that range.
+ */
+export async function getRepeatCustomerRate(from: string, to: string): Promise<RepeatCustomerStats> {
+  const supabase = await createSupabaseServerClient();
+
+  const { data: rangeOrders, error: rangeError } = await supabase
+    .from(DATABASE_TABLES.ORDERS)
+    .select("buyer_id")
+    .gte("placed_at", `${from}T00:00:00Z`)
+    .lte("placed_at", `${to}T23:59:59Z`);
+
+  if (rangeError) {
+    throw queryError("Failed to load repeat customer stats", rangeError);
+  }
+
+  const totalOrders = (rangeOrders ?? []).length;
+  if (totalOrders === 0) {
+    return { totalOrders: 0, returningOrders: 0, newOrders: 0, ratePercent: 0 };
+  }
+
+  const buyerIds = Array.from(new Set((rangeOrders ?? []).map((row) => row.buyer_id)));
+
+  const { data: historyOrders, error: historyError } = await supabase
+    .from(DATABASE_TABLES.ORDERS)
+    .select("buyer_id")
+    .in("buyer_id", buyerIds)
+    .limit(REPEAT_CUSTOMER_HISTORY_LIMIT);
+
+  if (historyError) {
+    throw queryError("Failed to load repeat customer stats", historyError);
+  }
+
+  const totalCountByBuyer = new Map<string, number>();
+  for (const row of historyOrders ?? []) {
+    totalCountByBuyer.set(row.buyer_id, (totalCountByBuyer.get(row.buyer_id) ?? 0) + 1);
+  }
+
+  let returningOrders = 0;
+  for (const row of rangeOrders ?? []) {
+    if ((totalCountByBuyer.get(row.buyer_id) ?? 0) > 1) returningOrders += 1;
+  }
+
+  const newOrders = totalOrders - returningOrders;
+  return {
+    totalOrders,
+    returningOrders,
+    newOrders,
+    ratePercent: Math.round((returningOrders / totalOrders) * 100),
+  };
 }
 
 // ============================================================================

@@ -27,6 +27,28 @@ export const buyerOrderListParamsSchema = paginationSchema.extend({
   tab: lifecycleTabSchema.optional(),
 });
 
+/**
+ * Dashboard-only extension of the buyer schema's fields — same
+ * search/status/pagination shape, plus payment-method/date-range/attention
+ * filters that only make sense for a seller/admin managing orders, never the
+ * buyer's own history.
+ */
+export const dashboardOrderListParamsSchema = paginationSchema.extend({
+  search: z.string().trim().min(1).max(40).optional(),
+  status: orderStatusSchema.optional(),
+  paymentMethod: z.enum(["cod", "xendit"]).optional(),
+  dateRange: z.enum(["today", "7d", "30d"]).optional(),
+  // Deliberately not z.coerce.boolean() — Boolean("false") is true, which
+  // would make ?attentionOnly=false behave identically to ?attentionOnly=true.
+  attentionOnly: z
+    .string()
+    .optional()
+    .transform((value) => value === "true"),
+});
+
+/** Shared id-list shape for the dashboard's bulk order actions. */
+export const bulkOrderIdsSchema = z.array(uuidSchema).min(1, "Select at least one order.").max(100);
+
 /** Payload for cancelling one of the buyer's own orders. */
 export const cancelOrderSchema = z.object({
   orderId: uuidSchema,
@@ -35,6 +57,11 @@ export const cancelOrderSchema = z.object({
     .trim()
     .min(1, "Please select or enter a reason.")
     .max(500, "Reason must be 500 characters or fewer."),
+});
+
+/** Payload for the buyer's "Confirm Received" completion action. */
+export const confirmOrderReceivedSchema = z.object({
+  orderId: uuidSchema,
 });
 
 /** Payload for a seller/admin advancing (or cancelling) an order from the dashboard. */
@@ -76,6 +103,7 @@ export const scanOrderNumberSchema = z.object({
 });
 
 export type BuyerOrderListParamsInput = z.input<typeof buyerOrderListParamsSchema>;
+export type DashboardOrderListParamsInput = z.input<typeof dashboardOrderListParamsSchema>;
 export type CancelOrderInput = z.infer<typeof cancelOrderSchema>;
 export type AdvanceOrderStatusInput = z.infer<typeof advanceOrderStatusSchema>;
 export type RecordShipmentInput = z.infer<typeof recordShipmentSchema>;

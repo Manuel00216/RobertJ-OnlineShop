@@ -83,14 +83,20 @@ export const ACTIVE_ORDER_STATUSES: readonly OrderStatus[] = [
  * `CANCELLABLE_ORDER_STATUSES`: a seller may still call off a `processing`
  * order (e.g. an item turns out to be unavailable), matching
  * `CancelOrderButton`'s existing buyer-facing copy ("once packed or shipped
- * it can no longer be cancelled"). `refunded` is unreachable here — no admin
- * refund flow exists yet (out of scope).
+ * it can no longer be cancelled" — that copy is buyer-facing only;
+ * seller/admin cancellation is wider). `shipped → cancelled` covers a failed
+ * delivery (refused at the door, lost in transit, returned to sender) —
+ * the seller/admin marks it, `orders_restock_on_cancel` restores stock the
+ * same way any other cancellation does; no separate "failed delivery"
+ * status was added. `refunded` is unreachable here — it's set by
+ * `decide_return`/`process_xendit_refund_webhook` on a full refund, not by
+ * this dashboard control.
  */
 export const ORDER_STATUS_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
   pending: ["confirmed", "cancelled"],
   confirmed: ["processing", "cancelled"],
   processing: ["shipped", "cancelled"],
-  shipped: ["delivered"],
+  shipped: ["delivered", "cancelled"],
   delivered: [],
   cancelled: [],
   refunded: [],

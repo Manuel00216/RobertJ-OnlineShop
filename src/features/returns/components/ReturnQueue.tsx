@@ -5,6 +5,7 @@ import { ErrorState } from "@/components/feedback/ErrorState";
 import { ROUTES } from "@/constants/routes";
 import { RETURN_STATUS } from "@/constants/status";
 import { DecideReturnPanel } from "@/features/returns/components/DecideReturnPanel";
+import { RecordReturnConditionPanel } from "@/features/returns/components/RecordReturnConditionPanel";
 import { ReturnRequestStatusCard } from "@/features/returns/components/ReturnRequestStatusCard";
 import { getReturnEvidenceSignedUrl, listReturnRequests } from "@/lib/supabase/queries";
 
@@ -58,6 +59,11 @@ export async function ReturnQueue() {
               returnId={request.id}
               sellerRejected={request.status === RETURN_STATUS.sellerRejected}
             />
+          ) : null}
+          {request.status === RETURN_STATUS.refunded &&
+          !request.restockedAt &&
+          !request.markedUnsellableAt ? (
+            <RecordReturnConditionPanel returnId={request.id} />
           ) : null}
         </li>
       ))}

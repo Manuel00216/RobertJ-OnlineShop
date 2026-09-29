@@ -28,6 +28,12 @@ export interface ReturnRequest {
   adminDecidedAt: string | null;
   /** Set only once the request reaches `refunded`. */
   refundAmountCents: number | null;
+  /** Set once the returned item was confirmed sellable and inventory was restored (`record_return_item_condition`). Mutually exclusive with `markedUnsellableAt`; both null means the condition hasn't been recorded yet. */
+  restockedAt: string | null;
+  /** Set once the returned item was explicitly confirmed NOT sellable (damaged/non-resellable) — closes out the condition-check step without restocking. */
+  markedUnsellableAt: string | null;
+  /** Optional free-text note attached when the item's condition was recorded, either way. */
+  conditionNote: string | null;
   createdAt: string;
 }
 
@@ -35,6 +41,8 @@ export interface ReturnRequest {
 export type SellerReturnDecision = "accept" | "reject";
 /** The only two outcomes `decide_return` accepts. */
 export type AdminReturnDecision = "approve" | "reject";
+/** The only two outcomes `record_return_item_condition` accepts. */
+export type ReturnItemCondition = "sellable" | "not_sellable";
 
 /**
  * Phase 5B: a Xendit refund attempt still awaiting `refund.succeeded`/

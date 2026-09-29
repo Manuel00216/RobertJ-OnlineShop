@@ -493,6 +493,7 @@ export type Database = {
       }
       orders: {
         Row: {
+          buyer_confirmed_received_at: string | null
           buyer_id: string
           cancellation_reason: string | null
           cancelled_at: string | null
@@ -519,6 +520,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          buyer_confirmed_received_at?: string | null
           buyer_id: string
           cancellation_reason?: string | null
           cancelled_at?: string | null
@@ -545,6 +547,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          buyer_confirmed_received_at?: string | null
           buyer_id?: string
           cancellation_reason?: string | null
           cancelled_at?: string | null
@@ -1068,13 +1071,17 @@ export type Database = {
           admin_decided_by: string | null
           admin_decision_note: string | null
           buyer_id: string
+          condition_note: string | null
+          condition_recorded_by: string | null
           created_at: string
           evidence_path: string | null
           id: string
+          marked_unsellable_at: string | null
           order_id: string
           order_item_id: string | null
           reason: string
           refund_amount_cents: number | null
+          restocked_at: string | null
           seller_decided_at: string | null
           seller_decided_by: string | null
           seller_decision_note: string | null
@@ -1088,13 +1095,17 @@ export type Database = {
           admin_decided_by?: string | null
           admin_decision_note?: string | null
           buyer_id: string
+          condition_note?: string | null
+          condition_recorded_by?: string | null
           created_at?: string
           evidence_path?: string | null
           id?: string
+          marked_unsellable_at?: string | null
           order_id: string
           order_item_id?: string | null
           reason: string
           refund_amount_cents?: number | null
+          restocked_at?: string | null
           seller_decided_at?: string | null
           seller_decided_by?: string | null
           seller_decision_note?: string | null
@@ -1108,13 +1119,17 @@ export type Database = {
           admin_decided_by?: string | null
           admin_decision_note?: string | null
           buyer_id?: string
+          condition_note?: string | null
+          condition_recorded_by?: string | null
           created_at?: string
           evidence_path?: string | null
           id?: string
+          marked_unsellable_at?: string | null
           order_id?: string
           order_item_id?: string | null
           reason?: string
           refund_amount_cents?: number | null
+          restocked_at?: string | null
           seller_decided_at?: string | null
           seller_decided_by?: string | null
           seller_decision_note?: string | null
@@ -1134,6 +1149,13 @@ export type Database = {
           {
             foreignKeyName: "return_requests_buyer_id_fkey"
             columns: ["buyer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "return_requests_condition_recorded_by_fkey"
+            columns: ["condition_recorded_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -1716,6 +1738,42 @@ export type Database = {
         Args: { p_key: string; p_max_hits: number; p_window_seconds: number }
         Returns: boolean
       }
+      confirm_order_received: {
+        Args: { p_order_id: string }
+        Returns: {
+          buyer_confirmed_received_at: string | null
+          buyer_id: string
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: Database["public"]["Enums"]["user_role"] | null
+          checkout_group_id: string | null
+          created_at: string
+          currency: string
+          delivered_at: string | null
+          id: string
+          notes: string | null
+          order_number: string
+          order_status: Database["public"]["Enums"]["order_status"]
+          paid_at: string | null
+          payment_method: Database["public"]["Enums"]["order_payment_method"]
+          payment_status: Database["public"]["Enums"]["payment_status"]
+          placed_at: string
+          seller_id: string | null
+          shipped_at: string | null
+          shipping_address: Json
+          shipping_fee_cents: number
+          shop_id: string | null
+          subtotal_cents: number
+          total_cents: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       create_order: {
         Args: {
           p_checkout_group_id?: string
@@ -1727,6 +1785,7 @@ export type Database = {
           p_shipping_fee_cents?: number
         }
         Returns: {
+          buyer_confirmed_received_at: string | null
           buyer_id: string
           cancellation_reason: string | null
           cancelled_at: string | null
@@ -1768,6 +1827,7 @@ export type Database = {
           p_shipping_fee_cents?: number
         }
         Returns: {
+          buyer_confirmed_received_at: string | null
           buyer_id: string
           cancellation_reason: string | null
           cancelled_at: string | null
@@ -1811,13 +1871,17 @@ export type Database = {
           admin_decided_by: string | null
           admin_decision_note: string | null
           buyer_id: string
+          condition_note: string | null
+          condition_recorded_by: string | null
           created_at: string
           evidence_path: string | null
           id: string
+          marked_unsellable_at: string | null
           order_id: string
           order_item_id: string | null
           reason: string
           refund_amount_cents: number | null
+          restocked_at: string | null
           seller_decided_at: string | null
           seller_decided_by: string | null
           seller_decision_note: string | null
@@ -1829,6 +1893,42 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "return_requests"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      expire_unpaid_xendit_order: {
+        Args: { p_order_id: string }
+        Returns: {
+          buyer_confirmed_received_at: string | null
+          buyer_id: string
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: Database["public"]["Enums"]["user_role"] | null
+          checkout_group_id: string | null
+          created_at: string
+          currency: string
+          delivered_at: string | null
+          id: string
+          notes: string | null
+          order_number: string
+          order_status: Database["public"]["Enums"]["order_status"]
+          paid_at: string | null
+          payment_method: Database["public"]["Enums"]["order_payment_method"]
+          payment_status: Database["public"]["Enums"]["payment_status"]
+          placed_at: string
+          seller_id: string | null
+          shipped_at: string | null
+          shipping_address: Json
+          shipping_fee_cents: number
+          shop_id: string | null
+          subtotal_cents: number
+          total_cents: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "orders"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -2105,6 +2205,39 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      record_return_item_condition: {
+        Args: { p_condition: string; p_note?: string; p_return_id: string }
+        Returns: {
+          admin_decided_at: string | null
+          admin_decided_by: string | null
+          admin_decision_note: string | null
+          buyer_id: string
+          condition_note: string | null
+          condition_recorded_by: string | null
+          created_at: string
+          evidence_path: string | null
+          id: string
+          marked_unsellable_at: string | null
+          order_id: string
+          order_item_id: string | null
+          reason: string
+          refund_amount_cents: number | null
+          restocked_at: string | null
+          seller_decided_at: string | null
+          seller_decided_by: string | null
+          seller_decision_note: string | null
+          seller_id: string | null
+          shop_id: string | null
+          status: Database["public"]["Enums"]["return_status"]
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "return_requests"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       record_xendit_refund_submission: {
         Args: {
           p_raw_response: Json
@@ -2193,13 +2326,17 @@ export type Database = {
           admin_decided_by: string | null
           admin_decision_note: string | null
           buyer_id: string
+          condition_note: string | null
+          condition_recorded_by: string | null
           created_at: string
           evidence_path: string | null
           id: string
+          marked_unsellable_at: string | null
           order_id: string
           order_item_id: string | null
           reason: string
           refund_amount_cents: number | null
+          restocked_at: string | null
           seller_decided_at: string | null
           seller_decided_by: string | null
           seller_decision_note: string | null
@@ -2230,13 +2367,17 @@ export type Database = {
           admin_decided_by: string | null
           admin_decision_note: string | null
           buyer_id: string
+          condition_note: string | null
+          condition_recorded_by: string | null
           created_at: string
           evidence_path: string | null
           id: string
+          marked_unsellable_at: string | null
           order_id: string
           order_item_id: string | null
           reason: string
           refund_amount_cents: number | null
+          restocked_at: string | null
           seller_decided_at: string | null
           seller_decided_by: string | null
           seller_decision_note: string | null
@@ -2317,6 +2458,7 @@ export type Database = {
         | "cancellation_restock"
         | "shrinkage"
         | "other"
+        | "return_restock"
       user_role: "buyer" | "seller" | "admin"
       xendit_refund_status: "pending" | "succeeded" | "failed"
     }
@@ -2491,6 +2633,7 @@ export const Constants = {
         "cancellation_restock",
         "shrinkage",
         "other",
+        "return_restock",
       ],
       user_role: ["buyer", "seller", "admin"],
       xendit_refund_status: ["pending", "succeeded", "failed"],

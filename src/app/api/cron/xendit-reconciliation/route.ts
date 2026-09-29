@@ -22,12 +22,25 @@ import {
  * same `process_xendit_webhook` RPC the real webhook and fix #5A/#5B use.
  * COD is out of scope by construction: `getStaleXenditPaymentsForReconciliationSweep`
  * only reads `payment_method_type = 'xendit'` rows.
+ *
+ * TD-9: after the payment-status sweep above, a second pass auto-expires
+ * orders that are still unpaid 24h after placement — see `runExpirySweep`.
+ * Deliberately the SAME cron/route (not a second scheduled job): daily
+ * granularity is more than enough for a 24h threshold, and it means one
+ * schedule to reason about instead of two.
  */
 
 /** Oldest-first raw rows to consider per run — bounds the query, not the work actually done (see queries.ts docs). */
 const FETCH_LIMIT = 200;
 /** Hard cap on how many stale candidates are actually reconciled (i.e. call Xendit) per run, regardless of how many were fetched. */
 const BATCH_LIMIT = 20;
+
+/** How long an unpaid online-payment order may sit before it's auto-cancelled. Business-set threshold, not inferred. */
+const EXPIRE_THRESHOLD_HOURS = 24;
+/** Oldest-first raw order rows to consider per run. */
+const EXPIRE_FETCH_LIMIT = 200;
+/** Hard cap on how many orders are actually expired (i.e. potentially call Xendit + write a cancellation) per run. */
+const EXPIRE_BATCH_LIMIT = 20;
 
 interface SweepSummary {
   candidatesFetched: number;
@@ -36,6 +49,13 @@ interface SweepSummary {
   clearedForRetry: number;
   blocked: number;
   skippedNotStale: number;
+  errors: number;
+}
+
+interface ExpirySweepSummary {
+  candidatesFetched: number;
+  expired: number;
+  stillResolvable: number;
   errors: number;
 }
 
@@ -98,7 +118,99 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({ received: true, ...summary });
+  const expiry = await runExpirySweep();
+
+  return NextResponse.json({ received: true, ...summary, expiry });
+}
+
+/**
+ * TD-9: cancels orders that are `payment_method = 'xendit'`, still
+ * `order_status = 'pending'`, and still unpaid `EXPIRE_THRESHOLD_HOURS`
+ * after `placed_at`. Before cancelling, always re-checks Xendit's real
+ * status first (reusing the exact same reconciliation building blocks the
+ * pre-cancellation guard uses) so an order Xendit still considers payable is
+ * never touched — an order with no payment attempt at all has nothing to
+ * reconcile and is safe to expire directly once past the threshold. The
+ * actual cancellation goes through `expire_unpaid_xendit_order`, the same
+ * `order_status = 'cancelled'` transition every other cancellation path
+ * uses, so `orders_restock_on_cancel` restocks it exactly as it does today —
+ * no parallel restock mechanism.
+ */
+async function runExpirySweep(): Promise<ExpirySweepSummary> {
+  const summary: ExpirySweepSummary = {
+    candidatesFetched: 0,
+    expired: 0,
+    stillResolvable: 0,
+    errors: 0,
+  };
+
+  let candidates: Awaited<ReturnType<typeof queries.getAbandonedXenditOrdersForExpiry>>;
+  try {
+    candidates = await queries.getAbandonedXenditOrdersForExpiry(
+      EXPIRE_THRESHOLD_HOURS,
+      EXPIRE_FETCH_LIMIT,
+    );
+  } catch (error) {
+    console.error("[xendit expiry sweep] failed to load candidates", error);
+    return summary;
+  }
+  summary.candidatesFetched = candidates.length;
+
+  for (const candidate of candidates) {
+    if (summary.expired + summary.stillResolvable >= EXPIRE_BATCH_LIMIT) break;
+
+    try {
+      const attempts = await queries.getFinalizedPendingXenditAttemptsForOrderAdmin(
+        candidate.orderId,
+        candidate.checkoutGroupId,
+      );
+
+      let stillResolvable = false;
+      for (const attempt of attempts) {
+        // A not-yet-stale attempt (by its own 20/30-min window) might still
+        // resolve on its own — never expire an order while one exists,
+        // mirroring blockCancellationIfXenditUnresolved's exact reasoning.
+        if (!isStaleXenditAttempt(attempt.attempt)) {
+          stillResolvable = true;
+          break;
+        }
+
+        const outcome = await reconcileStaleXenditAttempt(
+          attempt.referenceId,
+          attempt.channelCode,
+          attempt.attempt,
+        );
+        // "already_paid": the order was actually paid — never auto-cancel a
+        // paid order (unlike a buyer's own deliberate cancel, this is
+        // automated and must never discard a real payment). "blocked":
+        // ambiguous/network error — retry next run. Both leave the order
+        // untouched. Only "cleared_for_retry" (Xendit confirms it's
+        // genuinely not paid) lets the loop continue checking any other
+        // channel's attempt before this order is considered safe to expire.
+        if (outcome !== "cleared_for_retry") {
+          stillResolvable = true;
+          break;
+        }
+      }
+
+      if (stillResolvable) {
+        summary.stillResolvable++;
+        continue;
+      }
+
+      await queries.expireAbandonedXenditOrder(candidate.orderId);
+      summary.expired++;
+    } catch (error) {
+      summary.errors++;
+      console.error("[xendit expiry sweep] candidate failed", {
+        orderId: candidate.orderId,
+        orderNumber: candidate.orderNumber,
+        error,
+      });
+    }
+  }
+
+  return summary;
 }
 
 function isAuthorized(provided: string | null, expected: string): boolean {

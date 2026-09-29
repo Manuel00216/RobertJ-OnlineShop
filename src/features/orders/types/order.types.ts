@@ -94,6 +94,8 @@ export interface Order {
   shippedAt: string | null;
   deliveredAt: string | null;
   cancelledAt: string | null;
+  /** Set once the buyer explicitly confirms receipt of a delivered order (`confirm_order_received`). Null until then — a delivered order is not otherwise considered resolved. */
+  buyerConfirmedReceivedAt: string | null;
   /** True while the buyer may still cancel (status in `CANCELLABLE_ORDER_STATUSES`). */
   cancellable: boolean;
   /** Set when this order was placed as part of a multi-seller, one-combined-payment checkout; null for COD and single-seller orders. */
@@ -130,10 +132,37 @@ export interface OrderListParams {
   status?: OrderStatus;
   /** Optional lifecycle-tab filter, driven by `OrderLifecycleTabs` (buyer `/orders` only) — mutually exclusive with `status` in practice, but not enforced here. */
   lifecycleTab?: LifecycleTab;
+  /** Dashboard-only: narrows to how the order was paid for. */
+  paymentMethod?: "cod" | "xendit";
+  /** Dashboard-only: relative window off `placed_at`. */
+  dateRange?: "today" | "7d" | "30d";
+  /**
+   * Dashboard-only: only orders needing a seller action right now — see
+   * `isOrderNeedingAttention()`. Overrides `status` when set (attention
+   * spans several statuses, so the two aren't combined).
+   */
+  attentionOnly?: boolean;
 }
 
 /** Overview-hub payload: per-status counts + the 5 most recent orders. */
 export interface OrderSummary {
   statusCounts: Record<OrderStatus, number>;
   recentOrders: Order[];
+}
+
+/**
+ * True when an order needs a seller action right now: it's awaiting
+ * confirmation (and isn't blocked on an unpaid online payment — mirrors
+ * `OrderStatusControl`'s own `blockedByPayment` gate), or it's a COD order
+ * that's already shipped/delivered but the cash hasn't been marked collected
+ * yet. Drives the dashboard's "Needs attention" summary and quick filter.
+ */
+export function isOrderNeedingAttention(order: Pick<Order, "status" | "paymentMethod" | "paymentStatus">): boolean {
+  const blockedByPayment = order.paymentMethod === "xendit" && order.paymentStatus !== "paid";
+  const needsConfirmation = order.status === "pending" && !blockedByPayment;
+  const codAwaitingCollection =
+    order.paymentMethod === "cod" &&
+    order.paymentStatus === "pending" &&
+    (order.status === "shipped" || order.status === "delivered");
+  return needsConfirmation || codAwaitingCollection;
 }
