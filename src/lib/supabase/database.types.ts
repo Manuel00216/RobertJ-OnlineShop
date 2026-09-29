@@ -1608,6 +1608,10 @@ export type Database = {
         Args: { p_reason?: string; p_user_id: string }
         Returns: Json
       }
+      admin_hard_delete_shop: {
+        Args: { p_reason?: string; p_shop_id: string }
+        Returns: Json
+      }
       admin_list_users: {
         Args: never
         Returns: {

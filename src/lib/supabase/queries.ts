@@ -4291,6 +4291,52 @@ export async function listShopsWithMembers(): Promise<ShopWithMember[]> {
   return (data ?? []).map((row) => toShopWithMember(row as ShopRowWithMembers));
 }
 
+/** The exact `errcode`s `admin_hard_delete_shop` is documented to `raise
+ * exception ... using errcode` with — see that RPC's own migration
+ * (20260928072046_shop_hard_delete_support.sql). */
+const SHOP_DELETE_RPC_SAFE_ERROR_CODES = ["42501", "22023", "P0002"] as const;
+
+/**
+ * Permanently deletes an already-deactivated, member-free, history-free shop
+ * via the `admin_hard_delete_shop` RPC — the sole delete path (no DELETE
+ * grant/policy exists on `shops`). The RPC snapshots identity into
+ * `admin_action_log` and detaches (never deletes) the shop's
+ * products/variants/inventory/stock_adjustments/recommendation_rules by
+ * setting their `shop_id` to null; it blocks with a curated error if the
+ * shop still has a member or any historical order/return/shipment. Once the
+ * RPC succeeds, this also best-effort removes the shop's `shop-images`
+ * Storage objects (never FK-linked, so nothing else cleans these up) —
+ * failures there are swallowed, mirroring `replaceShopImage`'s cleanup.
+ */
+export async function hardDeleteShop(shopId: string, reason?: string): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("admin_hard_delete_shop", {
+    p_shop_id: shopId,
+    p_reason: reason ?? undefined,
+  });
+
+  if (error) {
+    throw curatedRpcError(
+      "Could not delete this shop.",
+      error,
+      SHOP_DELETE_RPC_SAFE_ERROR_CODES,
+    );
+  }
+
+  for (const kind of ["logo", "banner"] as const) {
+    const { data: files } = await supabase.storage
+      .from("shop-images")
+      .list(`${shopId}/${kind}`)
+      .catch(() => ({ data: null }));
+    if (files && files.length > 0) {
+      await supabase.storage
+        .from("shop-images")
+        .remove(files.map((file) => `${shopId}/${kind}/${file.name}`))
+        .catch(() => undefined);
+    }
+  }
+}
+
 // ============================================================================
 // Admin: Users
 // ============================================================================

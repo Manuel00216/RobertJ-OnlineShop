@@ -7,6 +7,7 @@ export {
   createShopAction,
   updateShopAction,
   toggleShopActiveAction,
+  deleteShopAction,
   updateOwnShopDescriptionAction,
   uploadShopImageAction,
   removeShopImageAction,
@@ -15,6 +16,7 @@ export {
   createShopSchema,
   updateShopSchema,
   toggleShopActiveSchema,
+  deleteShopSchema,
   updateOwnShopDescriptionSchema,
   uploadShopImageSchema,
 } from "./schemas/shop.schema";
@@ -22,6 +24,7 @@ export type {
   CreateShopInput,
   UpdateShopInput,
   ToggleShopActiveInput,
+  DeleteShopInput,
   UpdateOwnShopDescriptionInput,
   UploadShopImageInput,
 } from "./schemas/shop.schema";

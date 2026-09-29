@@ -9,6 +9,7 @@ import * as queries from "@/lib/supabase/queries";
 import type { ActionResult } from "@/types/action.types";
 import {
   createShopSchema,
+  deleteShopSchema,
   toggleShopActiveSchema,
   updateOwnShopDescriptionSchema,
   updateShopSchema,
@@ -71,6 +72,32 @@ export async function toggleShopActiveAction(
     return ok(shop);
   } catch (error) {
     return fail(error instanceof Error ? error.message : "Could not update the shop.");
+  }
+}
+
+/**
+ * Admin-only: permanently deletes a shop. The shop must already be
+ * deactivated, have no current member, and have no historical order/return/
+ * shipment — `queries.hardDeleteShop` (via `admin_hard_delete_shop`) enforces
+ * all of this and returns a curated error naming the exact blocker when it
+ * doesn't hold. Its products/inventory/etc. are detached (shop_id set null),
+ * never deleted.
+ */
+export async function deleteShopAction(shopId: string): Promise<ActionResult<{ id: string }>> {
+  const parsed = deleteShopSchema.safeParse({ shopId });
+  if (!parsed.success) return fromZodError(parsed.error);
+
+  try {
+    await queries.requireRole([USER_ROLES.admin]);
+    await queries.hardDeleteShop(parsed.data.shopId);
+    revalidatePath(ROUTES.adminShops);
+    revalidatePath(ROUTES.adminProducts);
+    revalidatePath(ROUTES.adminInventory);
+    revalidatePath(ROUTES.sellerProducts);
+    revalidatePath(ROUTES.sellerInventory);
+    return ok({ id: parsed.data.shopId });
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : "Could not delete the shop.");
   }
 }
 

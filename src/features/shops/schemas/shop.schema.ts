@@ -17,6 +17,11 @@ export const toggleShopActiveSchema = z.object({
   active: z.boolean(),
 });
 
+/** Payload for permanently deleting a shop — a plain-argument action, not a form (see `deleteShopAction`). */
+export const deleteShopSchema = z.object({
+  shopId: z.uuid(),
+});
+
 /** Mirrors `product.schema.ts`'s upload constants exactly — no reason for
  * shop images to be more permissive than product photos. */
 const MAX_SHOP_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -54,5 +59,6 @@ export const uploadShopImageSchema = z.object({
 export type CreateShopInput = z.infer<typeof createShopSchema>;
 export type UpdateShopInput = z.infer<typeof updateShopSchema>;
 export type ToggleShopActiveInput = z.infer<typeof toggleShopActiveSchema>;
+export type DeleteShopInput = z.infer<typeof deleteShopSchema>;
 export type UpdateOwnShopDescriptionInput = z.infer<typeof updateOwnShopDescriptionSchema>;
 export type UploadShopImageInput = z.infer<typeof uploadShopImageSchema>;
