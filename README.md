@@ -215,8 +215,7 @@ flowchart LR
     classDef done fill:#1f7a3d,stroke:#0d3d1f,color:#fff;
     classDef todo fill:#3a3f4b,stroke:#20242c,color:#fff;
     classDef partial fill:#8a6d1f,stroke:#4d3c10,color:#fff;
-    class P1,P2,P3,P4,P5,P7,P8,P9 done;
-    class P6 partial;
+    class P1,P2,P3,P4,P5,P6,P7,P8,P9 done;
 ```
 
 > [!NOTE]
@@ -231,8 +230,10 @@ flowchart LR
 > [ARCHITECTURE.md → Architecture Evolution Strategy](./ARCHITECTURE.md#architecture-evolution-strategy)),
 > and Admin can now manage users/shops and onboard sellers with no direct SQL
 > (`admin_assign_seller_shop`/`admin_list_users` RPCs, `/admin/{users,shops}`).
-> What's left: `orders` still keys off `seller_id` only, no `shop_id` bridge yet.
-> See [ARCHITECTURE.md → TD-1](./ARCHITECTURE.md#technical-debt-register).
+> `orders`/`return_requests`/`order_shipments` now all carry `shop_id` too
+> (`20260927134519_orders_returns_shipments_shop_scoping.sql` and later
+> shop-scoping migrations), closing the last gap — see
+> [ARCHITECTURE.md → TD-1](./ARCHITECTURE.md#technical-debt-register).
 
 | Phase | Focus | State |
 |-------|-------|-------|
@@ -241,10 +242,10 @@ flowchart LR
 | 3 | Authentication (UI + flows) | ✅ |
 | 4 | Customer Account & Order Tracking | ✅ |
 | 5 | **Checkout** | ✅ |
-| 6 | Shops & Inventory (align to SAD multi-shop model) | 🚧 (Shops + `products.shop_id` + Inventory + Admin Users/Shops onboarding done; `orders.shop_id` bridge not started) |
+| 6 | Shops & Inventory (align to SAD multi-shop model) | ✅ |
 | 7 | Payments — COD + QR receipt upload + manual verification | ✅ |
 | 8 | Reports & analytics | ✅ |
-| 9 | Guided Product Selection (rule-based) | 🚧 (`recommendation_rules` schema + admin/seller rule-authoring UI done; buyer-facing quiz not started) |
+| 9 | Guided Product Selection (rule-based) | ✅ |
 
 ---
 
@@ -441,8 +442,8 @@ The interface follows modern marketplace best practices, inspired by **Lazada, S
 | **Shop Owner** role | `seller` role | Current model has **seller accounts**, not shop entities. |
 | **Administrator** role | `admin` role | Matches. |
 | **Guest** | Unauthenticated visitor (no profile) | Matches. |
-| `shops` table | 🚧 **Foundation implemented** | Table + RLS + backfill exist (one shop per seller). `products.shop_id` now exists (`products` is shop-scoped, alongside `inventory`/`product_variants`/`stock_adjustments`/`recommendation_rules`) — but `orders`/`order_items`/`payments`/`return_requests` still key off **seller** (`seller_id`) only, no `shop_id` bridge yet. See [ARCHITECTURE.md → TD-1](./ARCHITECTURE.md#technical-debt-register). |
-| `shop_users` table | 🚧 **Foundation implemented** | Proper junction table (supports >1 staff per shop later); today exactly one member per shop (DB-enforced via `unique (user_id)`), admin-managed via `/admin/users` (no self-service join). |
+| `shops` table | ✅ **Implemented** | Table + RLS + backfill exist. `shop_id` is now carried by `products`, `inventory`, `product_variants`, `stock_adjustments`, `recommendation_rules`, `orders`, `return_requests`, and `order_shipments` (TD-1 resolved — see [ARCHITECTURE.md](./ARCHITECTURE.md#technical-debt-register)). Admin-only permanent shop deletion also exists, detaching (never deleting) any remaining products/inventory. |
+| `shop_users` table | ✅ **Implemented** | Proper junction table (supports >1 staff per shop later); today exactly one member per shop (DB-enforced via `unique (user_id)`), admin-managed via `/admin/users` (no self-service join). |
 | `roles` table | Role stored on `profiles.role` (enum) | Roles are an enum column, not a separate table. |
 | `inventory` table | ✅ **Implemented** — dedicated `inventory` + `stock_adjustments` tables | `products.quantity` is now a trigger-synced mirror, not the source of truth. See [ARCHITECTURE.md → Architecture Evolution Strategy](./ARCHITECTURE.md#architecture-evolution-strategy). |
 | `recommendation_rules` table | ✅ **Implemented**, schema + full flow | Explicit typed columns (not the SAD's indicative `jsonb conditions`), same rationale as `products`/`orders` — see the migration's header comment. Admin/seller manage rules from the existing `/admin/products`/`/seller/products` edit mode (`RecommendationRuleManager`), mirroring the product-variants placement. The buyer-facing quiz (occasion/size/budget → matching products, `GuidedSelectorQuiz`) is live on the marketing landing page. |
