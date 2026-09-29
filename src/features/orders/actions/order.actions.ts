@@ -161,8 +161,9 @@ export async function advanceOrderStatusAction(
   orderId: string,
   newStatus: string,
   shipment?: { courier: string; trackingNumber: string },
+  reason?: string,
 ): Promise<ActionResult<Order>> {
-  const parsed = advanceOrderStatusSchema.safeParse({ orderId, newStatus });
+  const parsed = advanceOrderStatusSchema.safeParse({ orderId, newStatus, reason });
   if (!parsed.success) return fromZodError(parsed.error);
 
   try {
@@ -208,6 +209,7 @@ export async function advanceOrderStatusAction(
       user.role === USER_ROLES.admin
         ? null
         : { sellerId: user.id, shopId: await queries.getOwnShopId(user.id) },
+      parsed.data.reason,
     );
 
     // Ready for Pickup: record the packing audit timestamp (advisory; the

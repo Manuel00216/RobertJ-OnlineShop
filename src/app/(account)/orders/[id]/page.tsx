@@ -158,6 +158,14 @@ export default async function OrderDetailPage({
         {order.cancellable ? (
           <CancelOrderButton orderId={order.id} orderNumber={order.orderNumber} />
         ) : null}
+        {order.status === ORDER_STATUS.cancelled ? (
+          <Link
+            href={ROUTES.orderCancellation(order.id)}
+            className={cn(buttonVariants({ variant: "rjOutline", size: "rjSm" }))}
+          >
+            View Cancellation Details
+          </Link>
+        ) : null}
         <BuyAgainButton order={order} sellerName={shopName} />
       </div>
 
@@ -218,7 +226,7 @@ export default async function OrderDetailPage({
               Payment Information
             </h2>
             <div className="mt-3">
-              <PaymentStatusBadge status={order.paymentStatus} />
+              <PaymentStatusBadge status={order.paymentStatus} paymentMethod={order.paymentMethod} />
             </div>
             {order.paymentStatus === "failed" && activePayment?.failureReason ? (
               <p className="mt-3 border-t border-rj-gray-100 pt-3 text-xs text-rj-gray-600">

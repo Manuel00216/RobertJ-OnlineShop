@@ -55,7 +55,7 @@ export function OrderCardActions({ order, lifecycleTab, groupInfo = null }: Orde
             </p>
           ) : (
             <div className="flex items-center gap-3">
-              <PaymentStatusBadge status={order.paymentStatus} />
+              <PaymentStatusBadge status={order.paymentStatus} paymentMethod={order.paymentMethod} />
               <Link
                 href={ROUTES.checkoutResume(order.id)}
                 className={cn(buttonVariants({ variant: "rj", size: "rjSm" }))}

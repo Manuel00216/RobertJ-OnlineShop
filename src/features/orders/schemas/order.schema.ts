@@ -64,11 +64,22 @@ export const confirmOrderReceivedSchema = z.object({
   orderId: uuidSchema,
 });
 
-/** Payload for a seller/admin advancing (or cancelling) an order from the dashboard. */
-export const advanceOrderStatusSchema = z.object({
-  orderId: uuidSchema,
-  newStatus: orderStatusSchema,
-});
+/**
+ * Payload for a seller/admin advancing (or cancelling) an order from the
+ * dashboard. `reason` is required specifically when `newStatus` is
+ * `cancelled` (mirrors the buyer's own `cancelOrderSchema` requirement) —
+ * optional/absent for every forward transition, which never uses it.
+ */
+export const advanceOrderStatusSchema = z
+  .object({
+    orderId: uuidSchema,
+    newStatus: orderStatusSchema,
+    reason: z.string().trim().max(500, "Reason must be 500 characters or fewer.").optional(),
+  })
+  .refine((data) => data.newStatus !== "cancelled" || !!data.reason, {
+    message: "Please select or enter a cancellation reason.",
+    path: ["reason"],
+  });
 
 /**
  * Courier + tracking captured at "Mark as shipped". Manual entry only (no

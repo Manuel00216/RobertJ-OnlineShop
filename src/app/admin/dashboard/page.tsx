@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { DashboardDateFilter } from "@/features/dashboard/components/DashboardDateFilter";
 import { RecentOrdersCard, RecentOrdersCardSkeleton } from "@/features/dashboard/components/RecentOrdersCard";
 import { LowStockCard, LowStockCardSkeleton } from "@/features/dashboard/components/LowStockCard";
+import { ActionCenterCard, ActionCenterCardSkeleton } from "@/features/seller/components/ActionCenterCard";
 import { AdminKpiRow, AdminKpiRowSkeleton } from "@/features/admin/components/AdminKpiRow";
 import { AdminQuickAccess, AdminQuickAccessSkeleton } from "@/features/admin/components/AdminQuickAccess";
 import { OrderStatusPanel } from "@/features/reports/components/OrderStatusPanel";
@@ -51,6 +52,10 @@ export default async function AdminDashboardPage({ searchParams }: AdminDashboar
         </div>
         <DashboardDateFilter from={from} to={to} />
       </div>
+
+      <Suspense fallback={<ActionCenterCardSkeleton />}>
+        <ActionCenterCard ordersHref={ROUTES.adminOrders} inventoryHref={ROUTES.adminInventory} />
+      </Suspense>
 
       <Suspense key={`kpi:${from}:${to}`} fallback={<AdminKpiRowSkeleton />}>
         <AdminKpiRow from={from} to={to} />

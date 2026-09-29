@@ -12,7 +12,10 @@ import { cn } from "@/lib/utils/cn";
  * Seller/admin marks a COD order's cash as collected. COD never auto-marks
  * paid at order creation — this is the only path (see
  * `mark_cod_payment_collected`), and it's blocked server-side if the order
- * has an active/paid online payment attempt instead.
+ * isn't actually `payment_method = 'cod'`, hasn't shipped yet, or has an
+ * active/paid online payment attempt instead. The caller (order detail
+ * pages) mirrors the same COD/shipped-or-delivered gate so the button isn't
+ * even offered outside those cases, but the RPC is the real boundary.
  */
 export function MarkCodCollectedButton({ orderId }: { orderId: string }) {
   const [confirmOpen, setConfirmOpen] = useState(false);

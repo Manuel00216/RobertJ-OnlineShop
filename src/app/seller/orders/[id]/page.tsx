@@ -115,9 +115,11 @@ export default async function SellerOrderDetailPage({ params }: SellerOrderDetai
                 Payment
               </h2>
               <div className="mt-2">
-                <PaymentStatusBadge status={order.paymentStatus} />
+                <PaymentStatusBadge status={order.paymentStatus} paymentMethod={order.paymentMethod} />
               </div>
-              {order.paymentStatus === "pending" ? (
+              {order.paymentMethod === "cod" &&
+              order.paymentStatus === "pending" &&
+              (order.status === "shipped" || order.status === "delivered") ? (
                 <div className="mt-3">
                   <MarkCodCollectedButton orderId={order.id} />
                 </div>

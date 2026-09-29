@@ -290,7 +290,7 @@ export function PaymentsDataTable({ payments, showAdminTools = false }: Payments
                   </td>
                   <td className="p-3 align-top text-sm text-muted-foreground">{methodLabel(payment)}</td>
                   <td className="p-3 align-top text-sm font-medium text-foreground">{formatCurrency(payment.amountCents, payment.currency)}</td>
-                  <td className="p-3 align-top"><PaymentStatusBadge status={payment.status} /></td>
+                  <td className="p-3 align-top"><PaymentStatusBadge status={payment.status} paymentMethod={payment.paymentMethodType} /></td>
                   <td className="p-3 align-top text-sm text-muted-foreground">{formatDate(payment.createdAt)}</td>
                   <td className="p-3 align-top text-right">
                     <RowMenu open={openMenuId === payment.id} onOpenChange={(open) => setOpenMenuId(open ? payment.id : null)}>
@@ -347,7 +347,7 @@ export function PaymentsDataTable({ payments, showAdminTools = false }: Payments
                       </a>
                     ) : null}
                     <div className="mt-2 flex flex-wrap gap-1.5">
-                      <PaymentStatusBadge status={payment.status} />
+                      <PaymentStatusBadge status={payment.status} paymentMethod={payment.paymentMethodType} />
                       {multi ? <Badge tone="neutral">Multi-seller order</Badge> : null}
                       {stale ? <Badge tone="warning">Stale — awaiting reconciliation</Badge> : null}
                     </div>

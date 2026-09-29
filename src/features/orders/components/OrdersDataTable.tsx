@@ -318,7 +318,7 @@ export function OrdersDataTable({ orders, isAdmin }: OrdersDataTableProps) {
                     <td className="p-3 align-top">
                       <div className="flex flex-col gap-1">
                         <Badge tone="neutral">{order.paymentMethod === "cod" ? "COD" : "Online"}</Badge>
-                        <PaymentStatusBadge status={order.paymentStatus} />
+                        <PaymentStatusBadge status={order.paymentStatus} paymentMethod={order.paymentMethod} />
                       </div>
                     </td>
                     <td className="p-3 align-top"><OrderStatusBadge status={order.status} /></td>
@@ -412,7 +412,7 @@ export function OrdersDataTable({ orders, isAdmin }: OrdersDataTableProps) {
                   </p>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     <OrderStatusBadge status={order.status} />
-                    <PaymentStatusBadge status={order.paymentStatus} />
+                    <PaymentStatusBadge status={order.paymentStatus} paymentMethod={order.paymentMethod} />
                   </div>
                 </div>
               </div>

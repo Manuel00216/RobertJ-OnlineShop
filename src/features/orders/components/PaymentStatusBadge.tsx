@@ -15,13 +15,31 @@ const PAYMENT_STATUS_TONE_MAP: Record<
 };
 
 /**
+ * Structurally identical to `PaymentMethodType` (`features/payments/types`)
+ * and `Order.paymentMethod` — declared locally rather than imported to avoid
+ * a cross-feature type dependency for a component that only ever compares
+ * against `"cod"`. Optional: callers that don't know the payment method yet
+ * (or where it's irrelevant) simply omit it and get the generic label.
+ */
+export type BadgePaymentMethod = "cod" | "xendit" | "card" | "qr_upload";
+
+export interface PaymentStatusBadgeProps {
+  status: PaymentStatus;
+  /** When provided and the order is COD, "pending" reads as "Pay on delivery" instead of the generic "Payment pending" — COD sitting unpaid through its whole fulfilment cycle is normal, not a signal something needs fixing (unlike a stalled online payment). */
+  paymentMethod?: BadgePaymentMethod;
+}
+
+/**
  * Read-only payment status badge. Payment verification (COD / receipt checks)
  * is a checkout + Administrator-module concern, so this surface only displays.
  */
-export function PaymentStatusBadge({ status }: { status: PaymentStatus }) {
+export function PaymentStatusBadge({ status, paymentMethod }: PaymentStatusBadgeProps) {
+  const label =
+    status === "pending" && paymentMethod === "cod" ? "Pay on delivery" : PAYMENT_STATUS_LABELS[status];
+
   return (
     <Badge tone={PAYMENT_STATUS_TONE_MAP[status]}>
-      {PAYMENT_STATUS_LABELS[status]}
+      {label}
     </Badge>
   );
 }

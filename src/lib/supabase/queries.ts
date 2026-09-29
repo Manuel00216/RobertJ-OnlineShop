@@ -2281,6 +2281,7 @@ export async function advanceOrderStatus(
   orderId: string,
   newStatus: OrderStatus,
   owner: { sellerId: string; shopId: string | null } | null,
+  reason?: string,
 ): Promise<Order> {
   const supabase = await createSupabaseServerClient();
 
@@ -2336,16 +2337,15 @@ export async function advanceOrderStatus(
     }
   }
 
-  // Cancelling also records who did it and when — mirrors `cancelBuyerOrder`'s
-  // own write, closing a pre-existing gap where this path never set
-  // `cancelled_at` at all. No reason is captured here (buyer-only, via
-  // `cancelOrderAction`) — redesigning the seller/admin cancel flow is out
-  // of scope for that feature.
+  // Cancelling also records who did it, when, and why — mirrors
+  // `cancelBuyerOrder`'s own write shape, now including a reason on this
+  // path too (COD workflow audit fix).
   const cancellationFields =
     newStatus === "cancelled"
       ? {
           cancelled_at: new Date().toISOString(),
           cancelled_by: (owner ? "seller" : "admin") as "seller" | "admin",
+          cancellation_reason: reason ?? null,
         }
       : {};
 

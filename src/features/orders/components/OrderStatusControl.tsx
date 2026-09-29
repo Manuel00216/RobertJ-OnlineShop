@@ -10,6 +10,10 @@ import { advanceOrderStatusAction } from "@/features/orders/actions/order.action
 import { ItemVerificationChecklist } from "@/features/orders/components/ItemVerificationChecklist";
 import { ShipmentCaptureForm } from "@/features/orders/components/ShipmentCaptureForm";
 import { ORDER_STATUS_TRANSITIONS } from "@/features/orders/constants/order.constants";
+import {
+  OTHER_SELLER_CANCELLATION_REASON,
+  SELLER_CANCELLATION_REASONS,
+} from "@/features/orders/constants/seller-cancellation-reasons.constants";
 import type { OrderItem } from "@/features/orders/types/order.types";
 import { cn } from "@/lib/utils/cn";
 
@@ -65,22 +69,34 @@ export function OrderStatusControl({
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [capturingShipment, setCapturingShipment] = useState(false);
+  const [selectedReason, setSelectedReason] = useState<string | null>(null);
+  const [otherText, setOtherText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const triggerRef = useRef<HTMLButtonElement>(null);
 
+  const resolvedCancelReason =
+    selectedReason === OTHER_SELLER_CANCELLATION_REASON
+      ? otherText.trim()
+      : (SELLER_CANCELLATION_REASONS.find((reason) => reason.value === selectedReason)?.label ?? "");
+
   function advance(
     target: OrderStatus,
     shipment?: { courier: string; trackingNumber: string },
+    reason?: string,
   ) {
     setError(null);
     startTransition(async () => {
-      const result = await advanceOrderStatusAction(orderId, target, shipment);
+      const result = await advanceOrderStatusAction(orderId, target, shipment, reason);
       if (!result.success) {
         setError(result.error);
         return;
       }
-      if (target === "cancelled") setConfirmingCancel(false);
+      if (target === "cancelled") {
+        setConfirmingCancel(false);
+        setSelectedReason(null);
+        setOtherText("");
+      }
       if (target === "processing") setVerifying(false);
       if (target === "shipped") setCapturingShipment(false);
     });
@@ -170,7 +186,7 @@ export function OrderStatusControl({
           description={
             status === "shipped"
               ? "Use this when the delivery failed, was refused, or was returned to sender. This can't be undone. Stock is restocked automatically; payment status is unaffected."
-              : "This can't be undone. Stock is restocked automatically."
+              : "Please select a cancellation reason. This can't be undone. Stock is restocked automatically."
           }
           tone="danger"
           confirmLabel={status === "shipped" ? "Yes, report failed delivery" : "Yes, cancel order"}
@@ -178,9 +194,58 @@ export function OrderStatusControl({
           cancelLabel="Keep order"
           isPending={isPending}
           triggerRef={triggerRef}
-          onConfirm={() => advance("cancelled")}
-          onCancel={() => setConfirmingCancel(false)}
-        />
+          onConfirm={() => advance("cancelled", undefined, resolvedCancelReason)}
+          onCancel={() => {
+            setConfirmingCancel(false);
+            setSelectedReason(null);
+            setOtherText("");
+          }}
+          confirmDisabled={!resolvedCancelReason}
+        >
+          <fieldset className="mt-3 flex flex-col gap-2">
+            <legend className="text-xs font-semibold text-foreground">
+              {status === "shipped" ? "What happened?" : "Select a cancellation reason"}
+            </legend>
+            {SELLER_CANCELLATION_REASONS.map((reason) => (
+              <label
+                key={reason.value}
+                className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground"
+              >
+                <input
+                  type="radio"
+                  name="seller-cancel-reason"
+                  value={reason.value}
+                  checked={selectedReason === reason.value}
+                  onChange={() => setSelectedReason(reason.value)}
+                  className="h-4 w-4 shrink-0 accent-primary"
+                />
+                {reason.label}
+              </label>
+            ))}
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+              <input
+                type="radio"
+                name="seller-cancel-reason"
+                value={OTHER_SELLER_CANCELLATION_REASON}
+                checked={selectedReason === OTHER_SELLER_CANCELLATION_REASON}
+                onChange={() => setSelectedReason(OTHER_SELLER_CANCELLATION_REASON)}
+                className="h-4 w-4 shrink-0 accent-primary"
+              />
+              Other
+            </label>
+            {selectedReason === OTHER_SELLER_CANCELLATION_REASON ? (
+              <input
+                type="text"
+                value={otherText}
+                onChange={(event) => setOtherText(event.target.value)}
+                placeholder="Please specify…"
+                maxLength={500}
+                autoFocus
+                className="rounded-md border border-border bg-background px-3 py-2 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+              />
+            ) : null}
+          </fieldset>
+        </ConfirmPanel>
       ) : null}
     </div>
   );

@@ -13,14 +13,28 @@ const DOT_CLASS: Record<"info" | "warning" | "danger", string> = {
   danger: "bg-danger",
 };
 
+export interface ActionCenterCardProps {
+  /** Where "Review →" sends the order-related rows. Defaults to the Seller Portal's own Orders list. Pass `ROUTES.adminOrders` to reuse this same card on the Admin Dashboard. */
+  ordersHref?: string;
+  /** Where the low-stock row's "Review →" sends. Defaults to the Seller Portal's own Inventory. Pass `ROUTES.adminInventory` for Admin. */
+  inventoryHref?: string;
+}
+
 /**
  * Consolidates the attention signals already surfaced separately in Orders
  * (needs confirmation, COD awaiting cash collection) and Inventory
- * (low/out of stock) into one scannable list at the top of the Seller
- * Dashboard — no new queries, just composing what those modules already
- * expose.
+ * (low/out of stock) into one scannable list — no new queries, just
+ * composing what those modules already expose. `getOrderAttentionCounts`/
+ * `getLowStockReport` take no scope parameter; RLS alone decides what's
+ * visible (a seller's own shop, or everything for an admin), so this same
+ * component works unchanged on both the Seller and Admin dashboards — only
+ * the review-link destinations differ, which is what `ordersHref`/
+ * `inventoryHref` are for.
  */
-export async function ActionCenterCard() {
+export async function ActionCenterCard({
+  ordersHref = ROUTES.sellerOrders,
+  inventoryHref = ROUTES.sellerInventory,
+}: ActionCenterCardProps = {}) {
   let needsConfirmation: number;
   let codAwaitingCollection: number;
   let lowStockCount: number;
@@ -42,7 +56,7 @@ export async function ActionCenterCard() {
     rows.push({
       tone: "info",
       text: `${needsConfirmation} order${needsConfirmation === 1 ? "" : "s"} need${needsConfirmation === 1 ? "s" : ""} confirmation`,
-      href: `${ROUTES.sellerOrders}?attentionOnly=true`,
+      href: `${ordersHref}?attentionOnly=true`,
     });
   }
   if (codAwaitingCollection > 0) {
@@ -50,14 +64,14 @@ export async function ActionCenterCard() {
     rows.push({
       tone: "warning",
       text: `${codAwaitingCollection} COD ${noun} awaiting cash collection`,
-      href: `${ROUTES.sellerOrders}?attentionOnly=true`,
+      href: `${ordersHref}?attentionOnly=true`,
     });
   }
   if (lowStockCount > 0) {
     rows.push({
       tone: "danger",
       text: `${lowStockCount} product${lowStockCount === 1 ? "" : "s"} low or out of stock`,
-      href: ROUTES.sellerInventory,
+      href: inventoryHref,
     });
   }
 

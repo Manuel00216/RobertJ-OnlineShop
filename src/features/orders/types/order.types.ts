@@ -100,7 +100,7 @@ export interface Order {
   cancellable: boolean;
   /** Set when this order was placed as part of a multi-seller, one-combined-payment checkout; null for COD and single-seller orders. */
   checkoutGroupId: string | null;
-  /** Buyer-supplied reason when they cancel their own order (`cancelOrderAction`). Null for seller/admin-initiated cancellations, and for orders that were never cancelled. */
+  /** Reason for cancellation — buyer-supplied via `cancelOrderAction`, or seller/admin-supplied via `advanceOrderStatusAction` (required on that path too, COD workflow audit fix). Null only for orders that were never cancelled. */
   cancellationReason: string | null;
   /** Which role actually cancelled the order. Null until `status` first becomes "cancelled". */
   cancelledBy: UserRole | null;
