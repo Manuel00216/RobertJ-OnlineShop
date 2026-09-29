@@ -35,10 +35,14 @@ export interface ProductGridCardProps {
   assigningShop: boolean;
   shops: Shop[];
   selectedShopId: string;
+  /** True when the caller filtered to `status=archived` — swaps the menu's Archive item for Restore. */
+  isArchivedView?: boolean;
   onToggleSelect: (checked: boolean) => void;
   onEdit: () => void;
   onMenuOpenChange: (open: boolean) => void;
   onRequestArchive: () => void;
+  /** Only called when `isArchivedView` is true. No confirm panel — restoring is safe/reversible. */
+  onRestore: () => void;
   onConfirmArchive: () => void;
   onCancelArchive: () => void;
   onRequestAssignShop: () => void;
@@ -68,10 +72,12 @@ export function ProductGridCard({
   assigningShop,
   shops,
   selectedShopId,
+  isArchivedView = false,
   onToggleSelect,
   onEdit,
   onMenuOpenChange,
   onRequestArchive,
+  onRestore,
   onConfirmArchive,
   onCancelArchive,
   onRequestAssignShop,
@@ -170,13 +176,23 @@ export function ProductGridCard({
             </button>
           ) : null}
           <hr className="my-1 border-border" />
-          <button
-            type="button"
-            onClick={onRequestArchive}
-            className="w-full rounded px-2 py-1.5 text-left text-sm text-danger hover:bg-danger/10"
-          >
-            Archive
-          </button>
+          {isArchivedView ? (
+            <button
+              type="button"
+              onClick={onRestore}
+              className="w-full rounded px-2 py-1.5 text-left text-sm text-foreground hover:bg-muted"
+            >
+              Restore
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onRequestArchive}
+              className="w-full rounded px-2 py-1.5 text-left text-sm text-danger hover:bg-danger/10"
+            >
+              Archive
+            </button>
+          )}
         </RowMenu>
       </div>
 

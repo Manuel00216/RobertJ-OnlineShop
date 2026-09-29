@@ -21,6 +21,7 @@ export {
   createProductAction,
   updateProductAction,
   archiveProductAction,
+  restoreProductAction,
   assignProductShopAction,
   searchProductSuggestionsAction,
   bulkArchiveProductsAction,

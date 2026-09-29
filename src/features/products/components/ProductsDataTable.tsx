@@ -25,6 +25,7 @@ import {
   bulkArchiveProductsAction,
   bulkAssignProductCategoryAction,
   bulkUpdateProductStatusAction,
+  restoreProductAction,
 } from "@/features/products/actions/product.actions";
 import { LOW_STOCK_THRESHOLD } from "@/features/products/constants/product.constants";
 import { ProductEditDrawer } from "@/features/products/components/ProductEditDrawer";
@@ -49,6 +50,8 @@ export interface ProductsDataTableProps {
   rules: RecommendationRule[];
   /** Presentation only — defaults to the pre-existing table/card layout. */
   view?: "grid" | "list";
+  /** True when the caller filtered to `status=archived` (the Recycle Bin view) — swaps each row's Archive action for Restore and hides the bulk-archive button. */
+  isArchivedView?: boolean;
 }
 
 function initials(title: string) {
@@ -85,6 +88,7 @@ export function ProductsDataTable({
   variants,
   rules,
   view = "list",
+  isArchivedView = false,
 }: ProductsDataTableProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -174,6 +178,19 @@ export function ProductsDataTable({
         return;
       }
       setConfirmArchiveIds(null);
+    });
+  }
+
+  /** No confirm panel — restoring is safe/reversible (unlike Archive), so it's a direct one-click action. */
+  function runRestoreOne(id: string) {
+    clearFeedback();
+    startTransition(async () => {
+      const result = await restoreProductAction(id);
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      setNotice("Product restored.");
     });
   }
 
@@ -267,14 +284,16 @@ export function ProductsDataTable({
               ) : null}
             </div>
 
-            <button
-              type="button"
-              ref={archiveTriggerRef}
-              className={cn(buttonVariants({ variant: "danger", size: "rjSm" }))}
-              onClick={() => setConfirmArchiveIds(Array.from(selected))}
-            >
-              Archive
-            </button>
+            {isArchivedView ? null : (
+              <button
+                type="button"
+                ref={archiveTriggerRef}
+                className={cn(buttonVariants({ variant: "danger", size: "rjSm" }))}
+                onClick={() => setConfirmArchiveIds(Array.from(selected))}
+              >
+                Archive
+              </button>
+            )}
             <Button type="button" variant="ghost" size="rjSm" onClick={() => setSelected(new Set())}>
               Clear selection
             </Button>
@@ -321,11 +340,16 @@ export function ProductsDataTable({
                 assigningShop={assigningShopId === product.id}
                 shops={shops}
                 selectedShopId={selectedShopId}
+                isArchivedView={isArchivedView}
                 onToggleSelect={(checked) => toggleOne(product.id, checked)}
                 onEdit={() => setEditingId(product.id)}
                 onMenuOpenChange={(open) => setOpenMenuId(open ? product.id : null)}
                 onRequestArchive={() => {
                   setConfirmArchiveIds([product.id]);
+                  setOpenMenuId(null);
+                }}
+                onRestore={() => {
+                  runRestoreOne(product.id);
                   setOpenMenuId(null);
                 }}
                 onConfirmArchive={() => runArchiveOne(product.id)}
@@ -442,16 +466,29 @@ export function ProductsDataTable({
                           </button>
                         ) : null}
                         <hr className="my-1 border-border" />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setConfirmArchiveIds([product.id]);
-                            setOpenMenuId(null);
-                          }}
-                          className="w-full rounded px-2 py-1.5 text-left text-sm text-danger hover:bg-danger/10"
-                        >
-                          Archive
-                        </button>
+                        {isArchivedView ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              runRestoreOne(product.id);
+                              setOpenMenuId(null);
+                            }}
+                            className="w-full rounded px-2 py-1.5 text-left text-sm text-foreground hover:bg-muted"
+                          >
+                            Restore
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setConfirmArchiveIds([product.id]);
+                              setOpenMenuId(null);
+                            }}
+                            className="w-full rounded px-2 py-1.5 text-left text-sm text-danger hover:bg-danger/10"
+                          >
+                            Archive
+                          </button>
+                        )}
                       </RowMenu>
                     </td>
                   </tr>
@@ -552,13 +589,25 @@ export function ProductsDataTable({
                   >
                     Manage stock
                   </Link>
-                  <button
-                    type="button"
-                    className={cn(buttonVariants({ variant: "danger", size: "rjSm" }))}
-                    onClick={() => setConfirmArchiveIds([product.id])}
-                  >
-                    Archive
-                  </button>
+                  {isArchivedView ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="rjSm"
+                      isLoading={isPending}
+                      onClick={() => runRestoreOne(product.id)}
+                    >
+                      Restore
+                    </Button>
+                  ) : (
+                    <button
+                      type="button"
+                      className={cn(buttonVariants({ variant: "danger", size: "rjSm" }))}
+                      onClick={() => setConfirmArchiveIds([product.id])}
+                    >
+                      Archive
+                    </button>
+                  )}
                 </div>
                 {confirmArchiveIds && confirmArchiveIds.length === 1 && confirmArchiveIds[0] === product.id ? (
                   <ConfirmPanel

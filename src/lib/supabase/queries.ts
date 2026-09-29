@@ -867,6 +867,61 @@ export async function archiveProduct(
 }
 
 /**
+ * Restores an archived product. The target status is computed, not chosen by
+ * the caller, because `products_active_requires_stock`/
+ * `products_active_requires_published_at` (initial_schema.sql) reject
+ * `active` for a zero-stock or never-published row — the same fallback
+ * `sync_products_quantity_from_inventory` already applies when stock hits
+ * zero (active -> sold). Restoring goes to `active` only when both
+ * conditions hold, else `draft`, so this can never violate those
+ * constraints. `owner`: same defense-in-depth scope as `archiveProduct`.
+ */
+export async function restoreProduct(
+  id: string,
+  owner: { sellerId: string; shopId: string | null } | null,
+): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+
+  let existingQuery = supabase
+    .from(DATABASE_TABLES.PRODUCTS)
+    .select("id, status, quantity, published_at")
+    .eq("id", id);
+
+  if (owner) {
+    const ownerFilter = owner.shopId
+      ? `seller_id.eq.${owner.sellerId},shop_id.eq.${owner.shopId}`
+      : `seller_id.eq.${owner.sellerId}`;
+    existingQuery = existingQuery.or(ownerFilter);
+  }
+
+  const { data: existing, error: readError } = await existingQuery.maybeSingle();
+
+  if (readError) {
+    throw new Error(`Failed to load product: ${readError.message}`);
+  }
+  if (!existing) {
+    throw new Error("Product not found.");
+  }
+  if (existing.status !== PRODUCT_STATUS.archived) {
+    throw new Error("Only archived products can be restored.");
+  }
+
+  const targetStatus =
+    existing.quantity > 0 && existing.published_at !== null
+      ? PRODUCT_STATUS.active
+      : PRODUCT_STATUS.draft;
+
+  const { error } = await supabase
+    .from(DATABASE_TABLES.PRODUCTS)
+    .update({ status: targetStatus })
+    .eq("id", id);
+
+  if (error) {
+    throw queryError("Failed to restore product", error);
+  }
+}
+
+/**
  * Cheap ownership check for a seller before an image write — same "own it,
  * or it's in my shop" rule as `updateProduct`/`archiveProduct` (and, since
  * the accompanying migration, the `product_images`/storage RLS policies
@@ -4937,6 +4992,13 @@ export async function listDashboardProductsPage(
   }
   if (params.status) {
     query = query.eq("status", params.status);
+  } else {
+    // The default/"All" view excludes archived products — they get their
+    // own explicit `?status=archived` view (the dashboard's Recycle Bin),
+    // same as they're excluded from the public storefront. Archiving never
+    // deletes the row, so this is purely a default-visibility choice; the
+    // explicit status filter above still shows them on request.
+    query = query.neq("status", PRODUCT_STATUS.archived);
   }
   if (params.categoryId) {
     query = query.eq("category_id", params.categoryId);

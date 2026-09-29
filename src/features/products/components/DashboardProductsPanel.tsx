@@ -1,5 +1,8 @@
+import { Archive } from "lucide-react";
+
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { ErrorState } from "@/components/feedback/ErrorState";
+import { PRODUCT_STATUS } from "@/constants/status";
 import type { RecommendationRule } from "@/features/assistant";
 import { DashboardProductViewToggle } from "@/features/products/components/DashboardProductViewToggle";
 import { PaginationControls } from "@/features/products/components/PaginationControls";
@@ -49,6 +52,11 @@ export async function DashboardProductsPanel({
   const rawView = Array.isArray(searchParams.view) ? searchParams.view[0] : searchParams.view;
   const view: "grid" | "list" = rawView === "grid" ? "grid" : "list";
 
+  // The Recycle Bin is the same table/grid, filtered to `status=archived` via
+  // the existing `DashboardProductStatusFilter` chip — not a separate page,
+  // so it keeps every other active filter (search/category) intact.
+  const isArchivedView = parsed.data.status === PRODUCT_STATUS.archived;
+
   let data: {
     result: PaginatedResult<Product>;
     categories: Category[];
@@ -71,6 +79,19 @@ export async function DashboardProductsPanel({
   const { items, page, totalPages, total } = result;
 
   if (items.length === 0) {
+    const otherFiltering = Boolean(parsed.data.search || parsed.data.categoryId);
+    if (isArchivedView) {
+      return (
+        <EmptyState
+          title={otherFiltering ? "No matching archived products" : "No archived products"}
+          description={
+            otherFiltering
+              ? "Try a different search term or clear a filter."
+              : "Products you archive will show up here, and can be restored at any time."
+          }
+        />
+      );
+    }
     const filtering = Boolean(parsed.data.search || parsed.data.status || parsed.data.categoryId);
     return (
       <EmptyState
@@ -86,9 +107,21 @@ export async function DashboardProductsPanel({
 
   return (
     <div className="flex flex-col gap-4">
+      {isArchivedView ? (
+        <div className="flex items-start gap-3 rounded-xl border border-border bg-muted p-4">
+          <Archive className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <div>
+            <p className="text-sm font-semibold text-foreground">Archived products</p>
+            <p className="text-sm text-muted-foreground">
+              Hidden from buyers and kept out of your normal product list. Restore a product to
+              make it available again — nothing is deleted while it&apos;s archived.
+            </p>
+          </div>
+        </div>
+      ) : null}
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground" aria-live="polite">
-          {total} product{total === 1 ? "" : "s"}
+          {total} {isArchivedView ? "archived " : ""}product{total === 1 ? "" : "s"}
         </p>
         <DashboardProductViewToggle />
       </div>
@@ -100,6 +133,7 @@ export async function DashboardProductsPanel({
         variants={variants}
         rules={rules}
         view={view}
+        isArchivedView={isArchivedView}
       />
       {totalPages > 1 ? <PaginationControls page={page} totalPages={totalPages} themed /> : null}
     </div>

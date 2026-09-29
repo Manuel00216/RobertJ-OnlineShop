@@ -160,6 +160,35 @@ export async function archiveProductAction(
   }
 }
 
+/**
+ * Restores an archived product back to Active/Draft (`queries.restoreProduct`
+ * decides which, based on stock/publish state — see its doc comment). Same
+ * role gate and owner-scoping as `archiveProductAction`: a seller may only
+ * restore their own (or their shop's) products, an admin may restore any.
+ */
+export async function restoreProductAction(
+  id: string,
+): Promise<ActionResult<null>> {
+  try {
+    const seller = await queries.requireRole(DASHBOARD_ROLES);
+    const owner =
+      seller.role === USER_ROLES.admin
+        ? null
+        : { sellerId: seller.id, shopId: await queries.getOwnShopId(seller.id) };
+    await queries.restoreProduct(id, owner);
+    revalidatePath(ROUTES.adminInventory);
+    revalidatePath(ROUTES.sellerInventory);
+    revalidatePath(ROUTES.products);
+    revalidatePath(ROUTES.adminProducts);
+    revalidatePath(ROUTES.sellerProducts);
+    return ok(null);
+  } catch (error) {
+    return fail(
+      error instanceof Error ? error.message : "Could not restore the product.",
+    );
+  }
+}
+
 /** Bulk counterpart to `archiveProductAction` — archives every selected product at once. */
 export async function bulkArchiveProductsAction(
   ids: string[],
