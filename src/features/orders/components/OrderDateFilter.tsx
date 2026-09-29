@@ -1,0 +1,34 @@
+"use client";
+
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+
+/** Date-placed dropdown for the dashboard Orders table — sets `dateRange`, always clears `page`. */
+export function OrderDateFilter() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const active = searchParams.get("dateRange") ?? "";
+
+  function updateParams(value: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value) params.set("dateRange", value);
+    else params.delete("dateRange");
+    params.delete("page");
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }
+
+  return (
+    <select
+      value={active}
+      onChange={(event) => updateParams(event.target.value)}
+      aria-label="Filter by date placed"
+      className="h-9 rounded-full border border-border bg-background px-3 text-xs font-semibold text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+    >
+      <option value="">All time</option>
+      <option value="today">Today</option>
+      <option value="7d">Last 7 days</option>
+      <option value="30d">Last 30 days</option>
+    </select>
+  );
+}

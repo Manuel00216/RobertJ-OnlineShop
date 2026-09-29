@@ -61,6 +61,37 @@ export const productListParamsSchema = z
     },
   );
 
+/** Validates and normalises search params for the Seller/Admin dashboard product listing. */
+export const dashboardProductListParamsSchema = z.object({
+  page: z.coerce.number().int().min(1).default(PAGINATION.defaultPage),
+  pageSize: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(PAGINATION.maxPageSize)
+    .default(PAGINATION.defaultPageSize),
+  search: z.string().trim().max(120).optional(),
+  status: productStatusSchema.optional(),
+  categoryId: z.uuid().optional(),
+});
+
+/** Shared id-list shape for the dashboard's bulk product actions. */
+const bulkProductIdsSchema = z.array(z.uuid()).min(1, "Select at least one product.").max(100);
+
+export const bulkArchiveProductsSchema = z.object({
+  ids: bulkProductIdsSchema,
+});
+
+export const bulkUpdateProductStatusSchema = z.object({
+  ids: bulkProductIdsSchema,
+  status: productStatusSchema,
+});
+
+export const bulkAssignProductCategorySchema = z.object({
+  ids: bulkProductIdsSchema,
+  categoryId: z.uuid(),
+});
+
 /**
  * Payload for creating a product. `price` arrives in major units from the form
  * and is converted to minor units in the service — the database never sees a
@@ -134,6 +165,10 @@ export const deleteProductImageSchema = z.object({
   productId: z.uuid(),
 });
 
+export type DashboardProductListParamsInput = z.input<typeof dashboardProductListParamsSchema>;
+export type BulkUpdateProductStatusInput = z.infer<typeof bulkUpdateProductStatusSchema>;
+export type BulkAssignProductCategoryInput = z.infer<typeof bulkAssignProductCategorySchema>;
+export type BulkArchiveProductsInput = z.infer<typeof bulkArchiveProductsSchema>;
 export type ProductListParamsInput = z.input<typeof productListParamsSchema>;
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;

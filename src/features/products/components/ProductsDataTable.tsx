@@ -1,0 +1,540 @@
+"use client";
+
+import Image from "next/image";
+import Link from "next/link";
+import { Fragment, useRef, useState, useTransition } from "react";
+
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ConfirmPanel } from "@/components/ui/confirm-panel";
+import { RowMenu } from "@/components/ui/row-menu";
+import { ErrorState } from "@/components/feedback/ErrorState";
+import { ROUTES } from "@/constants/routes";
+import {
+  PRODUCT_CONDITION_LABELS,
+  PRODUCT_STATUS,
+  PRODUCT_STATUS_LABELS,
+  type ProductStatus,
+} from "@/constants/status";
+import type { RecommendationRule } from "@/features/assistant";
+import {
+  archiveProductAction,
+  assignProductShopAction,
+  bulkArchiveProductsAction,
+  bulkAssignProductCategoryAction,
+  bulkUpdateProductStatusAction,
+} from "@/features/products/actions/product.actions";
+import { LOW_STOCK_THRESHOLD } from "@/features/products/constants/product.constants";
+import { ProductEditDrawer } from "@/features/products/components/ProductEditDrawer";
+import { ProductStatusBadge } from "@/features/products/components/ProductStatusBadge";
+import type { Category } from "@/features/categories/types/category.types";
+import { getCoverImage, type Product, type ProductVariant } from "@/features/products/types/product.types";
+import type { Shop } from "@/features/shops/types/shop.types";
+import { formatCurrency } from "@/lib/utils/currency";
+import { formatDate } from "@/lib/utils/date";
+import { cn } from "@/lib/utils/cn";
+
+export interface ProductsDataTableProps {
+  products: Product[];
+  categories: Category[];
+  /** Populated only for an admin (from `listShops()`); empty for a seller. */
+  shops: Shop[];
+  isAdmin: boolean;
+  /** Every variant visible to the caller — filtered per row below, no N+1. */
+  variants: ProductVariant[];
+  /** Every Guided Selection rule visible to the caller — filtered per row below, no N+1. */
+  rules: RecommendationRule[];
+}
+
+function initials(title: string) {
+  const words = title.split(" ").filter(Boolean);
+  return `${words[0]?.[0] ?? ""}${words[1]?.[0] ?? ""}`.toUpperCase();
+}
+
+function stockCell(product: Product, hasVariants: boolean) {
+  if (hasVariants) {
+    return <Badge tone="info">Multiple variants</Badge>;
+  }
+  const tone = product.quantity <= 0 ? "danger" : product.quantity <= LOW_STOCK_THRESHOLD ? "warning" : "success";
+  const label = product.quantity <= 0 ? "Out of stock" : product.quantity <= LOW_STOCK_THRESHOLD ? "Low stock" : "In stock";
+  return (
+    <div className="flex flex-col gap-1">
+      <Badge tone={tone}>{label}</Badge>
+      <span className="text-xs text-muted-foreground">{product.quantity} in stock</span>
+    </div>
+  );
+}
+
+/**
+ * Products dashboard table — desktop `<table>` + `sm:hidden` card fallback,
+ * checkbox multi-select driving a bulk-actions bar, and a row menu (kebab)
+ * for Edit/Manage stock/Archive. Replaces `DashboardProductRow`'s one-card-
+ * per-product stack; single-row edit now opens `ProductEditDrawer` instead
+ * of expanding the row in place.
+ */
+export function ProductsDataTable({
+  products,
+  categories,
+  shops,
+  isAdmin,
+  variants,
+  rules,
+}: ProductsDataTableProps) {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [confirmArchiveIds, setConfirmArchiveIds] = useState<string[] | null>(null);
+  const [assigningShopId, setAssigningShopId] = useState<string | null>(null);
+  const [selectedShopId, setSelectedShopId] = useState("");
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  const [categoryMenuOpen, setCategoryMenuOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+  const archiveTriggerRef = useRef<HTMLButtonElement>(null);
+
+  const editingProduct = products.find((p) => p.id === editingId) ?? null;
+  const inventoryHref = isAdmin ? ROUTES.adminInventory : ROUTES.sellerInventory;
+
+  const allSelected = products.length > 0 && products.every((p) => selected.has(p.id));
+  const someSelected = products.some((p) => selected.has(p.id));
+
+  function toggleAll(checked: boolean) {
+    setSelected(checked ? new Set(products.map((p) => p.id)) : new Set());
+  }
+  function toggleOne(id: string, checked: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+  function clearFeedback() {
+    setError(null);
+    setNotice(null);
+  }
+
+  function runBulkArchive(ids: string[]) {
+    clearFeedback();
+    startTransition(async () => {
+      const result = await bulkArchiveProductsAction(ids);
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      setNotice(`${result.data.updated} product${result.data.updated === 1 ? "" : "s"} archived.`);
+      setSelected(new Set());
+      setConfirmArchiveIds(null);
+    });
+  }
+
+  function runBulkStatus(status: ProductStatus) {
+    clearFeedback();
+    setStatusMenuOpen(false);
+    const ids = Array.from(selected);
+    startTransition(async () => {
+      const result = await bulkUpdateProductStatusAction(ids, status);
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      setNotice(`${result.data.updated} product${result.data.updated === 1 ? "" : "s"} set to ${PRODUCT_STATUS_LABELS[status]}.`);
+      setSelected(new Set());
+    });
+  }
+
+  function runBulkCategory(categoryId: string, categoryName: string) {
+    clearFeedback();
+    setCategoryMenuOpen(false);
+    const ids = Array.from(selected);
+    startTransition(async () => {
+      const result = await bulkAssignProductCategoryAction(ids, categoryId);
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      setNotice(`${result.data.updated} product${result.data.updated === 1 ? "" : "s"} moved to ${categoryName}.`);
+      setSelected(new Set());
+    });
+  }
+
+  function runArchiveOne(id: string) {
+    clearFeedback();
+    startTransition(async () => {
+      const result = await archiveProductAction(id);
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      setConfirmArchiveIds(null);
+    });
+  }
+
+  function runAssignShop(productId: string) {
+    if (!selectedShopId) return;
+    clearFeedback();
+    startTransition(async () => {
+      const result = await assignProductShopAction(productId, selectedShopId);
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      setAssigningShopId(null);
+      setSelectedShopId("");
+    });
+  }
+
+  const selectedCount = selected.size;
+
+  return (
+    <div className="flex flex-col gap-4">
+      {selectedCount > 0 ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 p-3">
+          <span className="text-sm font-semibold text-foreground">
+            {selectedCount} selected
+          </span>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <Button
+                type="button"
+                variant="outline"
+                size="rjSm"
+                onClick={() => {
+                  setStatusMenuOpen((v) => !v);
+                  setCategoryMenuOpen(false);
+                }}
+              >
+                Change status ▾
+              </Button>
+              {statusMenuOpen ? (
+                <div
+                  onBlur={(event) => {
+                    if (!event.currentTarget.contains(event.relatedTarget)) setStatusMenuOpen(false);
+                  }}
+                  className="absolute right-0 top-full z-20 mt-1 min-w-[160px] rounded-md border border-border bg-card p-1 shadow-md"
+                >
+                  {[PRODUCT_STATUS.draft, PRODUCT_STATUS.active, PRODUCT_STATUS.sold].map((status) => (
+                    <button
+                      key={status}
+                      type="button"
+                      onClick={() => runBulkStatus(status)}
+                      className="w-full rounded px-2 py-1.5 text-left text-sm text-foreground hover:bg-muted"
+                    >
+                      {PRODUCT_STATUS_LABELS[status]}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="relative">
+              <Button
+                type="button"
+                variant="outline"
+                size="rjSm"
+                onClick={() => {
+                  setCategoryMenuOpen((v) => !v);
+                  setStatusMenuOpen(false);
+                }}
+              >
+                Assign category ▾
+              </Button>
+              {categoryMenuOpen ? (
+                <div
+                  onBlur={(event) => {
+                    if (!event.currentTarget.contains(event.relatedTarget)) setCategoryMenuOpen(false);
+                  }}
+                  className="absolute right-0 top-full z-20 mt-1 max-h-64 min-w-[180px] overflow-y-auto rounded-md border border-border bg-card p-1 shadow-md"
+                >
+                  {categories.map((category) => (
+                    <button
+                      key={category.id}
+                      type="button"
+                      onClick={() => runBulkCategory(category.id, category.name)}
+                      className="w-full rounded px-2 py-1.5 text-left text-sm text-foreground hover:bg-muted"
+                    >
+                      {category.name}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+
+            <button
+              type="button"
+              ref={archiveTriggerRef}
+              className={cn(buttonVariants({ variant: "danger", size: "rjSm" }))}
+              onClick={() => setConfirmArchiveIds(Array.from(selected))}
+            >
+              Archive
+            </button>
+            <Button type="button" variant="ghost" size="rjSm" onClick={() => setSelected(new Set())}>
+              Clear selection
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {error ? <ErrorState title="Something went wrong" message={error} /> : null}
+      {notice ? <p className="text-sm text-success">{notice}</p> : null}
+
+      {confirmArchiveIds && confirmArchiveIds.length > 1 ? (
+        <ConfirmPanel
+          label={`Archive ${confirmArchiveIds.length} products`}
+          title={`Archive ${confirmArchiveIds.length} products?`}
+          tone="danger"
+          confirmLabel="Confirm archive"
+          isPending={isPending}
+          triggerRef={archiveTriggerRef}
+          onConfirm={() => runBulkArchive(confirmArchiveIds)}
+          onCancel={() => setConfirmArchiveIds(null)}
+        />
+      ) : null}
+
+      {/* ---------------- Desktop table ---------------- */}
+      <div className="hidden overflow-x-auto rounded-2xl border border-border bg-card sm:block">
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-border bg-muted">
+              <th className="w-10 p-3">
+                <Checkbox
+                  checked={someSelected && !allSelected ? "indeterminate" : allSelected}
+                  onChange={(event) => toggleAll(event.target.checked)}
+                  aria-label="Select all products on this page"
+                />
+              </th>
+              <th className="p-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Product</th>
+              <th className="p-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Category</th>
+              <th className="p-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Price</th>
+              <th className="p-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Stock</th>
+              <th className="p-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
+              <th className="p-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Updated</th>
+              <th className="w-10 p-3" />
+            </tr>
+          </thead>
+          <tbody>
+            {products.map((product) => {
+              const productVariants = variants.filter((v) => v.productId === product.id);
+              const cover = getCoverImage(product);
+              return (
+                <Fragment key={product.id}>
+                  <tr className={cn("border-b border-border last:border-0", selected.has(product.id) && "bg-primary/5")}>
+                    <td className="p-3 align-top">
+                      <Checkbox
+                        checked={selected.has(product.id)}
+                        onChange={(event) => toggleOne(product.id, event.target.checked)}
+                        aria-label={`Select ${product.title}`}
+                      />
+                    </td>
+                    <td className="p-3 align-top">
+                      <div className="flex items-center gap-3">
+                        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted text-xs font-bold text-muted-foreground">
+                          {cover ? (
+                            <Image src={cover.url} alt={cover.altText ?? ""} fill sizes="40px" className="object-cover" />
+                          ) : (
+                            initials(product.title)
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <button
+                            type="button"
+                            onClick={() => setEditingId(product.id)}
+                            className="block max-w-[220px] truncate text-left text-sm font-semibold text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+                          >
+                            {product.title}
+                          </button>
+                          <p className="text-xs text-muted-foreground">{PRODUCT_CONDITION_LABELS[product.condition]}</p>
+                          {product.shopId === null ? <Badge tone="warning">Unassigned</Badge> : null}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="p-3 align-top text-sm text-muted-foreground">{product.categoryName ?? "—"}</td>
+                    <td className="p-3 align-top text-sm font-medium text-foreground">
+                      {formatCurrency(product.priceCents, product.currency)}
+                    </td>
+                    <td className="p-3 align-top">{stockCell(product, productVariants.length > 0)}</td>
+                    <td className="p-3 align-top"><ProductStatusBadge status={product.status} /></td>
+                    <td className="p-3 align-top text-sm text-muted-foreground">{formatDate(product.updatedAt)}</td>
+                    <td className="p-3 align-top text-right">
+                      <RowMenu
+                        open={openMenuId === product.id}
+                        onOpenChange={(open) => setOpenMenuId(open ? product.id : null)}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingId(product.id);
+                            setOpenMenuId(null);
+                          }}
+                          className="w-full rounded px-2 py-1.5 text-left text-sm text-foreground hover:bg-muted"
+                        >
+                          Edit
+                        </button>
+                        <Link
+                          href={`${inventoryHref}?search=${encodeURIComponent(product.title)}`}
+                          onClick={() => setOpenMenuId(null)}
+                          className="block w-full rounded px-2 py-1.5 text-left text-sm text-foreground hover:bg-muted"
+                        >
+                          Manage stock
+                        </Link>
+                        {isAdmin && product.shopId === null ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAssigningShopId(product.id);
+                              setOpenMenuId(null);
+                            }}
+                            className="w-full rounded px-2 py-1.5 text-left text-sm text-foreground hover:bg-muted"
+                          >
+                            Assign to shop
+                          </button>
+                        ) : null}
+                        <hr className="my-1 border-border" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setConfirmArchiveIds([product.id]);
+                            setOpenMenuId(null);
+                          }}
+                          className="w-full rounded px-2 py-1.5 text-left text-sm text-danger hover:bg-danger/10"
+                        >
+                          Archive
+                        </button>
+                      </RowMenu>
+                    </td>
+                  </tr>
+                  {confirmArchiveIds && confirmArchiveIds.length === 1 && confirmArchiveIds[0] === product.id ? (
+                    <tr>
+                      <td colSpan={8} className="border-b border-border bg-muted p-4">
+                        <ConfirmPanel
+                          label={`Archive ${product.title}`}
+                          title={`Archive ${product.title}?`}
+                          tone="danger"
+                          confirmLabel="Confirm archive"
+                          isPending={isPending}
+                          onConfirm={() => runArchiveOne(product.id)}
+                          onCancel={() => setConfirmArchiveIds(null)}
+                        />
+                      </td>
+                    </tr>
+                  ) : null}
+                  {assigningShopId === product.id ? (
+                    <tr>
+                      <td colSpan={8} className="border-b border-border bg-muted p-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <select
+                            value={selectedShopId}
+                            onChange={(event) => setSelectedShopId(event.target.value)}
+                            className="h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+                          >
+                            <option value="">Select a shop…</option>
+                            {shops.map((shop) => (
+                              <option key={shop.id} value={shop.id}>
+                                {shop.name}
+                              </option>
+                            ))}
+                          </select>
+                          <Button
+                            type="button"
+                            variant="primary"
+                            size="rjSm"
+                            isLoading={isPending}
+                            disabled={!selectedShopId}
+                            onClick={() => runAssignShop(product.id)}
+                          >
+                            Assign
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="rjSm"
+                            disabled={isPending}
+                            onClick={() => setAssigningShopId(null)}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : null}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* ---------------- Mobile cards ---------------- */}
+      <div className="flex flex-col gap-3 sm:hidden">
+        {products.map((product) => {
+          const productVariants = variants.filter((v) => v.productId === product.id);
+          return (
+            <Card key={product.id} className={cn(selected.has(product.id) && "ring-2 ring-primary")}>
+              <CardContent className="flex flex-col gap-3 p-4">
+                <div className="flex items-start gap-3">
+                  <Checkbox
+                    checked={selected.has(product.id)}
+                    onChange={(event) => toggleOne(product.id, event.target.checked)}
+                    aria-label={`Select ${product.title}`}
+                    className="mt-1"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-foreground">{product.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {product.categoryName ?? "No category"} · {formatCurrency(product.priceCents, product.currency)}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <ProductStatusBadge status={product.status} />
+                      {stockCell(product, productVariants.length > 0)}
+                      {product.shopId === null ? <Badge tone="warning">Unassigned</Badge> : null}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" size="rjSm" onClick={() => setEditingId(product.id)}>
+                    Edit
+                  </Button>
+                  <Link
+                    href={`${inventoryHref}?search=${encodeURIComponent(product.title)}`}
+                    className={cn(buttonVariants({ variant: "outline", size: "rjSm" }))}
+                  >
+                    Manage stock
+                  </Link>
+                  <button
+                    type="button"
+                    className={cn(buttonVariants({ variant: "danger", size: "rjSm" }))}
+                    onClick={() => setConfirmArchiveIds([product.id])}
+                  >
+                    Archive
+                  </button>
+                </div>
+                {confirmArchiveIds && confirmArchiveIds.length === 1 && confirmArchiveIds[0] === product.id ? (
+                  <ConfirmPanel
+                    label={`Archive ${product.title}`}
+                    title={`Archive ${product.title}?`}
+                    tone="danger"
+                    confirmLabel="Confirm archive"
+                    isPending={isPending}
+                    onConfirm={() => runArchiveOne(product.id)}
+                    onCancel={() => setConfirmArchiveIds(null)}
+                  />
+                ) : null}
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      <ProductEditDrawer
+        product={editingProduct}
+        categories={categories}
+        variants={editingProduct ? variants.filter((v) => v.productId === editingProduct.id) : []}
+        rules={editingProduct ? rules.filter((r) => r.productId === editingProduct.id) : []}
+        onClose={() => setEditingId(null)}
+      />
+    </div>
+  );
+}

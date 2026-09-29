@@ -1,91 +1,95 @@
-"use client";
-
-import { useState } from "react";
-
-import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/feedback/EmptyState";
+import { ErrorState } from "@/components/feedback/ErrorState";
 import type { RecommendationRule } from "@/features/assistant";
-import { DashboardProductRow } from "@/features/products/components/DashboardProductRow";
-import { ProductForm } from "@/features/products/components/ProductForm";
+import { PaginationControls } from "@/features/products/components/PaginationControls";
+import { ProductsDataTable } from "@/features/products/components/ProductsDataTable";
+import { dashboardProductListParamsSchema } from "@/features/products/schemas/product.schema";
 import type { Category } from "@/features/categories/types/category.types";
 import type { Product, ProductVariant } from "@/features/products/types/product.types";
 import type { Shop } from "@/features/shops/types/shop.types";
+import {
+  listActiveCategories,
+  listDashboardProductVariants,
+  listDashboardProductsPage,
+  listDashboardRecommendationRules,
+} from "@/lib/supabase/queries";
+import type { PaginatedResult } from "@/types/pagination.types";
 
 export interface DashboardProductsPanelProps {
-  products: Product[];
-  categories: Category[];
+  searchParams: Record<string, string | string[] | undefined>;
+  /** `null` for an admin (no ownership filter — RLS + moderation scope only); the caller's own seller/shop id otherwise. */
+  owner: { sellerId: string; shopId: string | null } | null;
   /** Populated only for an admin (from `listShops()`); empty for a seller. */
   shops: Shop[];
   isAdmin: boolean;
-  /** Every variant visible to the caller, one bulk fetch — filtered per row below, no N+1. */
-  variants: ProductVariant[];
-  /** Every Guided Selection rule visible to the caller, one bulk fetch — filtered per row below, no N+1. */
-  rules: RecommendationRule[];
 }
 
 /**
- * Client wrapper for the products management list: owns the "show create
- * form" toggle (seller-only — admin creates nothing, see `createProductAction`)
- * and renders the management list. Data (`products`/`categories`/`shops`) is
- * fetched once, server-side, by the page — this component does no fetching
- * of its own.
+ * Dashboard equivalent of `ProductListSection` (the buyer catalog) — reads
+ * its own `searchParams` and fetches a paginated/filtered page of products
+ * directly, rather than the page pre-fetching everything and passing it
+ * down. Mirrors `DashboardOrdersPanel`'s exact shape.
  */
-export function DashboardProductsPanel({
-  products,
-  categories,
+export async function DashboardProductsPanel({
+  searchParams,
+  owner,
   shops,
   isAdmin,
-  variants,
-  rules,
 }: DashboardProductsPanelProps) {
-  const [showCreateForm, setShowCreateForm] = useState(false);
+  const parsed = dashboardProductListParamsSchema.safeParse(searchParams);
+  if (!parsed.success) {
+    return <ErrorState message="Those filters aren't valid. Try clearing your search." />;
+  }
+
+  let data: {
+    result: PaginatedResult<Product>;
+    categories: Category[];
+    variants: ProductVariant[];
+    rules: RecommendationRule[];
+  };
+  try {
+    const [result, categories, variants, rules] = await Promise.all([
+      listDashboardProductsPage(owner, parsed.data),
+      listActiveCategories(),
+      listDashboardProductVariants(),
+      listDashboardRecommendationRules(),
+    ]);
+    data = { result, categories, variants, rules };
+  } catch {
+    return <ErrorState message="We couldn't load products right now." />;
+  }
+
+  const { result, categories, variants, rules } = data;
+  const { items, page, totalPages, total } = result;
+
+  if (items.length === 0) {
+    const filtering = Boolean(parsed.data.search || parsed.data.status || parsed.data.categoryId);
+    return (
+      <EmptyState
+        title={filtering ? "No matching products" : "No products yet"}
+        description={
+          filtering
+            ? "Try a different search term or clear a filter."
+            : "Create your first product to get started."
+        }
+      />
+    );
+  }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          {products.length} product{products.length === 1 ? "" : "s"}
-        </p>
-        {/* Admin manages/moderates existing products only — never creates
-            one, so this action (and the form below) is seller-only. */}
-        {!isAdmin ? (
-          <Button
-            type="button"
-            variant="primary"
-            size="rjSm"
-            onClick={() => setShowCreateForm((value) => !value)}
-          >
-            {showCreateForm ? "Cancel" : "New product"}
-          </Button>
-        ) : null}
-      </div>
-
-      {!isAdmin && showCreateForm ? (
-        <div className="rounded-2xl border border-border bg-muted p-5">
-          <ProductForm categories={categories} onDone={() => setShowCreateForm(false)} />
-        </div>
-      ) : null}
-
-      {products.length === 0 ? (
-        <EmptyState
-          title="No products yet"
-          description="Create your first product to get started."
-        />
-      ) : (
-        <div className="flex flex-col gap-3">
-          {products.map((product) => (
-            <DashboardProductRow
-              key={product.id}
-              product={product}
-              categories={categories}
-              shops={shops}
-              isAdmin={isAdmin}
-              variants={variants.filter((variant) => variant.productId === product.id)}
-              rules={rules.filter((rule) => rule.productId === product.id)}
-            />
-          ))}
-        </div>
-      )}
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-muted-foreground" aria-live="polite">
+        {total} product{total === 1 ? "" : "s"}
+      </p>
+      <ProductsDataTable
+        products={items}
+        categories={categories}
+        shops={shops}
+        isAdmin={isAdmin}
+        variants={variants}
+        rules={rules}
+      />
+      {totalPages > 1 ? <PaginationControls page={page} totalPages={totalPages} themed /> : null}
     </div>
   );
 }

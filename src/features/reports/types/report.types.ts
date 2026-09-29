@@ -1,4 +1,5 @@
 import type { OrderStatus } from "@/constants/status";
+import type { StockStatus } from "@/features/inventory";
 
 /** Time bucket granularity for the sales trend. Mirrors the RPC's accepted values. */
 export type ReportGranularity = "day" | "week" | "month";
@@ -49,4 +50,42 @@ export interface TopProduct {
   productTitle: string;
   unitsSold: number;
   revenueCents: number;
+}
+
+/**
+ * One low/out-of-stock inventory row cross-referenced with its sales in the
+ * report range — "your best-seller is about to run out" — Seller Dashboard/
+ * Reports only. Ranked by `revenueCentsInRange` (paid orders), same
+ * "revenue over paid" convention as {@link TopProduct}; `unitsSoldInRange`
+ * counts across all placed orders, matching it too.
+ */
+export interface RestockPriorityItem {
+  productId: string;
+  variantId: string | null;
+  productTitle: string;
+  variantLabel: string | null;
+  quantity: number;
+  stockStatus: StockStatus;
+  unitsSoldInRange: number;
+  revenueCentsInRange: number;
+}
+
+/** Revenue/units rollup per category within the range (paid orders only). Seller Reports only. */
+export interface CategoryRevenue {
+  categoryId: string | null;
+  categoryName: string;
+  revenueCents: number;
+  unitsSold: number;
+}
+
+/**
+ * Returning- vs. new-buyer split for the range — a buyer counts as
+ * "returning" if they have more than one order with this seller across all
+ * time, not just within the range. Seller Dashboard only.
+ */
+export interface RepeatCustomerStats {
+  totalOrders: number;
+  returningOrders: number;
+  newOrders: number;
+  ratePercent: number;
 }

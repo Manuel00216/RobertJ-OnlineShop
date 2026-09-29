@@ -41,6 +41,14 @@ export interface StockAdjustment {
   createdAt: string;
 }
 
+/** Filters accepted by the Seller/Admin dashboard inventory listing. */
+export interface DashboardInventoryListParams {
+  page: number;
+  pageSize: number;
+  search?: string;
+  stockStatus?: StockStatus;
+}
+
 /** Computes the derived stock status from a raw quantity/threshold pair. */
 export function getStockStatus(
   quantity: number,

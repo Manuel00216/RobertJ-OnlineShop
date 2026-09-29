@@ -65,6 +65,25 @@ export function getDefaultRange(): { from: string; to: string } {
   return { from: addDays(to, -(DEFAULT_REPORT_DAYS - 1)), to };
 }
 
+/** Whole days between two `YYYY-MM-DD` dates, inclusive-exclusive (`to` - `from`). */
+function daysBetween(from: string, to: string): number {
+  const a = new Date(`${from}T00:00:00Z`).getTime();
+  const b = new Date(`${to}T00:00:00Z`).getTime();
+  return Math.round((b - a) / 86_400_000);
+}
+
+/**
+ * The equal-length period immediately preceding `[from, to]` — e.g. for a
+ * 30-day range, the 30 days before it. Powers the Seller Dashboard/Reports'
+ * period-over-period delta chips.
+ */
+export function getPreviousPeriod(from: string, to: string): { from: string; to: string } {
+  const days = daysBetween(from, to) + 1;
+  const prevTo = addDays(from, -1);
+  const prevFrom = addDays(prevTo, -(days - 1));
+  return { from: prevFrom, to: prevTo };
+}
+
 /**
  * Same `from`/`to` parsing as {@link parseReportFilters}, but defaulting to
  * today only rather than the last {@link DEFAULT_REPORT_DAYS} days — used by

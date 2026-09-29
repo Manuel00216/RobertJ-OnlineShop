@@ -1,33 +1,57 @@
 import { EmptyState } from "@/components/feedback/EmptyState";
-import { InventoryRow } from "@/features/inventory/components/InventoryRow";
-import type { InventoryItem } from "@/features/inventory/types/inventory.types";
+import { ErrorState } from "@/components/feedback/ErrorState";
+import { PaginationControls } from "@/features/products/components/PaginationControls";
+import { InventoryDataTable } from "@/features/inventory/components/InventoryDataTable";
+import { dashboardInventoryListParamsSchema } from "@/features/inventory/schemas/inventory.schema";
+import { listDashboardInventoryPage } from "@/lib/supabase/queries";
 
 export interface InventoryTableProps {
-  items: InventoryItem[];
+  searchParams: Record<string, string | string[] | undefined>;
   isAdmin: boolean;
 }
 
 /**
- * `/dashboard/inventory`'s list. Data is fetched once, server-side, by the
- * page (mirrors `DashboardProductsPanel`) — this component does no fetching
- * of its own; RLS already scoped `items` to the caller's own shop(s), or
- * every shop for an admin.
+ * `/seller/inventory` and `/admin/inventory`'s list. Reads its own
+ * `searchParams` and fetches a paginated/filtered page directly — mirrors
+ * `DashboardProductsPanel`/`DashboardOrdersPanel`'s exact shape. RLS already
+ * scopes rows to the caller's own shop(s), or every shop for an admin.
  */
-export function InventoryTable({ items, isAdmin }: InventoryTableProps) {
+export async function InventoryTable({ searchParams, isAdmin }: InventoryTableProps) {
+  const parsed = dashboardInventoryListParamsSchema.safeParse(searchParams);
+  if (!parsed.success) {
+    return <ErrorState message="Those filters aren't valid. Try clearing your search." />;
+  }
+
+  let result: Awaited<ReturnType<typeof listDashboardInventoryPage>>;
+  try {
+    result = await listDashboardInventoryPage(parsed.data);
+  } catch {
+    return <ErrorState message="We couldn't load inventory right now." />;
+  }
+
+  const { items, page, totalPages, total } = result;
+
   if (items.length === 0) {
+    const filtering = Boolean(parsed.data.search || parsed.data.stockStatus);
     return (
       <EmptyState
-        title="No stock to manage yet"
-        description="Inventory rows are created automatically for every product."
+        title={filtering ? "No matching stock rows" : "No stock to manage yet"}
+        description={
+          filtering
+            ? "Try a different search term or clear a filter."
+            : "Inventory rows are created automatically for every product."
+        }
       />
     );
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      {items.map((item) => (
-        <InventoryRow key={item.id} item={item} isAdmin={isAdmin} />
-      ))}
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-muted-foreground" aria-live="polite">
+        {total} row{total === 1 ? "" : "s"}
+      </p>
+      <InventoryDataTable items={items} isAdmin={isAdmin} />
+      {totalPages > 1 ? <PaginationControls page={page} totalPages={totalPages} themed /> : null}
     </div>
   );
 }

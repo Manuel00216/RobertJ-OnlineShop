@@ -10,6 +10,9 @@ import * as queries from "@/lib/supabase/queries";
 import type { ActionResult } from "@/types/action.types";
 import {
   assignProductShopSchema,
+  bulkArchiveProductsSchema,
+  bulkAssignProductCategorySchema,
+  bulkUpdateProductStatusSchema,
   createProductSchema,
   deleteProductImageSchema,
   updateProductSchema,
@@ -153,6 +156,91 @@ export async function archiveProductAction(
   } catch (error) {
     return fail(
       error instanceof Error ? error.message : "Could not archive the product.",
+    );
+  }
+}
+
+/** Bulk counterpart to `archiveProductAction` — archives every selected product at once. */
+export async function bulkArchiveProductsAction(
+  ids: string[],
+): Promise<ActionResult<{ updated: number }>> {
+  const parsed = bulkArchiveProductsSchema.safeParse({ ids });
+  if (!parsed.success) return fromZodError(parsed.error);
+
+  try {
+    const seller = await queries.requireRole(DASHBOARD_ROLES);
+    const owner =
+      seller.role === USER_ROLES.admin
+        ? null
+        : { sellerId: seller.id, shopId: await queries.getOwnShopId(seller.id) };
+    const updated = await queries.bulkUpdateProductStatus(parsed.data.ids, "archived", owner);
+    revalidatePath(ROUTES.adminInventory);
+    revalidatePath(ROUTES.sellerInventory);
+    revalidatePath(ROUTES.products);
+    revalidatePath(ROUTES.adminProducts);
+    revalidatePath(ROUTES.sellerProducts);
+    return ok({ updated: updated.length });
+  } catch (error) {
+    return fail(
+      error instanceof Error ? error.message : "Could not archive the selected products.",
+    );
+  }
+}
+
+/** Bulk status change (Draft/Active/Sold/Archived) applied to every selected product at once. */
+export async function bulkUpdateProductStatusAction(
+  ids: string[],
+  status: string,
+): Promise<ActionResult<{ updated: number }>> {
+  const parsed = bulkUpdateProductStatusSchema.safeParse({ ids, status });
+  if (!parsed.success) return fromZodError(parsed.error);
+
+  try {
+    const seller = await queries.requireRole(DASHBOARD_ROLES);
+    const owner =
+      seller.role === USER_ROLES.admin
+        ? null
+        : { sellerId: seller.id, shopId: await queries.getOwnShopId(seller.id) };
+    const updated = await queries.bulkUpdateProductStatus(parsed.data.ids, parsed.data.status, owner);
+    revalidatePath(ROUTES.adminInventory);
+    revalidatePath(ROUTES.sellerInventory);
+    revalidatePath(ROUTES.products);
+    revalidatePath(ROUTES.adminProducts);
+    revalidatePath(ROUTES.sellerProducts);
+    return ok({ updated: updated.length });
+  } catch (error) {
+    return fail(
+      error instanceof Error ? error.message : "Could not update the selected products.",
+    );
+  }
+}
+
+/** Bulk category reassignment applied to every selected product at once. */
+export async function bulkAssignProductCategoryAction(
+  ids: string[],
+  categoryId: string,
+): Promise<ActionResult<{ updated: number }>> {
+  const parsed = bulkAssignProductCategorySchema.safeParse({ ids, categoryId });
+  if (!parsed.success) return fromZodError(parsed.error);
+
+  try {
+    const seller = await queries.requireRole(DASHBOARD_ROLES);
+    const owner =
+      seller.role === USER_ROLES.admin
+        ? null
+        : { sellerId: seller.id, shopId: await queries.getOwnShopId(seller.id) };
+    const updated = await queries.bulkAssignProductCategory(
+      parsed.data.ids,
+      parsed.data.categoryId,
+      owner,
+    );
+    revalidatePath(ROUTES.adminProducts);
+    revalidatePath(ROUTES.sellerProducts);
+    revalidatePath(ROUTES.products);
+    return ok({ updated: updated.length });
+  } catch (error) {
+    return fail(
+      error instanceof Error ? error.message : "Could not update the selected products.",
     );
   }
 }

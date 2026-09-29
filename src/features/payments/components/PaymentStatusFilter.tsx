@@ -30,6 +30,7 @@ export function PaymentStatusFilter() {
     } else {
       params.delete("status");
     }
+    params.delete("page");
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }
 

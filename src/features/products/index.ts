@@ -1,7 +1,12 @@
 export { CatalogHeader } from "./components/CatalogHeader";
 export { ProductStatusBadge } from "./components/ProductStatusBadge";
-export { DashboardProductRow } from "./components/DashboardProductRow";
 export { DashboardProductsPanel } from "./components/DashboardProductsPanel";
+export { ProductsDataTable } from "./components/ProductsDataTable";
+export { ProductEditDrawer } from "./components/ProductEditDrawer";
+export { CreateProductToggle } from "./components/CreateProductToggle";
+export { DashboardProductSearchInput } from "./components/DashboardProductSearchInput";
+export { DashboardProductStatusFilter } from "./components/DashboardProductStatusFilter";
+export { DashboardCategoryFilter } from "./components/DashboardCategoryFilter";
 export { ProductForm } from "./components/ProductForm";
 export { ProductGrid } from "./components/ProductGrid";
 export { ProductTile, type ProductTileItem } from "./components/ProductTile";
@@ -18,9 +23,13 @@ export {
   archiveProductAction,
   assignProductShopAction,
   searchProductSuggestionsAction,
+  bulkArchiveProductsAction,
+  bulkUpdateProductStatusAction,
+  bulkAssignProductCategoryAction,
 } from "./actions/product.actions";
 export {
   productListParamsSchema,
+  dashboardProductListParamsSchema,
   createProductSchema,
   updateProductSchema,
   assignProductShopSchema,
@@ -28,5 +37,6 @@ export {
 export type {
   Product,
   ProductListParams,
+  DashboardProductListParams,
   ProductSort,
 } from "./types/product.types";

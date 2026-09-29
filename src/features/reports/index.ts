@@ -6,12 +6,15 @@ export { SalesTrendPanel } from "./components/SalesTrendPanel";
 export { OrderStatusPanel } from "./components/OrderStatusPanel";
 export { TopProductsPanel } from "./components/TopProductsPanel";
 export { LowStockPanel } from "./components/LowStockPanel";
+export { RestockPriorityPanel } from "./components/RestockPriorityPanel";
+export { RevenueByCategoryPanel } from "./components/RevenueByCategoryPanel";
+export { RepeatCustomersPanel } from "./components/RepeatCustomersPanel";
 export {
   SalesSummarySkeleton,
   ReportCardSkeleton,
 } from "./components/ReportSkeletons";
 
-export { parseReportFilters } from "./utils/report-range";
+export { parseReportFilters, getPreviousPeriod } from "./utils/report-range";
 export type {
   ReportFilters,
   ReportGranularity,
@@ -19,4 +22,7 @@ export type {
   SalesTrendPoint,
   OrderStatusCount,
   TopProduct,
+  RestockPriorityItem,
+  CategoryRevenue,
+  RepeatCustomerStats,
 } from "./types/report.types";

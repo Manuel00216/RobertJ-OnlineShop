@@ -1,133 +1,94 @@
-import Link from "next/link";
-
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { ErrorState } from "@/components/feedback/ErrorState";
-import { Badge } from "@/components/ui/badge";
-import { THEMED_CARD } from "@/components/ui/card";
-import { ROUTES } from "@/constants/routes";
-import type { PaymentStatus } from "@/constants/status";
-import { PaymentStatusBadge } from "@/features/orders/components/PaymentStatusBadge";
+import { PaginationControls } from "@/features/products/components/PaginationControls";
+import { PaymentAttentionStrip } from "@/features/payments/components/PaymentAttentionStrip";
+import { PaymentsDataTable } from "@/features/payments/components/PaymentsDataTable";
+import { dashboardPaymentListParamsSchema } from "@/features/payments/schemas/payment.schema";
+import type { DashboardPaymentListParams, Payment } from "@/features/payments/types/payment.types";
 import { isStaleXenditAttempt } from "@/features/payments/lib/xendit-reconciliation";
-import { formatCurrency } from "@/lib/utils/currency";
-import { formatDate } from "@/lib/utils/date";
-import { cn } from "@/lib/utils/cn";
-import { getPaymentReceiptSignedUrl, listPaymentHistory } from "@/lib/supabase/queries";
-
-const METHOD_LABELS: Record<string, string> = {
-  cod: "Cash on Delivery",
-  xendit: "Online Payment",
-  qr_upload: "QR Transfer (legacy)",
-  card: "Card (legacy)",
-};
+import { getPaymentReceiptSignedUrl, getStalePaymentCount, listPaymentHistory } from "@/lib/supabase/queries";
+import type { PaginatedResult } from "@/types/pagination.types";
 
 export interface PaymentsListProps {
-  /** Narrows the list to one payment status. Omitted = unfiltered (unchanged default behavior). */
-  status?: PaymentStatus;
+  searchParams: Record<string, string | string[] | undefined>;
   /**
-   * Phase 4B, Admin-only extras (stale/multi-seller indicators). Defaults to
-   * false so the Seller payments page — which renders this same component
-   * with no props — is visually unchanged.
+   * Phase 4B, Admin-only extras (stale/multi-seller indicators + the "needs
+   * reconciliation" strip). Defaults to false so the Seller payments page
+   * stays visually unchanged from before.
    */
   showAdminTools?: boolean;
 }
 
 /**
- * Read-only payment history — no manual verification actions. Xendit
- * payments settle themselves via webhook, and COD is marked collected from
- * the order detail page; there's nothing left to manually decide here,
- * unlike the retired QR verification queue. Legacy `qr_upload` rows still
- * link to their original receipt for audit purposes.
+ * Read-only payment history — no manual verification actions beyond "Mark
+ * COD collected" (single-row and bulk). Xendit payments settle themselves
+ * via webhook; there's nothing else left to manually decide here, unlike
+ * the retired QR verification queue.
  */
-export async function PaymentsList({ status, showAdminTools = false }: PaymentsListProps = {}) {
-  let payments: Awaited<ReturnType<typeof listPaymentHistory>>;
+export async function PaymentsList({ searchParams, showAdminTools = false }: PaymentsListProps) {
+  const parsed = dashboardPaymentListParamsSchema.safeParse(searchParams);
+  if (!parsed.success) {
+    return <ErrorState message="Those filters aren't valid. Try clearing your search." />;
+  }
+
+  const params: DashboardPaymentListParams = parsed.data;
+
+  let result: PaginatedResult<Payment>;
+  let staleCount = 0;
   try {
-    payments = await listPaymentHistory(50, status);
+    if (showAdminTools) {
+      [result, staleCount] = await Promise.all([listPaymentHistory(params), getStalePaymentCount()]);
+    } else {
+      result = await listPaymentHistory(params);
+    }
   } catch {
     return <ErrorState message="We couldn't load payment history right now." />;
   }
 
-  if (payments.length === 0) {
-    return status ? (
-      <EmptyState
-        title="No matching payments"
-        description="Try a different status filter."
-      />
-    ) : (
-      <EmptyState title="No payments yet" description="Payments will appear here once orders come in." />
-    );
-  }
+  const { items, page, totalPages, total } = result;
+  const filtering = Boolean(params.search || params.status || params.paymentMethodType || params.staleOnly);
+
+  // Legacy QR receipts are stored in a private bucket — resolve a short-lived
+  // signed URL per row here (server-side) so the (client) data table can
+  // just render a plain link, same as the pre-redesign list did. `stale` is
+  // computed here too (not inside the client component) since
+  // `isStaleXenditAttempt` lives in a module that transitively imports the
+  // server-only query layer.
+  const withReceipts = await Promise.all(
+    items.map(async (payment) => ({
+      ...payment,
+      receiptUrl:
+        payment.paymentMethodType === "qr_upload" && payment.receiptPath
+          ? await getPaymentReceiptSignedUrl(payment.receiptPath).catch(() => null)
+          : null,
+      stale:
+        showAdminTools &&
+        payment.paymentMethodType === "xendit" &&
+        payment.status === "pending" &&
+        payment.xenditPaymentRequestId != null &&
+        isStaleXenditAttempt(payment),
+    })),
+  );
 
   return (
-    <ul className="flex flex-col gap-3">
-      {await Promise.all(
-        payments.map(async (payment) => {
-          const receiptUrl =
-            payment.paymentMethodType === "qr_upload" && payment.receiptPath
-              ? await getPaymentReceiptSignedUrl(payment.receiptPath).catch(() => null)
-              : null;
+    <div className="flex flex-col gap-6">
+      {showAdminTools ? <PaymentAttentionStrip staleCount={staleCount} /> : null}
 
-          // Phase 4B: only meaningful for a still-pending Xendit attempt that
-          // Xendit actually acknowledged — reuses the exact fix
-          // #5A/#5B/cron staleness window, no new logic. A row with no
-          // `xenditPaymentRequestId` (checkout abandoned before Xendit ever
-          // responded) is never a reconciliation candidate — see
-          // `getStaleXenditPaymentsForReconciliationSweep` and
-          // `reconcileStaleXenditAttempt`'s own early return — so it must
-          // never claim to be "awaiting reconciliation" no matter its age.
-          const isStale =
-            showAdminTools &&
-            payment.paymentMethodType === "xendit" &&
-            payment.status === "pending" &&
-            payment.xenditPaymentRequestId != null &&
-            isStaleXenditAttempt(payment);
-          const isMultiSeller = showAdminTools && Boolean(payment.checkoutGroupId);
-
-          return (
-            <li key={payment.id} className={cn(THEMED_CARD, "flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between")}>
-              <div className="min-w-0">
-                <Link
-                  href={ROUTES.orderDetail(payment.orderId)}
-                  className="text-sm font-bold text-foreground hover:underline"
-                >
-                  {payment.orderNumber}
-                </Link>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {payment.buyerName ?? "Buyer"} · {formatDate(payment.createdAt)}
-                </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {METHOD_LABELS[payment.paymentMethodType] ?? payment.paymentMethodType}
-                  {payment.paymentChannel ? ` · ${payment.paymentChannel}` : ""}
-                </p>
-                {payment.status === "failed" && payment.failureReason ? (
-                  <p className="mt-0.5 text-xs text-danger">{payment.failureReason}</p>
-                ) : null}
-                {receiptUrl ? (
-                  <a
-                    href={receiptUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-0.5 inline-block text-xs font-semibold text-danger hover:underline"
-                  >
-                    View receipt
-                  </a>
-                ) : null}
-                {isMultiSeller || isStale ? (
-                  <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {isMultiSeller ? <Badge tone="neutral">Multi-seller order</Badge> : null}
-                    {isStale ? <Badge tone="warning">Stale — awaiting reconciliation</Badge> : null}
-                  </div>
-                ) : null}
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-semibold text-foreground">
-                  {formatCurrency(payment.amountCents, payment.currency)}
-                </span>
-                <PaymentStatusBadge status={payment.status} />
-              </div>
-            </li>
-          );
-        }),
+      {items.length === 0 ? (
+        filtering ? (
+          <EmptyState title="No matching payments" description="Try a different search term or filter." />
+        ) : (
+          <EmptyState title="No payments yet" description="Payments will appear here once orders come in." />
+        )
+      ) : (
+        <>
+          <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-muted-foreground" aria-live="polite">
+            {total} payment{total === 1 ? "" : "s"}
+          </p>
+          <PaymentsDataTable payments={withReceipts} showAdminTools={showAdminTools} />
+          {totalPages > 1 ? <PaginationControls page={page} totalPages={totalPages} themed /> : null}
+        </>
       )}
-    </ul>
+    </div>
   );
 }

@@ -7,12 +7,15 @@ import {
   OrderStatusPanel,
   parseReportFilters,
   ReportCardSkeleton,
+  RepeatCustomersPanel,
   ReportsFilters,
-  SalesSummaryPanel,
+  RestockPriorityPanel,
+  RevenueByCategoryPanel,
   SalesSummarySkeleton,
   SalesTrendPanel,
   TopProductsPanel,
 } from "@/features/reports";
+import { SellerSalesSummaryPanel } from "@/features/seller/components/SellerSalesSummaryPanel";
 
 export const metadata: Metadata = { title: "Reports — Seller Portal" };
 
@@ -35,7 +38,7 @@ export default async function SellerReportsPage({ searchParams }: SellerReportsP
       {/* Keyed so changing filters restarts every panel's suspense boundary. */}
       <div key={JSON.stringify(filters)} className="flex flex-col gap-6">
         <Suspense fallback={<SalesSummarySkeleton />}>
-          <SalesSummaryPanel filters={filters} />
+          <SellerSalesSummaryPanel filters={filters} />
         </Suspense>
 
         <Suspense fallback={<ReportCardSkeleton />}>
@@ -50,6 +53,19 @@ export default async function SellerReportsPage({ searchParams }: SellerReportsP
             <TopProductsPanel filters={filters} />
           </Suspense>
         </div>
+
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Suspense fallback={<ReportCardSkeleton />}>
+            <RevenueByCategoryPanel filters={filters} />
+          </Suspense>
+          <Suspense fallback={<ReportCardSkeleton />}>
+            <RepeatCustomersPanel filters={filters} />
+          </Suspense>
+        </div>
+
+        <Suspense fallback={<ReportCardSkeleton />}>
+          <RestockPriorityPanel filters={filters} />
+        </Suspense>
 
         <Suspense fallback={<ReportCardSkeleton />}>
           <LowStockPanel showShop={false} />

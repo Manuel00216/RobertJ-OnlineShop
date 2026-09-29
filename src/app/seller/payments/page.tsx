@@ -2,6 +2,8 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 
 import { Skeleton } from "@/components/ui/skeleton";
+import { PaymentMethodFilter } from "@/features/payments/components/PaymentMethodFilter";
+import { PaymentSearchInput } from "@/features/payments/components/PaymentSearchInput";
 import { PaymentsList } from "@/features/payments/components/PaymentsList";
 
 export const metadata: Metadata = { title: "Payments — Seller Portal" };
@@ -17,11 +19,28 @@ function PaymentsListSkeleton() {
   );
 }
 
-export default function SellerPaymentsPage() {
+interface SellerPaymentsPageProps {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+export default async function SellerPaymentsPage({ searchParams }: SellerPaymentsPageProps) {
+  const params = await searchParams;
+
   return (
     <div className="flex flex-col gap-6 p-5 lg:p-7">
-      <Suspense fallback={<PaymentsListSkeleton />}>
-        <PaymentsList />
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex-1">
+          <Suspense fallback={null}>
+            <PaymentSearchInput />
+          </Suspense>
+        </div>
+        <Suspense fallback={null}>
+          <PaymentMethodFilter />
+        </Suspense>
+      </div>
+
+      <Suspense key={JSON.stringify(params)} fallback={<PaymentsListSkeleton />}>
+        <PaymentsList searchParams={params} />
       </Suspense>
     </div>
   );

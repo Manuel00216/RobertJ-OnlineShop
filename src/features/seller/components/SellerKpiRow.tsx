@@ -2,8 +2,10 @@ import { AlertTriangle, CreditCard, Package, ShoppingBag, Timer, TrendingUp } fr
 
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DeltaBadge } from "@/components/ui/delta-badge";
 import { StatCard } from "@/components/ui/stat-card";
 import { ROUTES } from "@/constants/routes";
+import { getPreviousPeriod } from "@/features/reports/utils/report-range";
 import { formatCurrency } from "@/lib/utils/currency";
 import {
   getDashboardOrderSummary,
@@ -29,6 +31,7 @@ export interface SellerKpiRowProps {
  */
 export async function SellerKpiRow({ from, to }: SellerKpiRowProps) {
   let summary: Awaited<ReturnType<typeof getSalesSummary>>;
+  let previousSummary: Awaited<ReturnType<typeof getSalesSummary>>;
   let pendingOrders: number;
   let totalProducts: number;
   let lowStockCount: number;
@@ -36,13 +39,16 @@ export async function SellerKpiRow({ from, to }: SellerKpiRowProps) {
   try {
     const user = await requireSessionUser();
     const owner = { sellerId: user.id, shopId: await getOwnShopId(user.id) };
-    const [salesSummary, orderSummary, products, lowStock] = await Promise.all([
+    const previous = getPreviousPeriod(from, to);
+    const [salesSummary, priorSummary, orderSummary, products, lowStock] = await Promise.all([
       getSalesSummary(from, to, null),
+      getSalesSummary(previous.from, previous.to, null),
       getDashboardOrderSummary(),
       listDashboardProducts(owner),
       getLowStockReport(),
     ]);
     summary = salesSummary;
+    previousSummary = priorSummary;
     pendingOrders = orderSummary.statusCounts.pending;
     totalProducts = products.length;
     lowStockCount = lowStock.length;
@@ -55,7 +61,12 @@ export async function SellerKpiRow({ from, to }: SellerKpiRowProps) {
       <StatCard
         href={ROUTES.sellerReports}
         label="Total Revenue"
-        value={formatCurrency(summary.revenueCents)}
+        value={
+          <span className="inline-flex items-baseline gap-2">
+            {formatCurrency(summary.revenueCents)}
+            <DeltaBadge current={summary.revenueCents} previous={previousSummary.revenueCents} />
+          </span>
+        }
         icon={TrendingUp}
         iconBg="bg-primary/10"
         iconColor="text-primary"
@@ -63,7 +74,12 @@ export async function SellerKpiRow({ from, to }: SellerKpiRowProps) {
       <StatCard
         href={ROUTES.sellerOrders}
         label="Total Orders"
-        value={summary.totalOrders}
+        value={
+          <span className="inline-flex items-baseline gap-2">
+            {summary.totalOrders}
+            <DeltaBadge current={summary.totalOrders} previous={previousSummary.totalOrders} />
+          </span>
+        }
         icon={ShoppingBag}
         iconBg="bg-info/10"
         iconColor="text-info"

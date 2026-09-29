@@ -67,6 +67,21 @@ export interface ProductListParams {
 
 export type ProductSort = "newest" | "price-asc" | "price-desc" | "title-asc";
 
+/**
+ * Filters accepted by the Seller/Admin dashboard product listing — a
+ * separate shape from `ProductListParams` (the buyer catalog) because the
+ * dashboard filters by lifecycle `status`, never `onSale`/`minPrice`/
+ * `maxPrice`, and has no `shopId` (the owner scope is resolved server-side,
+ * not taken from the URL).
+ */
+export interface DashboardProductListParams {
+  page: number;
+  pageSize: number;
+  search?: string;
+  status?: ProductStatus;
+  categoryId?: string;
+}
+
 /** Convenience accessor — the cover image, or null when a product has none. */
 export function getCoverImage(product: Product): ProductImage | null {
   return product.images[0] ?? null;

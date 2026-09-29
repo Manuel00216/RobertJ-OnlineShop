@@ -31,6 +31,18 @@ export interface Payment {
 /** Mirrors the DB `payment_method_type` enum. */
 export type PaymentMethodType = "cod" | "card" | "qr_upload" | "xendit";
 
+/** Filters accepted by the Seller/Admin dashboard payment history listing. */
+export interface DashboardPaymentListParams {
+  page: number;
+  pageSize: number;
+  /** Order-number search (ilike `orders.order_number`). */
+  search?: string;
+  status?: PaymentStatus;
+  paymentMethodType?: PaymentMethodType;
+  /** Admin-only: narrows to stale, still-pending Xendit attempts awaiting reconciliation — see `isStaleXenditAttempt`. */
+  staleOnly?: boolean;
+}
+
 /**
  * The raw `payments` row returned directly by the Xendit/COD RPCs (no order
  * join) — used by the buyer-facing payment-creation flow, as opposed to
