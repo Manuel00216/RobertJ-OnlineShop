@@ -28,6 +28,7 @@ import {
 } from "@/features/products/actions/product.actions";
 import { LOW_STOCK_THRESHOLD } from "@/features/products/constants/product.constants";
 import { ProductEditDrawer } from "@/features/products/components/ProductEditDrawer";
+import { ProductGridCard } from "@/features/products/components/ProductGridCard";
 import { ProductStatusBadge } from "@/features/products/components/ProductStatusBadge";
 import type { Category } from "@/features/categories/types/category.types";
 import { getCoverImage, type Product, type ProductVariant } from "@/features/products/types/product.types";
@@ -46,6 +47,8 @@ export interface ProductsDataTableProps {
   variants: ProductVariant[];
   /** Every Guided Selection rule visible to the caller — filtered per row below, no N+1. */
   rules: RecommendationRule[];
+  /** Presentation only — defaults to the pre-existing table/card layout. */
+  view?: "grid" | "list";
 }
 
 function initials(title: string) {
@@ -81,6 +84,7 @@ export function ProductsDataTable({
   isAdmin,
   variants,
   rules,
+  view = "list",
 }: ProductsDataTableProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -294,8 +298,53 @@ export function ProductsDataTable({
         />
       ) : null}
 
+      {/* ---------------- Grid view ---------------- */}
+      {view === "grid" ? (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {products.map((product) => {
+            const productVariants = variants.filter((v) => v.productId === product.id);
+            return (
+              <ProductGridCard
+                key={product.id}
+                product={product}
+                stock={stockCell(product, productVariants.length > 0)}
+                selected={selected.has(product.id)}
+                isAdmin={isAdmin}
+                inventoryHref={inventoryHref}
+                menuOpen={openMenuId === product.id}
+                isPending={isPending}
+                confirmingArchive={
+                  confirmArchiveIds !== null &&
+                  confirmArchiveIds.length === 1 &&
+                  confirmArchiveIds[0] === product.id
+                }
+                assigningShop={assigningShopId === product.id}
+                shops={shops}
+                selectedShopId={selectedShopId}
+                onToggleSelect={(checked) => toggleOne(product.id, checked)}
+                onEdit={() => setEditingId(product.id)}
+                onMenuOpenChange={(open) => setOpenMenuId(open ? product.id : null)}
+                onRequestArchive={() => {
+                  setConfirmArchiveIds([product.id]);
+                  setOpenMenuId(null);
+                }}
+                onConfirmArchive={() => runArchiveOne(product.id)}
+                onCancelArchive={() => setConfirmArchiveIds(null)}
+                onRequestAssignShop={() => {
+                  setAssigningShopId(product.id);
+                  setOpenMenuId(null);
+                }}
+                onSelectedShopIdChange={setSelectedShopId}
+                onConfirmAssignShop={() => runAssignShop(product.id)}
+                onCancelAssignShop={() => setAssigningShopId(null)}
+              />
+            );
+          })}
+        </div>
+      ) : null}
+
       {/* ---------------- Desktop table ---------------- */}
-      <div className="hidden overflow-x-auto rounded-2xl border border-border bg-card sm:block">
+      <div className={cn("overflow-x-auto rounded-2xl border border-border bg-card", view === "list" ? "hidden sm:block" : "hidden")}>
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-border bg-muted">
@@ -468,7 +517,7 @@ export function ProductsDataTable({
       </div>
 
       {/* ---------------- Mobile cards ---------------- */}
-      <div className="flex flex-col gap-3 sm:hidden">
+      <div className={cn("flex flex-col gap-3", view === "list" ? "sm:hidden" : "hidden")}>
         {products.map((product) => {
           const productVariants = variants.filter((v) => v.productId === product.id);
           return (

@@ -1,6 +1,7 @@
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import type { RecommendationRule } from "@/features/assistant";
+import { DashboardProductViewToggle } from "@/features/products/components/DashboardProductViewToggle";
 import { PaginationControls } from "@/features/products/components/PaginationControls";
 import { ProductsDataTable } from "@/features/products/components/ProductsDataTable";
 import { dashboardProductListParamsSchema } from "@/features/products/schemas/product.schema";
@@ -41,6 +42,13 @@ export async function DashboardProductsPanel({
     return <ErrorState message="Those filters aren't valid. Try clearing your search." />;
   }
 
+  // `view` is presentation-only (Grid/List), so it's read from the raw
+  // params rather than added to `dashboardProductListParamsSchema` — it
+  // never affects the query. No `?view=` or anything but "grid" defaults
+  // to List, matching the existing table/card layout.
+  const rawView = Array.isArray(searchParams.view) ? searchParams.view[0] : searchParams.view;
+  const view: "grid" | "list" = rawView === "grid" ? "grid" : "list";
+
   let data: {
     result: PaginatedResult<Product>;
     categories: Category[];
@@ -78,9 +86,12 @@ export async function DashboardProductsPanel({
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-muted-foreground" aria-live="polite">
-        {total} product{total === 1 ? "" : "s"}
-      </p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground" aria-live="polite">
+          {total} product{total === 1 ? "" : "s"}
+        </p>
+        <DashboardProductViewToggle />
+      </div>
       <ProductsDataTable
         products={items}
         categories={categories}
@@ -88,6 +99,7 @@ export async function DashboardProductsPanel({
         isAdmin={isAdmin}
         variants={variants}
         rules={rules}
+        view={view}
       />
       {totalPages > 1 ? <PaginationControls page={page} totalPages={totalPages} themed /> : null}
     </div>
