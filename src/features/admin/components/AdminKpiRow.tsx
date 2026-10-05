@@ -6,10 +6,10 @@ import { StatCard } from "@/components/ui/stat-card";
 import { ROUTES } from "@/constants/routes";
 import { formatCurrency } from "@/lib/utils/currency";
 import {
-  getDashboardOrderSummary,
   getLowStockReport,
+  getOrderAttentionCounts,
+  getProductCount,
   getSalesSummary,
-  listDashboardProducts,
 } from "@/lib/supabase/queries";
 
 export interface AdminKpiRowProps {
@@ -22,6 +22,12 @@ export interface AdminKpiRowProps {
  * as the Shop Owner dashboard's `DashboardKpiRow` (scope is always
  * platform-wide here, so no `isAdmin` branch is needed), restyled to match
  * the Figma Admin Portal's stat-card look.
+ *
+ * "Pending Orders" uses `getOrderAttentionCounts().needsConfirmation` — the
+ * same definition as `AdminQuickAccess`'s badge and the topbar notification
+ * bell (excludes a `pending` order whose online payment hasn't completed
+ * yet) — not the raw `order_status = 'pending'` count, so this tile can
+ * never disagree with those other two surfaces on the same dashboard.
  */
 export async function AdminKpiRow({ from, to }: AdminKpiRowProps) {
   let summary: Awaited<ReturnType<typeof getSalesSummary>>;
@@ -30,15 +36,15 @@ export async function AdminKpiRow({ from, to }: AdminKpiRowProps) {
   let lowStockCount: number;
 
   try {
-    const [salesSummary, orderSummary, products, lowStock] = await Promise.all([
+    const [salesSummary, attentionCounts, productCount, lowStock] = await Promise.all([
       getSalesSummary(from, to, null),
-      getDashboardOrderSummary(),
-      listDashboardProducts(null),
+      getOrderAttentionCounts(),
+      getProductCount(null),
       getLowStockReport(),
     ]);
     summary = salesSummary;
-    pendingOrders = orderSummary.statusCounts.pending;
-    totalProducts = products.length;
+    pendingOrders = attentionCounts.needsConfirmation;
+    totalProducts = productCount;
     lowStockCount = lowStock.length;
   } catch {
     return <ErrorState message="We couldn't load the platform overview right now." />;

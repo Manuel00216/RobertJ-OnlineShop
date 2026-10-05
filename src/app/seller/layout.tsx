@@ -4,25 +4,31 @@ import { ROUTES } from "@/constants/routes";
 import { USER_ROLES } from "@/constants/roles";
 import { SellerLayout, type SellerNotification } from "@/features/seller";
 import {
-  getDashboardOrderSummary,
   getLowStockReport,
+  getOrderAttentionCounts,
   requireRole,
 } from "@/lib/supabase/queries";
 
-/** Real pending-work signals surfaced as notifications — no mock data, no separate notifications table. */
+/**
+ * Real pending-work signals surfaced as notifications — no mock data, no
+ * separate notifications table. The "Pending orders" count uses
+ * `getOrderAttentionCounts().needsConfirmation` — the same definition as
+ * `SellerKpiRow`'s KPI tile, `SellerQuickAccess`'s badge, and the Action
+ * Center card — so this bell never disagrees with the rest of the dashboard.
+ */
 async function getSellerNotifications(): Promise<SellerNotification[]> {
-  const [orderSummary, lowStock] = await Promise.all([
-    getDashboardOrderSummary(),
+  const [attentionCounts, lowStock] = await Promise.all([
+    getOrderAttentionCounts(),
     getLowStockReport(),
   ]);
 
   const notifications: SellerNotification[] = [];
 
-  if (orderSummary.statusCounts.pending > 0) {
+  if (attentionCounts.needsConfirmation > 0) {
     notifications.push({
       id: "pending-orders",
       title: "Pending orders",
-      description: `${orderSummary.statusCounts.pending} order${orderSummary.statusCounts.pending === 1 ? "" : "s"} awaiting confirmation`,
+      description: `${attentionCounts.needsConfirmation} order${attentionCounts.needsConfirmation === 1 ? "" : "s"} awaiting confirmation`,
       href: ROUTES.sellerOrders,
       tone: "warning",
     });

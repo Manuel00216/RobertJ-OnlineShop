@@ -1635,7 +1635,7 @@ export type Database = {
         Returns: Json
       }
       admin_list_users: {
-        Args: never
+        Args: { p_user_id?: string }
         Returns: {
           avatar_url: string
           created_at: string
@@ -1670,6 +1670,26 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "profiles"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      admin_update_shop: {
+        Args: { p_active?: boolean; p_name?: string; p_shop_id: string }
+        Returns: {
+          active: boolean
+          banner_url: string | null
+          created_at: string
+          description: string | null
+          id: string
+          logo_url: string | null
+          name: string
+          slug: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "shops"
           isOneToOne: true
           isSetofReturn: false
         }

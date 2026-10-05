@@ -61,7 +61,7 @@ export default async function AdminReportsPage({ searchParams }: AdminReportsPag
         </div>
 
         <Suspense fallback={<ReportCardSkeleton />}>
-          <LowStockPanel showShop />
+          <LowStockPanel showShop shopId={filters.shopId} />
         </Suspense>
       </div>
     </div>

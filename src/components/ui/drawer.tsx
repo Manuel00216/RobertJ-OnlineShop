@@ -3,6 +3,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 
+import { useScrollLock } from "@/hooks/useScrollLock";
 import { cn } from "@/lib/utils/cn";
 
 export interface DrawerProps {
@@ -22,6 +23,10 @@ export interface DrawerProps {
  */
 export function Drawer({ open, onClose, title, children, footer }: DrawerProps) {
   const closeRef = useRef<HTMLButtonElement>(null);
+
+  // Lock background scroll while the drawer is open — same pattern as
+  // ProductLightbox/ProductFilters/GuidedSelectorQuiz.
+  useScrollLock(open);
 
   useEffect(() => {
     if (!open) return;

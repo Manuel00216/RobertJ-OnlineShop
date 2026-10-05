@@ -31,7 +31,11 @@ export async function assignSellerShopAction(
     const admin = await queries.requireRole([USER_ROLES.admin]);
     await queries.requireRateLimit(`assignSellerShop:${admin.id}`, 20, 60);
     await queries.assignSellerShop(parsed.data.userId, parsed.data.shopId);
-    revalidatePath(ROUTES.adminUsers);
+    // "layout" so this cascades to /admin/users/[id] too — a plain path-only
+    // revalidation only invalidates that exact path, leaving the user's own
+    // detail page showing a stale shop/role if the action was triggered from
+    // there rather than the list.
+    revalidatePath(ROUTES.adminUsers, "layout");
     revalidatePath(ROUTES.adminShops);
     return ok(null);
   } catch (error) {
@@ -60,7 +64,7 @@ export async function demoteSellerToBuyerAction(
     const admin = await queries.requireRole(ADMIN_ONLY_ROLES);
     await queries.requireRateLimit(`demoteSellerToBuyer:${admin.id}`, 20, 60);
     await queries.demoteSellerToBuyer(parsed.data.userId);
-    revalidatePath(ROUTES.adminUsers);
+    revalidatePath(ROUTES.adminUsers, "layout");
     revalidatePath(ROUTES.adminShops);
     return ok(null);
   } catch (error) {
@@ -89,7 +93,7 @@ export async function setUserActiveAction(
     const admin = await queries.requireRole(ADMIN_ONLY_ROLES);
     await queries.requireRateLimit(`setUserActive:${admin.id}`, 20, 60);
     await queries.setUserActive(parsed.data.userId, parsed.data.isActive);
-    revalidatePath(ROUTES.adminUsers);
+    revalidatePath(ROUTES.adminUsers, "layout");
     return ok(null);
   } catch (error) {
     return fail(

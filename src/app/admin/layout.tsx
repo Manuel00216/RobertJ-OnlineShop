@@ -5,27 +5,33 @@ import { ADMIN_ONLY_ROLES } from "@/constants/roles";
 import { RETURN_STATUS } from "@/constants/status";
 import { AdminLayout, type AdminNotification } from "@/features/admin";
 import {
-  getDashboardOrderSummary,
   getLowStockReport,
+  getOrderAttentionCounts,
   listReturnRequests,
   requireRole,
 } from "@/lib/supabase/queries";
 
-/** Real pending-work signals surfaced as notifications — no mock data, no separate notifications table. */
+/**
+ * Real pending-work signals surfaced as notifications — no mock data, no
+ * separate notifications table. The "Pending orders" count uses
+ * `getOrderAttentionCounts().needsConfirmation` — the same definition as
+ * `AdminKpiRow`'s KPI tile and `AdminQuickAccess`'s badge — so this bell
+ * never disagrees with the rest of the dashboard.
+ */
 async function getAdminNotifications(): Promise<AdminNotification[]> {
-  const [orderSummary, lowStock, pendingReturns] = await Promise.all([
-    getDashboardOrderSummary(),
+  const [attentionCounts, lowStock, pendingReturns] = await Promise.all([
+    getOrderAttentionCounts(),
     getLowStockReport(),
     listReturnRequests(RETURN_STATUS.sellerAccepted),
   ]);
 
   const notifications: AdminNotification[] = [];
 
-  if (orderSummary.statusCounts.pending > 0) {
+  if (attentionCounts.needsConfirmation > 0) {
     notifications.push({
       id: "pending-orders",
       title: "Pending orders",
-      description: `${orderSummary.statusCounts.pending} order${orderSummary.statusCounts.pending === 1 ? "" : "s"} awaiting confirmation`,
+      description: `${attentionCounts.needsConfirmation} order${attentionCounts.needsConfirmation === 1 ? "" : "s"} awaiting confirmation`,
       href: ROUTES.adminOrders,
       tone: "warning",
     });

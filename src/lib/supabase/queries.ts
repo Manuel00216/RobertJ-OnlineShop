@@ -226,11 +226,11 @@ export async function listProducts(
 ): Promise<PaginatedResult<Product>> {
   const supabase = await createSupabaseServerClient();
 
-  // `shopId` isn't a column on `products` (TD-1 — `products.shop_id` is
-  // unpopulated on every live row) — resolve it to the shop's member seller
-  // ids first via `resolve_shop_membership`, same as the dedicated shop
-  // filter. A shop with zero members short-circuits to an empty page instead
-  // of querying products at all.
+  // `shopId` isn't reliably populated on every historical row (TD-1 legacy
+  // products) — resolve it to the shop's member seller ids first via
+  // `resolve_shop_membership`, same as the dedicated shop filter. A shop with
+  // zero members short-circuits to an empty page instead of querying
+  // products at all.
   let shopSellerIds: string[] | null = null;
   if (params.shopId) {
     shopSellerIds = await getShopSellerIds(params.shopId);
@@ -245,6 +245,16 @@ export async function listProducts(
     }
   }
 
+  // Hide products whose shop has been deactivated by an admin (shops is a
+  // tiny, admin-controlled table — this is a cheap lookup). A product with
+  // no shop_id at all (a handful of legacy pre-shop-scoping rows) has no
+  // shop to be deactivated, so it stays visible either way.
+  const { data: inactiveShopRows } = await supabase
+    .from(DATABASE_TABLES.SHOPS)
+    .select("id")
+    .eq("active", false);
+  const inactiveShopIds = (inactiveShopRows ?? []).map((row) => row.id);
+
   // Built via a closure so an out-of-range page can be refetched (below) with
   // the identical filters/sort — a Supabase builder can't be re-ranged once
   // awaited, and duplicating the filter chain would violate DRY. `head` skips
@@ -257,6 +267,10 @@ export async function listProducts(
 
     if (shopSellerIds) {
       query = query.in("seller_id", shopSellerIds);
+    }
+
+    if (inactiveShopIds.length > 0) {
+      query = query.or(`shop_id.is.null,shop_id.not.in.(${inactiveShopIds.join(",")})`);
     }
 
     if (params.search) {
@@ -923,6 +937,17 @@ export async function archiveProduct(
  * zero (active -> sold). Restoring goes to `active` only when both
  * conditions hold, else `draft`, so this can never violate those
  * constraints. `owner`: same defense-in-depth scope as `archiveProduct`.
+ *
+ * Stock is read from `inventory` (summed by `product_id`), not
+ * `products.quantity` directly: `sync_products_quantity_from_inventory` only
+ * keeps that mirror in sync for non-variant stock changes, so for any
+ * variant-parent product it's frozen at whatever value existed when the
+ * product was created — reading it here could restore a well-stocked
+ * variant product to `draft`, or a sold-out one to `active`. Summing
+ * `inventory` works uniformly for both simple and variant-parent products
+ * (one row vs. one row per variant), and is written back to
+ * `products.quantity` in the same update so the mirror is accurate going
+ * forward too, not just for this decision.
  */
 export async function restoreProduct(
   id: string,
@@ -932,7 +957,7 @@ export async function restoreProduct(
 
   let existingQuery = supabase
     .from(DATABASE_TABLES.PRODUCTS)
-    .select("id, status, quantity, published_at")
+    .select("id, status, published_at")
     .eq("id", id);
 
   if (owner) {
@@ -954,14 +979,25 @@ export async function restoreProduct(
     throw new Error("Only archived products can be restored.");
   }
 
+  const { data: inventoryRows, error: inventoryError } = await supabase
+    .from(DATABASE_TABLES.INVENTORY)
+    .select("quantity")
+    .eq("product_id", id);
+
+  if (inventoryError) {
+    throw queryError("Failed to load stock", inventoryError);
+  }
+
+  const totalQuantity = (inventoryRows ?? []).reduce((sum, row) => sum + row.quantity, 0);
+
   const targetStatus =
-    existing.quantity > 0 && existing.published_at !== null
+    totalQuantity > 0 && existing.published_at !== null
       ? PRODUCT_STATUS.active
       : PRODUCT_STATUS.draft;
 
   const { error } = await supabase
     .from(DATABASE_TABLES.PRODUCTS)
-    .update({ status: targetStatus })
+    .update({ status: targetStatus, quantity: totalQuantity })
     .eq("id", id);
 
   if (error) {
@@ -4579,20 +4615,29 @@ export interface UpdateShopInput {
   active?: boolean;
 }
 
-/** Admin-only: edits a shop. RLS (`is_admin()`) is the authorization boundary. */
+/**
+ * Admin-only: edits a shop's name/active status, via the `admin_update_shop`
+ * RPC — the sole write path for those columns. `shops`' UPDATE grant to
+ * `authenticated` is scoped to description/logo_url/banner_url only (a
+ * seller's own-row RLS policy is row-level, not column-level, so the grant
+ * is what actually keeps a seller from writing name/active/slug); a plain
+ * client `.update()` call here would be silently rejected by Postgres for
+ * these columns regardless of RLS.
+ */
 export async function updateShop(input: UpdateShopInput): Promise<Shop> {
   const supabase = await createSupabaseServerClient();
-  const { id, ...rest } = input;
-
-  const { data, error } = await supabase
-    .from(DATABASE_TABLES.SHOPS)
-    .update(rest)
-    .eq("id", id)
-    .select(SHOP_COLUMNS)
-    .single();
+  const { data, error } = await supabase.rpc("admin_update_shop", {
+    p_shop_id: input.id,
+    p_name: input.name,
+    p_active: input.active,
+  });
 
   if (error) {
-    throw queryError("Failed to update shop", error);
+    throw curatedRpcError(
+      "Could not update the shop.",
+      error,
+      ADMIN_USER_RPC_SAFE_ERROR_CODES,
+    );
   }
 
   return toShop(data as ShopRow);
@@ -4848,6 +4893,34 @@ export async function hardDeleteShop(shopId: string, reason?: string): Promise<v
  */
 const ADMIN_USER_RPC_SAFE_ERROR_CODES = ["42501", "22023", "P0002"] as const;
 
+type AdminUserRpcRow = {
+  id: string;
+  email: string | null;
+  full_name: string | null;
+  username: string | null;
+  role: AdminUser["role"];
+  avatar_url: string | null;
+  created_at: string;
+  shop_id: string | null;
+  shop_name: string | null;
+  is_active: boolean;
+};
+
+function toAdminUser(row: AdminUserRpcRow): AdminUser {
+  return {
+    id: row.id,
+    email: row.email,
+    fullName: row.full_name,
+    username: row.username,
+    role: row.role,
+    avatarUrl: row.avatar_url,
+    createdAt: row.created_at,
+    shopId: row.shop_id,
+    shopName: row.shop_name,
+    isActive: row.is_active,
+  };
+}
+
 /**
  * Every user, admin-only, via the `admin_list_users` RPC — the sole path to
  * see email (never otherwise joinable from `public.profiles`; mirrors
@@ -4863,30 +4936,24 @@ export async function listAdminUsers(): Promise<AdminUser[]> {
     throw rpcError("Could not load users.", error);
   }
 
-  return (data ?? []).map((row) => ({
-    id: row.id,
-    email: row.email,
-    fullName: row.full_name,
-    username: row.username,
-    role: row.role,
-    avatarUrl: row.avatar_url,
-    createdAt: row.created_at,
-    shopId: row.shop_id,
-    shopName: row.shop_name,
-    isActive: row.is_active,
-  }));
+  return (data ?? []).map((row) => toAdminUser(row as AdminUserRpcRow));
 }
 
 /**
- * Single user for the admin detail/drill-in view (L1). Reuses
- * `listAdminUsers()` — already admin-gated via the `admin_list_users` RPC —
- * and finds the match, rather than adding a new by-id RPC: the admin-managed
- * user list is small, so this keeps the admin-user read surface to the one
- * existing RPC instead of a second, broader API.
+ * Single user for the admin detail/drill-in view (L1) — calls
+ * `admin_list_users` with its optional `p_user_id` filter instead of
+ * fetching every user just to find one.
  */
 export async function getAdminUserById(userId: string): Promise<AdminUser | null> {
-  const users = await listAdminUsers();
-  return users.find((user) => user.id === userId) ?? null;
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("admin_list_users", { p_user_id: userId });
+
+  if (error) {
+    throw rpcError("Could not load this user.", error);
+  }
+
+  const row = data?.[0];
+  return row ? toAdminUser(row as AdminUserRpcRow) : null;
 }
 
 /**
@@ -5032,6 +5099,37 @@ export async function listDashboardProducts(
   }
 
   return (data ?? []).map((row) => toProduct(row as ProductRowWithImages));
+}
+
+/**
+ * Count-only counterpart to `listDashboardProducts` — same owner-filter
+ * shape, but a `head: true` probe instead of fetching every row. For a
+ * "how many products" KPI tile, which only ever read `.length` off the full
+ * fetch before.
+ */
+export async function getProductCount(
+  owner: { sellerId: string; shopId: string | null } | null,
+): Promise<number> {
+  const supabase = await createSupabaseServerClient();
+  let query = supabase
+    .from(DATABASE_TABLES.PRODUCTS)
+    .select("id", { count: "exact", head: true });
+
+  if (owner) {
+    query = query.or(
+      owner.shopId
+        ? `seller_id.eq.${owner.sellerId},shop_id.eq.${owner.shopId}`
+        : `seller_id.eq.${owner.sellerId}`,
+    );
+  }
+
+  const { count, error } = await query;
+
+  if (error) {
+    throw queryError("Failed to count products", error);
+  }
+
+  return count ?? 0;
 }
 
 /**
@@ -5867,12 +5965,15 @@ export const getTopProducts = cache(async function getTopProducts(
 /**
  * Low- and out-of-stock rows for the report, reusing the existing RLS-scoped
  * inventory read (no new SQL). A seller sees their own shop's stock; an admin
- * sees every shop's.
+ * sees every shop's — optionally narrowed to one shop via `shopId` (the
+ * admin Reports page's shop filter; every other caller omits it and keeps
+ * today's unfiltered behavior unchanged).
  */
-export async function getLowStockReport(): Promise<InventoryItem[]> {
+export async function getLowStockReport(shopId?: string | null): Promise<InventoryItem[]> {
   const items = await listDashboardInventory();
   return items
     .filter((item) => item.stockStatus !== "in_stock")
+    .filter((item) => !shopId || item.shopId === shopId)
     .sort((a, b) => a.quantity - b.quantity);
 }
 

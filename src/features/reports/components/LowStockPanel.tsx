@@ -7,13 +7,22 @@ import { getLowStockReport } from "@/lib/supabase/queries";
 
 /**
  * Low- and out-of-stock products, reusing the RLS-scoped inventory read (no new
- * SQL). Not date-scoped — it reflects current stock, so it takes no filters.
+ * SQL). Not date-scoped — it reflects current stock, so it takes no date range.
  * `showShop` labels the owning shop when an admin is viewing across shops.
+ * `shopId` narrows to one shop — threaded through from the page's shop filter
+ * like every sibling panel, so this panel can't silently ignore it while the
+ * rest of the page re-scopes.
  */
-export async function LowStockPanel({ showShop }: { showShop: boolean }) {
+export async function LowStockPanel({
+  showShop,
+  shopId,
+}: {
+  showShop: boolean;
+  shopId?: string | null;
+}) {
   let items: InventoryItem[];
   try {
-    items = await getLowStockReport();
+    items = await getLowStockReport(shopId);
   } catch {
     return <ErrorState message="We couldn't load the low-stock report right now." />;
   }

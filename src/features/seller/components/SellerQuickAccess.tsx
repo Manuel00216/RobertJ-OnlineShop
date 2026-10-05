@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ROUTES } from "@/constants/routes";
-import { getDashboardOrderSummary } from "@/lib/supabase/queries";
+import { getOrderAttentionCounts } from "@/lib/supabase/queries";
 
 /**
  * Shortcut tiles for the Seller Portal dashboard — structural twin of
@@ -13,13 +13,18 @@ import { getDashboardOrderSummary } from "@/lib/supabase/queries";
  * don't have) for a plain "Payments" link. Payments no longer need a
  * pending-count badge — Xendit payments settle themselves via webhook, and
  * COD is marked collected from the order detail page, not a queue here.
+ *
+ * The badge count uses `getOrderAttentionCounts().needsConfirmation` — the
+ * same definition as `SellerKpiRow`'s "Pending Orders" tile, the topbar
+ * notification bell, and the Action Center card — so this dashboard never
+ * shows two different numbers for the same thing.
  */
 export async function SellerQuickAccess() {
   let pendingOrders: number;
 
   try {
-    const orderSummary = await getDashboardOrderSummary();
-    pendingOrders = orderSummary.statusCounts.pending;
+    const attentionCounts = await getOrderAttentionCounts();
+    pendingOrders = attentionCounts.needsConfirmation;
   } catch {
     return <ErrorState message="We couldn't load quick actions right now." />;
   }

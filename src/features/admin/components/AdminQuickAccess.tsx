@@ -6,19 +6,25 @@ import { ErrorState } from "@/components/feedback/ErrorState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ROUTES } from "@/constants/routes";
 import { RETURN_STATUS } from "@/constants/status";
-import { getDashboardOrderSummary, listReturnRequests } from "@/lib/supabase/queries";
+import { getOrderAttentionCounts, listReturnRequests } from "@/lib/supabase/queries";
 
-/** Shortcut tiles for the Admin Portal dashboard, with real pending-work counts (no mock badges). */
+/**
+ * Shortcut tiles for the Admin Portal dashboard, with real pending-work
+ * counts (no mock badges). The "Pending Orders" badge uses
+ * `getOrderAttentionCounts().needsConfirmation` — the same definition as
+ * `AdminKpiRow`'s KPI tile and the topbar notification bell — so this
+ * dashboard never shows two different numbers for the same thing.
+ */
 export async function AdminQuickAccess() {
   let pendingOrders: number;
   let pendingReturns: number;
 
   try {
-    const [orderSummary, returns] = await Promise.all([
-      getDashboardOrderSummary(),
+    const [attentionCounts, returns] = await Promise.all([
+      getOrderAttentionCounts(),
       listReturnRequests(RETURN_STATUS.sellerAccepted),
     ]);
-    pendingOrders = orderSummary.statusCounts.pending;
+    pendingOrders = attentionCounts.needsConfirmation;
     pendingReturns = returns.length;
   } catch {
     return <ErrorState message="We couldn't load quick actions right now." />;
