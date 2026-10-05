@@ -51,7 +51,7 @@ export function OrderLifecycleTabs({ counts }: OrderLifecycleTabsProps) {
 
   return (
     <div
-      className="flex flex-wrap gap-6 overflow-x-auto border-b border-rj-gray-100"
+      className="flex flex-nowrap gap-6 overflow-x-auto border-b border-rj-gray-100"
       role="tablist"
       aria-label="Filter orders by status"
     >

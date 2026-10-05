@@ -56,13 +56,13 @@ export function VerificationPending({
         <Mail className="h-7 w-7" aria-hidden="true" />
       </span>
 
-      <h2
+      <h1
         ref={headingRef}
         tabIndex={-1}
         className="font-serif text-2xl leading-tight text-rj-black outline-none"
       >
         Check Your Email
-      </h2>
+      </h1>
 
       <p className="text-sm text-rj-gray-600">
         We sent a verification link to <span className="font-semibold text-rj-black">{email}</span>.

@@ -34,6 +34,10 @@ export function mapAuthError(error: unknown): string {
   for (const [pattern, copy] of KNOWN_ERRORS) {
     if (pattern.test(message)) return copy;
   }
+  // Logged so a newly-surfaced Supabase error code doesn't silently hide
+  // behind the generic fallback — e.g. once leaked-password protection
+  // (currently Pro-only, disabled) turns on and starts throwing its own code.
+  console.warn(`[auth] Unmapped auth error, using fallback copy: ${message}`);
   return FALLBACK;
 }
 

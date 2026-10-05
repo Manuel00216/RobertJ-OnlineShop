@@ -12,6 +12,7 @@ import { ErrorState } from "@/components/feedback/ErrorState";
 import { FormField } from "@/components/forms/FormField";
 import { ROUTES } from "@/constants/routes";
 import { formatCurrency } from "@/lib/utils/currency";
+import { useScrollLock } from "@/hooks/useScrollLock";
 import { getGuidedSelectionMatchesAction } from "@/features/assistant/actions/quiz.actions";
 import { OCCASION_LABELS } from "@/features/assistant/constants/assistant.constants";
 import { guidedSelectionQuerySchema } from "@/features/assistant/schemas/quiz.schema";
@@ -61,6 +62,9 @@ export function GuidedSelectorQuiz({ trigger }: GuidedSelectorQuizProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  // Stop the page behind the full-screen quiz from scrolling on touch.
+  useScrollLock(open);
 
   function handleOpen() {
     setOpen(true);

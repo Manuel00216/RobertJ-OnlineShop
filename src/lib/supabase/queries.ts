@@ -245,79 +245,127 @@ export async function listProducts(
     }
   }
 
-  let query = supabase
-    .from(DATABASE_TABLES.PRODUCTS)
-    .select(PRODUCT_COLUMNS, { count: "exact" })
-    .eq("status", params.status ?? PRODUCT_STATUS.active);
+  // Built via a closure so an out-of-range page can be refetched (below) with
+  // the identical filters/sort — a Supabase builder can't be re-ranged once
+  // awaited, and duplicating the filter chain would violate DRY. `head` skips
+  // row transfer for a count-only probe.
+  const buildQuery = (head = false) => {
+    let query = supabase
+      .from(DATABASE_TABLES.PRODUCTS)
+      .select(PRODUCT_COLUMNS, { count: "exact", head })
+      .eq("status", params.status ?? PRODUCT_STATUS.active);
 
-  if (shopSellerIds) {
-    query = query.in("seller_id", shopSellerIds);
+    if (shopSellerIds) {
+      query = query.in("seller_id", shopSellerIds);
+    }
+
+    if (params.search) {
+      // Postgres's `.or()` filter mini-DSL treats "," and "()" as syntax, not
+      // literal characters, so strip them before interpolating — otherwise a
+      // search term containing one would break the filter string.
+      const term = params.search.replace(/[,()]/g, " ").trim();
+      if (term) {
+        // Trigram substring match on the title (typo/partial-tolerant, backed
+        // by products_title_trgm_idx) OR'd with full-text search across the
+        // generated `search_vector` column (title + description, backed by
+        // products_search_vector_idx — see initial_schema.sql), so a
+        // description-only match is now findable too.
+        query = query.or(
+          `title.ilike.%${term}%,search_vector.wfts(english).${term}`,
+        );
+      }
+    }
+    if (params.categoryId) {
+      query = query.eq("category_id", params.categoryId);
+    }
+    if (params.onSale) {
+      // Same seller-set "sale" tag convention ProductCard/FeaturedProductsGrid
+      // already read — no compare-at-price column exists to filter on instead.
+      query = query.contains("tags", ["sale"]);
+    }
+    if (params.sellerId) {
+      query = query.eq("seller_id", params.sellerId);
+    }
+    if (params.minPrice !== undefined) {
+      // Backed by products_active_price_idx (price_cents where status='active').
+      query = query.gte("price_cents", toCents(params.minPrice));
+    }
+    if (params.maxPrice !== undefined) {
+      query = query.lte("price_cents", toCents(params.maxPrice));
+    }
+
+    switch (params.sort) {
+      case "price-asc":
+        query = query.order("price_cents", { ascending: true });
+        break;
+      case "price-desc":
+        query = query.order("price_cents", { ascending: false });
+        break;
+      case "title-asc":
+        query = query.order("title", { ascending: true });
+        break;
+      default:
+        query = query.order("created_at", { ascending: false });
+    }
+    return query;
+  };
+
+  // Common path: one round-trip for the requested page.
+  const { from, to } = toRange(params);
+  const firstPass = await buildQuery().range(from, to);
+
+  if (!firstPass.error) {
+    const total = firstPass.count ?? 0;
+    return {
+      items: (firstPass.data ?? []).map((row) => toProduct(row as ProductRowWithImages)),
+      total,
+      page: params.page,
+      pageSize: params.pageSize,
+      totalPages: Math.max(1, Math.ceil(total / params.pageSize)),
+    };
   }
 
-  if (params.search) {
-    // Postgres's `.or()` filter mini-DSL treats "," and "()" as syntax, not
-    // literal characters, so strip them before interpolating — otherwise a
-    // search term containing one would break the filter string.
-    const term = params.search.replace(/[,()]/g, " ").trim();
-    if (term) {
-      // Trigram substring match on the title (typo/partial-tolerant, backed
-      // by products_title_trgm_idx) OR'd with full-text search across the
-      // generated `search_vector` column (title + description, backed by
-      // products_search_vector_idx — see initial_schema.sql), so a
-      // description-only match is now findable too.
-      query = query.or(
-        `title.ilike.%${term}%,search_vector.wfts(english).${term}`,
-      );
+  // A page past the last one (e.g. hand-edited ?page=999) makes PostgREST
+  // reject the out-of-range offset rather than return an empty list — it
+  // only rejects when the requested *offset itself* exceeds the row count,
+  // so an in-range or merely-partial last page never reaches this branch.
+  // Recovery costs two more round-trips: a head-only probe to find the real
+  // last page, then a refetch of it. (Investigated collapsing this further —
+  // PostgREST's 416 response carries the true count in its error body, but
+  // postgrest-js only parses `Content-Range` into `count` on a 2xx response,
+  // so it's unavailable here; and probing unconditionally before every
+  // request would regress the common in-range case from one round-trip to
+  // two. Three round-trips for this rare, recoverable case is the floor
+  // without either a fragile error-string parse or that regression.)
+  // For page 1 (or if the probe shows the page was actually in range), the
+  // error is genuine: rethrow.
+  if (params.page > 1) {
+    const probe = await buildQuery(true);
+    const probeTotal = probe.count ?? 0;
+    const probeTotalPages = Math.max(1, Math.ceil(probeTotal / params.pageSize));
+
+    if (!probe.error && probeTotal > 0 && params.page > probeTotalPages) {
+      const clamped = toRange({ page: probeTotalPages, pageSize: params.pageSize });
+      const lastPage = await buildQuery().range(clamped.from, clamped.to);
+      if (!lastPage.error) {
+        // Recomputed from THIS query's own count, not the earlier probe's —
+        // so the returned total/totalPages can never disagree with the
+        // items actually returned, even if a row was inserted or deleted
+        // between the two round-trips.
+        const total = lastPage.count ?? probeTotal;
+        const totalPages = Math.max(1, Math.ceil(total / params.pageSize));
+        return {
+          items: (lastPage.data ?? []).map((row) => toProduct(row as ProductRowWithImages)),
+          total,
+          page: totalPages,
+          pageSize: params.pageSize,
+          totalPages,
+        };
+      }
     }
   }
-  if (params.categoryId) {
-    query = query.eq("category_id", params.categoryId);
-  }
-  if (params.onSale) {
-    // Same seller-set "sale" tag convention ProductCard/FeaturedProductsGrid
-    // already read — no compare-at-price column exists to filter on instead.
-    query = query.contains("tags", ["sale"]);
-  }
-  if (params.sellerId) {
-    query = query.eq("seller_id", params.sellerId);
-  }
-  if (params.minPrice !== undefined) {
-    // Backed by products_active_price_idx (price_cents where status='active').
-    query = query.gte("price_cents", toCents(params.minPrice));
-  }
-  if (params.maxPrice !== undefined) {
-    query = query.lte("price_cents", toCents(params.maxPrice));
-  }
 
-  switch (params.sort) {
-    case "price-asc":
-      query = query.order("price_cents", { ascending: true });
-      break;
-    case "price-desc":
-      query = query.order("price_cents", { ascending: false });
-      break;
-    case "title-asc":
-      query = query.order("title", { ascending: true });
-      break;
-    default:
-      query = query.order("created_at", { ascending: false });
-  }
-
-  const { from, to } = toRange(params);
-  const { data, error, count } = await query.range(from, to);
-
-  if (error) {
-    throw queryError("Failed to load products", error);
-  }
-
-  const total = count ?? 0;
-  return {
-    items: (data ?? []).map((row) => toProduct(row as ProductRowWithImages)),
-    total,
-    page: params.page,
-    pageSize: params.pageSize,
-    totalPages: Math.max(1, Math.ceil(total / params.pageSize)),
-  };
+  throw queryError("Failed to load products", firstPass.error);
 }
 
 /**
@@ -1524,51 +1572,68 @@ export interface MarketplaceStats {
   sellerCount: number | null;
   /** Count of `products` with status `active`. */
   productCount: number | null;
+  /** Count of `profiles` with role `buyer`. */
+  buyerCount: number | null;
+  /** Count of `orders` that reached `delivered` — real "orders fulfilled". */
+  fulfilledOrderCount: number | null;
 }
 
 /**
- * Fetches the two derivable headline counts with `head`-only count queries (no
- * rows transferred). Wrapped in React `cache()` so multiple sections rendering
- * in the same request share a single round-trip. Never throws — on any failure
- * both counts come back `null` so the UI shows its fallbacks.
+ * Fetches the derivable headline counts via `get_marketplace_stats`, a
+ * `SECURITY DEFINER` RPC (see its migration) that computes all four counts
+ * server-side in one round-trip. Deliberately NOT four separate RLS-scoped
+ * queries: `profiles` SELECT RLS hides buyer-role rows from anon/other
+ * buyers, and `orders` has no anon table grant at all, so reading these
+ * aggregates through the normal session client would silently return 0 (or
+ * error) for virtually every real visitor — the RPC bypasses that per-viewer
+ * visibility to return the true platform totals, exposing only counts, never
+ * row data. Wrapped in React `cache()` so multiple sections rendering in the
+ * same request share a single round-trip. Never throws — on any failure
+ * every count comes back `null` so the UI shows its fallback. We deliberately
+ * do NOT expose aggregate ₱ sales totals or fabricated figures on a public page.
  */
 export const getMarketplaceStats = cache(async (): Promise<MarketplaceStats> => {
+  const empty: MarketplaceStats = {
+    sellerCount: null,
+    productCount: null,
+    buyerCount: null,
+    fulfilledOrderCount: null,
+  };
+
   try {
     const supabase = await createSupabaseServerClient();
-
-    const [sellers, products] = await Promise.all([
-      supabase
-        .from(DATABASE_TABLES.PROFILES)
-        .select("id", { count: "exact", head: true })
-        .eq("role", USER_ROLES.seller),
-      supabase
-        .from(DATABASE_TABLES.PRODUCTS)
-        .select("id", { count: "exact", head: true })
-        .eq("status", PRODUCT_STATUS.active),
-    ]);
+    const { data, error } = await supabase.rpc("get_marketplace_stats");
+    const row = data?.[0];
+    if (error || !row) return empty;
 
     return {
-      sellerCount: sellers.error ? null : sellers.count,
-      productCount: products.error ? null : products.count,
+      sellerCount: row.seller_count,
+      productCount: row.product_count,
+      buyerCount: row.buyer_count,
+      fulfilledOrderCount: row.fulfilled_order_count,
     };
   } catch {
-    return { sellerCount: null, productCount: null };
+    return empty;
   }
 });
 
 /**
- * Resolves the number to display for a stat. For a `live` stat it uses the real
- * count when one exists (> 0); otherwise — query failed, or genuinely zero rows
- * — it falls back to the stat's hardcoded value. `placeholder` stats always use
- * their hardcoded value.
+ * Resolves the number to display for a stat, or `null` if it shouldn't be
+ * shown at all. A `live` stat shows its real count whenever the query
+ * succeeded — including a legitimate zero (so an empty marketplace reads
+ * "0", never a fabricated number). When the query itself failed (`null`),
+ * this returns `null` too — callers should omit the stat rather than fall
+ * back to a hardcoded number, which would misrepresent a DB outage as either
+ * a measured "0" or a fabricated placeholder figure. `placeholder` stats
+ * always use their hardcoded value — but every headline stat is `live` now,
+ * so a placeholder figure is never presented as measured fact.
  */
 export function resolveStatValue(
   stat: LandingStat,
   stats: MarketplaceStats,
-): number {
+): number | null {
   if (stat.source === "live" && stat.metric) {
-    const live = stats[stat.metric];
-    if (live !== null && live > 0) return live;
+    return stats[stat.metric];
   }
   return stat.value;
 }
@@ -2530,6 +2595,8 @@ export interface CreateOrderInput {
   notes?: string | null;
   /** Durable record of buyer intent, written once at insert time — see `create_order`'s `p_payment_method`. Defaults to `'cod'` server-side when omitted. */
   paymentMethod?: "cod" | "xendit";
+  /** Per-checkout-attempt key. A repeat call with the same key (and seller) replays the already-created order instead of creating a duplicate — see `create_order`'s `p_idempotency_key`. */
+  idempotencyKey?: string;
 }
 
 /**
@@ -2555,6 +2622,7 @@ export async function createOrder(
     p_shipping_fee_cents: input.shippingFeeCents,
     p_notes: input.notes ?? undefined,
     p_payment_method: input.paymentMethod ?? undefined,
+    p_idempotency_key: input.idempotencyKey ?? undefined,
   });
 
   if (error) {
@@ -2584,6 +2652,8 @@ export interface CreateOrderGroupInput {
   notes?: string | null;
   /** Durable record of buyer intent, written once at insert time for every order in the group — see `create_order_group`'s `p_payment_method`. Defaults to `'cod'` server-side when omitted. */
   paymentMethod?: "cod" | "xendit";
+  /** Per-checkout-attempt key. A repeat call with the same key replays the already-created order batch instead of creating duplicates — see `create_order_group`'s `p_idempotency_key`. */
+  idempotencyKey?: string;
 }
 
 /**
@@ -2615,6 +2685,7 @@ export async function createOrderGroup(
     p_shipping_fee_cents: input.shippingFeeCents,
     p_notes: input.notes ?? undefined,
     p_payment_method: input.paymentMethod ?? undefined,
+    p_idempotency_key: input.idempotencyKey ?? undefined,
   });
 
   if (error) {

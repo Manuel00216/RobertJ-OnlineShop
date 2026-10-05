@@ -93,19 +93,21 @@ export async function Hero() {
             </div>
           </div>
 
-          {/* Stats */}
+          {/* Stats — a stat whose live query failed is omitted rather than
+              shown as a fabricated or misleading "0+" (see resolveStatValue). */}
           <dl className="flex gap-7 border-t border-rj-white/10 pt-8">
-            {HERO_STATS.map((stat) => (
-              <div key={stat.label}>
-                <dd className="font-serif text-2xl text-rj-white md:text-3xl">
-                  <AnimatedCounter
-                    to={resolveStatValue(stat, liveStats)}
-                    suffix={stat.suffix}
-                  />
-                </dd>
-                <dt className="mt-0.5 text-[11px] text-rj-gray-600">{stat.label}</dt>
-              </div>
-            ))}
+            {HERO_STATS.map((stat) => {
+              const value = resolveStatValue(stat, liveStats);
+              if (value === null) return null;
+              return (
+                <div key={stat.label}>
+                  <dd className="font-serif text-2xl text-rj-white md:text-3xl">
+                    <AnimatedCounter to={value} suffix={stat.suffix} />
+                  </dd>
+                  <dt className="mt-0.5 text-[11px] text-rj-gray-600">{stat.label}</dt>
+                </div>
+              );
+            })}
           </dl>
         </div>
 

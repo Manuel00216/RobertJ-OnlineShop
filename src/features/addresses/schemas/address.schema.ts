@@ -19,7 +19,11 @@ export const addressSchema = z.object({
   phone: z
     .string()
     .trim()
-    .regex(/^\+?[0-9 ()-]{7,20}$/, "Enter a valid phone number."),
+    .regex(/^\+?[0-9 ()-]{7,20}$/, "Enter a valid phone number.")
+    // The character-class above alone accepts a separators-only string like
+    // "-------"; require at least 7 actual digits so a digit-less value can't
+    // be saved as a phone number.
+    .refine((value) => (value.match(/\d/g)?.length ?? 0) >= 7, "Enter a valid phone number."),
   region: z.string().trim().max(120).optional().default(""),
   province: z.string().trim().max(120).optional().default(""),
   city: z.string().trim().min(1, "City/Municipality is required.").max(120),

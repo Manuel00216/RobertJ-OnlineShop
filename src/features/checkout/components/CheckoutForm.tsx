@@ -24,6 +24,7 @@ import { SelectedAddressCard } from "@/features/checkout/components/SelectedAddr
 import { ShippingAddressForm } from "@/features/checkout/components/ShippingAddressForm";
 import { ShippingMethodCard } from "@/features/checkout/components/ShippingMethodCard";
 import { CHECKOUT_CONSTANTS, CHECKOUT_COPY } from "@/features/checkout/constants/checkout.constants";
+import { useCheckoutIdempotencyKey } from "@/features/checkout/hooks/useCheckoutIdempotencyKey";
 import {
   shippingAddressSchema,
   type ShippingAddressInput,
@@ -31,6 +32,7 @@ import {
 } from "@/features/checkout/schemas/checkout.schema";
 import type { PaymentMethod, PlaceOrderResult } from "@/features/checkout/types/checkout.types";
 import { addressToShippingInput } from "@/features/checkout/utils/addressMapping";
+import { buildCheckoutFingerprint } from "@/features/checkout/utils/idempotency";
 import { groupCartBySeller } from "@/features/checkout/utils/groupCartBySeller";
 import { cn } from "@/lib/utils/cn";
 // Imported directly from the actions module, not the feature barrel — the
@@ -131,6 +133,11 @@ export function CheckoutForm({
   const [notes, setNotes] = useState("");
   const [isPending, startTransition] = useTransition();
   const [cardPaymentTarget, setCardPaymentTarget] = useState<CardPaymentTarget | null>(null);
+
+  // Idempotency key for this checkout attempt — see useCheckoutIdempotencyKey
+  // for why this is fingerprint-keyed and sessionStorage-backed rather than a
+  // bare ref.
+  const { getOrCreateKey, retireKey } = useCheckoutIdempotencyKey();
 
   // Switching back to COD clears any channel choice so a stale selection
   // never lingers if the buyer flips to Online Payment again.
@@ -252,6 +259,30 @@ export function CheckoutForm({
       return;
     }
 
+    // Built once, used both to fingerprint this exact attempt and as the
+    // payload sent below — one source of truth for "what is being submitted".
+    const orderGroups = groups.map((group) => ({
+      sellerId: group.sellerId,
+      sellerName: group.sellerName,
+      items: group.items.map((item) => ({
+        productId: item.productId,
+        variantId: item.variantId,
+        quantity: item.quantity,
+      })),
+    }));
+    const trimmedNotes = notes.trim() || undefined;
+    const effectiveXenditChannel = method === "xendit" ? xenditChannel ?? undefined : undefined;
+
+    const idempotencyKey = getOrCreateKey(
+      buildCheckoutFingerprint({
+        address: parsed.data,
+        groups: orderGroups,
+        notes: trimmedNotes,
+        paymentMethod: method,
+        xenditChannel: effectiveXenditChannel,
+      }),
+    );
+
     startTransition(async () => {
       // Best-effort, independent of order placement — a save failure here
       // must never block checkout. Only offered when the buyer isn't
@@ -274,18 +305,11 @@ export function CheckoutForm({
 
       const actionResult: ActionResult<PlaceOrderResult> = await placeOrderAction({
         address: parsed.data,
-        groups: groups.map((group) => ({
-          sellerId: group.sellerId,
-          sellerName: group.sellerName,
-          items: group.items.map((item) => ({
-            productId: item.productId,
-            variantId: item.variantId,
-            quantity: item.quantity,
-          })),
-        })),
-        notes: notes.trim() || undefined,
+        groups: orderGroups,
+        notes: trimmedNotes,
         paymentMethod: method,
-        xenditChannel: method === "xendit" ? xenditChannel ?? undefined : undefined,
+        xenditChannel: effectiveXenditChannel,
+        idempotencyKey,
       });
 
       if (!actionResult.success) {
@@ -295,6 +319,12 @@ export function CheckoutForm({
       }
 
       const { created, failed, checkoutGroupId } = actionResult.data;
+
+      // Retire the key once something was actually created, so a later, genuinely
+      // new checkout gets a fresh key. On a fully-failed attempt the key is kept
+      // so an immediate retry — even after a reload, now that it's persisted —
+      // still dedups a possibly-created-but-lost order.
+      if (created.length > 0) retireKey();
       setResult(actionResult.data);
       const placedLines = created.flatMap((order) => order.lines);
 

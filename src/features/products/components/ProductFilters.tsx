@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { FILTER_CHIP_ACTIVE as CHIP_ACTIVE, FILTER_CHIP_IDLE as CHIP_IDLE } from "@/components/ui/filter-chip";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { useScrollLock } from "@/hooks/useScrollLock";
 import type { Category } from "@/features/categories/types/category.types";
 import type { ProductSort } from "@/features/products/types/product.types";
 import type { Shop } from "@/features/shops/types/shop.types";
@@ -54,6 +55,9 @@ export function ProductFilters({ categories = [], shops = [] }: ProductFiltersPr
   const [sheetOpen, setSheetOpen] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+
+  // Lock background scroll while the mobile filter sheet is open.
+  useScrollLock(sheetOpen);
 
   useEffect(() => {
     if (!sheetOpen) return;

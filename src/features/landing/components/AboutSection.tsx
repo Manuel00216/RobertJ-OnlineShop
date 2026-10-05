@@ -80,20 +80,26 @@ export async function AboutSection() {
             quality-checked sellers in one trusted place.
           </p>
 
+          {/* A stat whose live query failed is omitted rather than shown as a
+              fabricated or misleading "0+" (see resolveStatValue). */}
           <dl className="mb-10 grid grid-cols-2 gap-5">
-            {ABOUT_STATS.map((stat) => (
-              <div key={stat.label} className="border-l-2 border-rj-red pl-4">
-                <dd className="font-serif text-2xl text-rj-black">
-                  <AnimatedCounter
-                    to={resolveStatValue(stat, liveStats)}
-                    prefix={stat.prefix}
-                    suffix={stat.suffix}
-                    decimals={stat.decimals}
-                  />
-                </dd>
-                <dt className="mt-0.5 text-[11px] text-rj-gray-400">{stat.label}</dt>
-              </div>
-            ))}
+            {ABOUT_STATS.map((stat) => {
+              const value = resolveStatValue(stat, liveStats);
+              if (value === null) return null;
+              return (
+                <div key={stat.label} className="border-l-2 border-rj-red pl-4">
+                  <dd className="font-serif text-2xl text-rj-black">
+                    <AnimatedCounter
+                      to={value}
+                      prefix={stat.prefix}
+                      suffix={stat.suffix}
+                      decimals={stat.decimals}
+                    />
+                  </dd>
+                  <dt className="mt-0.5 text-[11px] text-rj-gray-400">{stat.label}</dt>
+                </div>
+              );
+            })}
           </dl>
 
           <Link

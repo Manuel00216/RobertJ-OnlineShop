@@ -96,6 +96,12 @@ export const placeOrderSchema = z
     notes: orderNotesSchema,
     paymentMethod: z.enum(["cod", "xendit"]).default("cod"),
     xenditChannel: xenditChannelSchema.optional(),
+    // Per-checkout-attempt idempotency key (client-generated, stable across
+    // retries of the same attempt). Threaded into create_order/
+    // create_order_group so a duplicate submission replays the existing
+    // order(s) instead of creating new ones. Optional: an older client that
+    // omits it keeps today's behaviour.
+    idempotencyKey: uuidSchema.optional(),
   })
   .refine(
     (data) => data.paymentMethod !== "xendit" || data.xenditChannel !== undefined,

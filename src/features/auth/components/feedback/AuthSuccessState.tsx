@@ -54,13 +54,13 @@ export function AuthSuccessState({
         <Icon className="h-7 w-7" aria-hidden="true" />
       </span>
 
-      <h2
+      <h1
         ref={headingRef}
         tabIndex={-1}
         className="font-serif text-2xl leading-tight text-rj-black outline-none"
       >
         {headline}
-      </h2>
+      </h1>
 
       <p className="text-sm text-rj-gray-600">{body}</p>
 

@@ -27,9 +27,9 @@ export function AuthHeader({ eyebrow, title, description, switchLink }: AuthHead
           {eyebrow}
         </p>
       ) : null}
-      <h2 className="font-serif text-[28px] leading-[1.1] text-rj-black md:text-[32px]">
+      <h1 className="font-serif text-[28px] leading-[1.1] text-rj-black md:text-[32px]">
         {title}
-      </h2>
+      </h1>
       {description ? <p className="text-sm text-rj-gray-600">{description}</p> : null}
       {switchLink ? <div className="mt-3">{switchLink}</div> : null}
     </header>

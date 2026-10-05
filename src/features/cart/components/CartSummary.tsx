@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Package } from "lucide-react";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -82,33 +82,65 @@ export function CartSummary({ isAuthenticated }: CartSummaryProps) {
   // the same way here means the buyer never sees a surprise split later.
   const groups = useMemo(() => groupCartBySeller(items), [items]);
 
-  useEffect(() => {
+  // Keyed by idsKey (not a bare boolean) so a duplicate call for the SAME
+  // content (the visibilitychange+focus double-fire on tab-return below) is
+  // skipped, while a call for genuinely NEW content (the cart changed while
+  // a previous check was still in flight) is never blocked by it.
+  const inFlightKeyRef = useRef<string | null>(null);
+
+  const runAvailabilityCheck = useCallback(() => {
     if (!idsKey || items.length === 0) return;
+    if (inFlightKeyRef.current === idsKey) return;
+    inFlightKeyRef.current = idsKey;
     startChecking(async () => {
-      const lines = items.map((item) => ({
-        productId: item.productId,
-        variantId: item.variantId,
-      }));
-      const result = await checkCartAvailabilityAction(lines);
-      if (result.success) {
-        setAvailability({
-          key: idsKey,
-          data: new Map(
-            result.data.map((entry) => [
-              getCartLineKey({
-                productId: entry.productId,
-                variantId: entry.variantId ?? undefined,
-              }),
-              entry,
-            ]),
-          ),
-        });
+      try {
+        const lines = items.map((item) => ({
+          productId: item.productId,
+          variantId: item.variantId,
+        }));
+        const result = await checkCartAvailabilityAction(lines);
+        if (result.success) {
+          setAvailability({
+            key: idsKey,
+            data: new Map(
+              result.data.map((entry) => [
+                getCartLineKey({
+                  productId: entry.productId,
+                  variantId: entry.variantId ?? undefined,
+                }),
+                entry,
+              ]),
+            ),
+          });
+        }
+      } finally {
+        if (inFlightKeyRef.current === idsKey) inFlightKeyRef.current = null;
       }
     });
-    // `items` (not just idsKey) is a dependency: the request body needs each
-    // line's variantId, which idsKey alone (a sorted string) doesn't expose.
+    // `items` (not just idsKey) is read for each line's variantId, which idsKey
+    // alone (a sorted string) doesn't expose.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idsKey]);
+
+  useEffect(() => {
+    runAvailabilityCheck();
+  }, [runAvailabilityCheck]);
+
+  // Re-verify when the buyer returns to the tab after idling on the cart page,
+  // so stock/price staleness surfaces here rather than only at order placement
+  // after the whole address form is filled. `create_order` remains the
+  // authoritative re-check regardless; this is a UX early warning.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") runAvailabilityCheck();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [runAvailabilityCheck]);
 
   const checked = availability?.key === idsKey;
 

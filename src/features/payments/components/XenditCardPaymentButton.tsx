@@ -47,14 +47,28 @@ export function XenditCardPaymentButton(props: XenditCardPaymentButtonProps) {
   const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const componentsRef = useRef<import("xendit-components-web").XenditComponents | null>(null);
+  // Bumped at the start of every `startCardPayment()` call (including the
+  // "expired" retry button, which can run while a prior session's async work
+  // or event listeners are still pending). Every callback below closes over
+  // the generation it was created for and checks it's still current before
+  // touching state — so an abandoned session's late `init`/`session-*` event,
+  // or a slow `createXenditCardSessionAction`/dynamic import that resolves
+  // after a newer attempt already started, can never yank the UI back or
+  // overwrite the live widget. A plain `removeEventListener` would only guard
+  // the three events we explicitly listen for; this guards every callback.
+  const sessionGenerationRef = useRef(0);
 
   useEffect(() => {
     return () => {
       componentsRef.current = null;
+      sessionGenerationRef.current += 1;
     };
   }, []);
 
   const startCardPayment = useCallback(async () => {
+    const generation = ++sessionGenerationRef.current;
+    const isCurrent = () => generation === sessionGenerationRef.current;
+
     setError(null);
     setPhase("loading");
 
@@ -62,6 +76,7 @@ export function XenditCardPaymentButton(props: XenditCardPaymentButtonProps) {
       props.orderId !== undefined
         ? await createXenditCardSessionAction(props.orderId)
         : await createXenditGroupCardSessionAction(props.checkoutGroupId);
+    if (!isCurrent()) return;
     if (!result.success) {
       setError(result.error);
       setPhase("error");
@@ -70,12 +85,14 @@ export function XenditCardPaymentButton(props: XenditCardPaymentButtonProps) {
 
     try {
       const { XenditComponents } = await import("xendit-components-web");
+      if (!isCurrent()) return;
       const components = new XenditComponents({
         componentsSdkKey: result.data.componentsSdkKey,
       });
       componentsRef.current = components;
 
       components.addEventListener("init", () => {
+        if (!isCurrent()) return;
         const channel = components.getActiveChannels({ filter: "CARDS" })[0];
         if (!channel || !containerRef.current) {
           setError("Card payment is not available for this order right now.");
@@ -88,13 +105,16 @@ export function XenditCardPaymentButton(props: XenditCardPaymentButtonProps) {
       });
 
       components.addEventListener("session-complete", () => {
+        if (!isCurrent()) return;
         setPhase("complete");
         onComplete?.();
       });
       components.addEventListener("session-expired-or-canceled", () => {
+        if (!isCurrent()) return;
         setPhase("expired");
       });
     } catch {
+      if (!isCurrent()) return;
       setError("Could not load the card payment form. Please try again.");
       setPhase("error");
     }
@@ -149,9 +169,16 @@ export function XenditCardPaymentButton(props: XenditCardPaymentButtonProps) {
         </Button>
       ) : null}
       {phase === "expired" ? (
-        <p className="text-xs text-rj-red-dark">
-          This payment session expired or was cancelled. Try again below.
-        </p>
+        <>
+          <p className="text-xs text-rj-red-dark">
+            This payment session expired or was cancelled. Try again below.
+          </p>
+          {/* The retry control the copy above promises — previously missing, so
+              "below" rendered nothing and a refresh was the only recovery. */}
+          <Button type="button" variant="rjOutline" size="rj" onClick={startCardPayment}>
+            Pay with Card
+          </Button>
+        </>
       ) : null}
       {error ? <p className="text-xs text-rj-red-dark">{error}</p> : null}
     </div>

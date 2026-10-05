@@ -1,3 +1,5 @@
+import { NEW_PASSWORD_MIN } from "@/features/auth/schemas/auth.schema";
+
 /**
  * Authentication screen copy (frozen UI/UX spec v1.0). Kept out of components
  * so a copy change is not a component change — same pattern as
@@ -18,7 +20,7 @@ export const AUTH_COPY = {
     signInPromptLink: "Sign in",
     fullNamePlaceholder: "Juan Dela Cruz",
     confirmPasswordLabel: "Confirm Password",
-    passwordHint: "Must be at least 8 characters",
+    passwordHint: `Must be at least ${NEW_PASSWORD_MIN} characters`,
     termsPrefix: "By continuing, you agree to our",
     termsLink: "Terms",
     privacyLink: "Privacy Policy",
@@ -37,7 +39,7 @@ export const AUTH_COPY = {
     cardDescription: "Choose a strong password you have not used before.",
     newPasswordLabel: "New Password",
     confirmPasswordLabel: "Confirm New Password",
-    passwordHint: "Must be at least 8 characters",
+    passwordHint: `Must be at least ${NEW_PASSWORD_MIN} characters`,
     submitLabel: "Update Password",
   },
 } as const;

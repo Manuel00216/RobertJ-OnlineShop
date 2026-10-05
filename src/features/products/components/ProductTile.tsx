@@ -210,7 +210,7 @@ export function ProductTile({ item, style }: ProductTileProps) {
 
       <div>
         <div className="mb-0.5 flex items-center justify-between gap-2">
-          <span className="truncate text-[9px] font-medium tracking-widest text-rj-gray-400">
+          <span className="truncate text-[11px] font-medium tracking-widest text-rj-gray-400">
             {item.shopName}
           </span>
           {item.conditionLabel ? (
@@ -232,12 +232,12 @@ export function ProductTile({ item, style }: ProductTileProps) {
             </span>
           ) : null}
           {isLowStock ? (
-            <span className="text-[10px] font-bold text-rj-gold">
+            <span className="text-[11px] font-bold text-rj-gold">
               Only {item.maxQuantity} left
             </span>
           ) : null}
           {item.soldCount > 0 ? (
-            <span className="text-[10px] text-rj-gray-400">{item.soldCount} sold</span>
+            <span className="text-[11px] text-rj-gray-400">{item.soldCount} sold</span>
           ) : null}
         </div>
       </div>

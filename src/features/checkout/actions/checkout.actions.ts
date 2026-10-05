@@ -109,6 +109,7 @@ export async function placeOrderAction(
         shippingFeeCents: CHECKOUT_CONSTANTS.shippingFeeCentsPerSeller,
         notes: parsed.data.notes || null,
         paymentMethod: parsed.data.paymentMethod,
+        idempotencyKey: parsed.data.idempotencyKey,
       });
 
       const created: PlacedOrder[] = group.orders.map((order) => {
@@ -160,6 +161,10 @@ export async function placeOrderAction(
           shippingFeeCents: CHECKOUT_CONSTANTS.shippingFeeCentsPerSeller,
           notes: parsed.data.notes || null,
           paymentMethod: parsed.data.paymentMethod,
+          // Same attempt key for every group — create_order namespaces dedup by
+          // seller internally, so a retry replays each already-created seller's
+          // order while still creating any that previously failed.
+          idempotencyKey: parsed.data.idempotencyKey,
         });
         orderId = order.orderId;
         created.push({

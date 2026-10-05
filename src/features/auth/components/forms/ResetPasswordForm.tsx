@@ -69,6 +69,7 @@ export function ResetPasswordForm() {
         {formError ? <ErrorState title="Could not update password" message={formError} /> : null}
 
         <PasswordInput
+          label={AUTH_COPY.resetPassword.newPasswordLabel}
           name="password"
           required
           autoComplete="new-password"

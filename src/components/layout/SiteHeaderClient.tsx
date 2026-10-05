@@ -27,6 +27,66 @@ export interface SiteHeaderClientProps {
   notifications: BuyerActivityEvent[];
 }
 
+interface SearchFormProps {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+  onSubmit: (value: string) => void;
+  /** "desktop" adds the submit button and suggestions focus handlers; "mobile" gets a leading icon + autofocus instead. */
+  variant: "desktop" | "mobile";
+  autoFocus?: boolean;
+  onFocus?: () => void;
+  onBlur?: () => void;
+}
+
+/** Shared markup for the header's two search entry points (desktop inline, mobile collapsible). */
+function SearchForm({ id, value, onChange, onSubmit, variant, autoFocus, onFocus, onBlur }: SearchFormProps) {
+  const isDesktop = variant === "desktop";
+  return (
+    <form
+      role="search"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit(value);
+      }}
+      className={
+        isDesktop
+          ? "flex items-center gap-2 rounded-full border border-rj-gray-200 px-4 py-2 transition-colors focus-within:border-rj-black"
+          : "flex items-center gap-2 rounded-full border border-rj-gray-200 px-4 py-2"
+      }
+    >
+      {!isDesktop ? <Search className="h-[13px] w-[13px] text-rj-gray-400" aria-hidden="true" /> : null}
+      <label htmlFor={id} className="sr-only">
+        Search products
+      </label>
+      <input
+        id={id}
+        type="search"
+        autoFocus={autoFocus}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onFocus={onFocus}
+        onBlur={onBlur}
+        placeholder="Search for anything…"
+        className={
+          isDesktop
+            ? "w-full bg-transparent text-[13px] text-rj-black outline-none placeholder:text-rj-gray-400"
+            : "w-full bg-transparent text-sm text-rj-black outline-none placeholder:text-rj-gray-400"
+        }
+      />
+      {isDesktop ? (
+        <button
+          type="submit"
+          aria-label="Search"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-rj-red text-white transition-colors hover:bg-rj-red-dark"
+        >
+          <Search className="h-3 w-3" aria-hidden="true" />
+        </button>
+      ) : null}
+    </form>
+  );
+}
+
 /**
  * Interactive shell for the shared site header. Categories and search are
  * both real, wired controls (not decorative) — search submits to
@@ -173,35 +233,15 @@ export function SiteHeaderClient({ user, categories, notifications }: SiteHeader
 
         {/* Search — desktop, always visible, real submit */}
         <div className="relative hidden max-w-md flex-1 md:block">
-          <form
-            role="search"
-            onSubmit={(event) => {
-              event.preventDefault();
-              submitSearch(searchValue);
-            }}
-            className="flex items-center gap-2 rounded-full border border-rj-gray-200 px-4 py-2 transition-colors focus-within:border-rj-black"
-          >
-            <label htmlFor="site-search" className="sr-only">
-              Search products
-            </label>
-            <input
-              id="site-search"
-              type="search"
-              value={searchValue}
-              onChange={(event) => setSearchValue(event.target.value)}
-              onFocus={() => setShowSuggestions(true)}
-              onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-              placeholder="Search for anything…"
-              className="w-full bg-transparent text-[13px] text-rj-black outline-none placeholder:text-rj-gray-400"
-            />
-            <button
-              type="submit"
-              aria-label="Search"
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-rj-red text-white transition-colors hover:bg-rj-red-dark"
-            >
-              <Search className="h-3 w-3" aria-hidden="true" />
-            </button>
-          </form>
+          <SearchForm
+            id="site-search"
+            variant="desktop"
+            value={searchValue}
+            onChange={setSearchValue}
+            onSubmit={submitSearch}
+            onFocus={() => setShowSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+          />
 
           {showSuggestions && debouncedSearchValue.trim().length >= 2 && suggestions.length > 0 ? (
             <div
@@ -279,28 +319,14 @@ export function SiteHeaderClient({ user, categories, notifications }: SiteHeader
             transition={{ duration: 0.2, ease: "easeOut" }}
             className="overflow-hidden border-t border-rj-gray-100 px-5 py-3 md:hidden"
           >
-            <form
-              role="search"
-              onSubmit={(event) => {
-                event.preventDefault();
-                submitSearch(searchValue);
-              }}
-              className="flex items-center gap-2 rounded-full border border-rj-gray-200 px-4 py-2"
-            >
-              <Search className="h-[13px] w-[13px] text-rj-gray-400" aria-hidden="true" />
-              <label htmlFor="site-search-mobile" className="sr-only">
-                Search products
-              </label>
-              <input
-                id="site-search-mobile"
-                type="search"
-                autoFocus
-                value={searchValue}
-                onChange={(event) => setSearchValue(event.target.value)}
-                placeholder="Search for anything…"
-                className="w-full bg-transparent text-sm text-rj-black outline-none placeholder:text-rj-gray-400"
-              />
-            </form>
+            <SearchForm
+              id="site-search-mobile"
+              variant="mobile"
+              autoFocus
+              value={searchValue}
+              onChange={setSearchValue}
+              onSubmit={submitSearch}
+            />
           </motion.div>
         ) : null}
       </AnimatePresence>

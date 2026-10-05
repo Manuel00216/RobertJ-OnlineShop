@@ -5,6 +5,7 @@ import { motion, type PanInfo } from "framer-motion";
 import { ChevronLeft, ChevronRight, Minus, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { useScrollLock } from "@/hooks/useScrollLock";
 import type { ProductImage } from "@/features/products/types/product.types";
 
 export interface ProductLightboxProps {
@@ -44,6 +45,10 @@ export function ProductLightbox({
   const active = images[activeIndex] ?? null;
   const zoom = ZOOM_LEVELS[zoomIndex];
   const isZoomed = zoom > 1;
+
+  // This viewer is only mounted while open, so the page behind it stays locked
+  // for its whole lifetime (no background scroll on touch).
+  useScrollLock(true);
 
   function goTo(index: number) {
     const next = ((index % images.length) + images.length) % images.length;

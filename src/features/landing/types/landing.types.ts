@@ -26,7 +26,12 @@ export interface MarketplaceFeature {
 
 /** A headline metric rendered with an animated counter. */
 export interface LandingStat {
-  /** Hardcoded value. Used directly for placeholders, or as the live fallback. */
+  /**
+   * Hardcoded value. Used directly for `placeholder` stats. For a `live`
+   * stat this is unused — see `resolveStatValue`: a failed live query omits
+   * the stat entirely rather than falling back to a number, so a DB outage
+   * is never misrepresented as a measured "0" or a fabricated placeholder.
+   */
   value: number;
   label: string;
   prefix?: string;
@@ -35,12 +40,13 @@ export interface LandingStat {
   decimals?: number;
   /**
    * `live` — replaced with a real Supabase count when one exists (see `metric`);
-   * `placeholder` — a marketing figure with no DB source yet (buyers, sales,
-   * rating), shown as-is until the supporting data exists.
+   * `placeholder` — a marketing figure with no DB source yet, shown as-is.
+   * Headline stats are all `live` now so no fabricated figure is presented as
+   * measured fact (see the `getMarketplaceStats` / `resolveStatValue` note).
    */
   source: "live" | "placeholder";
   /** Which live count feeds this stat. Required when `source` is `live`. */
-  metric?: "sellerCount" | "productCount";
+  metric?: "sellerCount" | "productCount" | "buyerCount" | "fulfilledOrderCount";
 }
 
 /**

@@ -1777,6 +1777,7 @@ export type Database = {
       create_order: {
         Args: {
           p_checkout_group_id?: string
+          p_idempotency_key?: string
           p_items: Json
           p_notes?: string
           p_payment_method?: string
@@ -1821,6 +1822,7 @@ export type Database = {
       create_order_group: {
         Args: {
           p_groups: Json
+          p_idempotency_key?: string
           p_notes?: string
           p_payment_method?: string
           p_shipping_address: Json
@@ -2036,6 +2038,15 @@ export type Database = {
           occurred_at: string
           order_id: string
           order_number: string
+        }[]
+      }
+      get_marketplace_stats: {
+        Args: never
+        Returns: {
+          buyer_count: number
+          fulfilled_order_count: number
+          product_count: number
+          seller_count: number
         }[]
       }
       get_my_profile: {

@@ -200,9 +200,15 @@ export default async function OrderDetailPage({
           <ReturnRequestStatusCard request={returnRequest} evidenceUrl={returnEvidenceUrl} />
         ) : showDeliveryResolution ? (
           <DeliveryResolutionChoice orderId={order.id} orderNumber={order.orderNumber} />
-        ) : order.status === ORDER_STATUS.cancelled ? (
+        ) : (
+          // Return is still allowed (delivered, or cancelled-but-paid) and none
+          // is open yet. The paired confirm/report choice above only applies
+          // before the buyer confirms receipt; once they have (or for a
+          // cancelled-paid order with no confirm step), the report path must
+          // still be reachable — a defect found days after "Confirm Received"
+          // previously hit a dead end here. Backend `request_return` allows it.
           <ReportProblemPanel orderId={order.id} />
-        ) : null
+        )
       ) : null}
 
       <SellerShopRow shopName={shopName} shopId={membership?.shopId ?? null} />
