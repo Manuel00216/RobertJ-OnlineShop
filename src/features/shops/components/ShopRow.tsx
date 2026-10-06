@@ -78,7 +78,10 @@ export function ShopRow({ shop }: ShopRowProps) {
               </Badge>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              {shop.memberName ?? "Unassigned"} · /{shop.slug}
+              {shop.members.length > 0
+                ? shop.members.map((member) => member.name).join(", ")
+                : "Unassigned"}{" "}
+              · /{shop.slug}
             </p>
             {error ? (
               <div className="mt-2">

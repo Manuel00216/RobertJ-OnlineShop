@@ -4795,7 +4795,6 @@ type ShopRowWithMembers = ShopRow & {
 };
 
 function toShopWithMember(row: ShopRowWithMembers): ShopWithMember {
-  const membership = row.shop_users?.[0] ?? null;
   return {
     id: row.id,
     name: row.name,
@@ -4806,8 +4805,15 @@ function toShopWithMember(row: ShopRowWithMembers): ShopWithMember {
     logoUrl: row.logo_url,
     bannerUrl: row.banner_url,
     description: row.description,
-    memberId: membership?.user_id ?? null,
-    memberName: membership?.member?.full_name ?? membership?.member?.username ?? null,
+    // Every member, not just the first — a shop can have more than one
+    // (co-sellers), and the admin Users screen already correctly shows each
+    // user's own assignment; dropping extras here made this screen disagree
+    // with that one for any shop with 2+ members.
+    members: (row.shop_users ?? []).flatMap((su) =>
+      su.member
+        ? [{ id: su.user_id, name: su.member.full_name ?? su.member.username ?? "Unnamed" }]
+        : [],
+    ),
   };
 }
 

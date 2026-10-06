@@ -12,9 +12,18 @@ export interface Shop {
   description: string | null;
 }
 
-/** A shop plus its current `shop_users` member (if any) — for the admin Shops management screen. */
+/** One shop_users member's identity, as shown on the admin Shops management screen. */
+export interface ShopMember {
+  id: string;
+  /** Display name (full name, falling back to username). */
+  name: string;
+}
+
+/**
+ * A shop plus every current `shop_users` member — a shop can have more than
+ * one (co-sellers), so this is an array, never just "the" member. Empty when
+ * unassigned.
+ */
 export interface ShopWithMember extends Shop {
-  memberId: string | null;
-  /** Member's display name (full name, falling back to username), or null if unassigned. */
-  memberName: string | null;
+  members: ShopMember[];
 }

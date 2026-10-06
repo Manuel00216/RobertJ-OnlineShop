@@ -28,4 +28,4 @@ export type {
   UpdateOwnShopDescriptionInput,
   UploadShopImageInput,
 } from "./schemas/shop.schema";
-export type { Shop, ShopWithMember } from "./types/shop.types";
+export type { Shop, ShopMember, ShopWithMember } from "./types/shop.types";
