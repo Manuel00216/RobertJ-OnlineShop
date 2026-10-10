@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { RJ_CARD } from "@/components/ui/card";
 import { USER_ROLES, type UserRole } from "@/constants/roles";
 import { ROUTES } from "@/constants/routes";
-import { signOutAction } from "@/features/auth/actions/auth.actions";
+import { SignOutButton } from "@/features/auth/components/SignOutButton";
 import { canViewDashboard } from "@/lib/auth/permissions";
 import { cn } from "@/lib/utils/cn";
 import { getInitials } from "@/lib/utils/format";
@@ -117,17 +117,12 @@ export function AccountMenu({ user }: { user: SessionUser }) {
               </Link>
             ))}
           </div>
-          <form
-            action={signOutAction}
-            className="mt-1 border-t border-rj-gray-100 pt-1.5"
+          <SignOutButton
+            wrapperClassName="mt-1 border-t border-rj-gray-100 pt-1.5"
+            className="w-full rounded-xl px-3 py-2 text-left text-sm text-rj-red-dark transition-colors hover:bg-rj-gray-100"
           >
-            <button
-              type="submit"
-              className="w-full rounded-xl px-3 py-2 text-left text-sm text-rj-red-dark transition-colors hover:bg-rj-gray-100"
-            >
-              Sign out
-            </button>
-          </form>
+            Sign out
+          </SignOutButton>
         </div>
       ) : null}
     </div>

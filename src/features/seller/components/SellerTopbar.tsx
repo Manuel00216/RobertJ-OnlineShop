@@ -6,7 +6,7 @@ import { Bell, ChevronDown, Menu, Search } from "lucide-react";
 
 import { ROLE_LABELS, type UserRole } from "@/constants/roles";
 import { ROUTES } from "@/constants/routes";
-import { signOutAction } from "@/features/auth/actions/auth.actions";
+import { SignOutButton } from "@/features/auth/components/SignOutButton";
 import { getSellerPageMeta } from "@/features/seller/constants/nav";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { cn } from "@/lib/utils/cn";
@@ -169,14 +169,12 @@ export function SellerTopbar({ user, pathname, notifications, onMenuClick }: Sel
                   Profile Settings
                 </Link>
               </div>
-              <form action={signOutAction} className="border-t border-border py-1.5">
-                <button
-                  type="submit"
-                  className="w-full px-4 py-2 text-left text-sm text-danger transition-colors hover:bg-danger/10"
-                >
-                  Sign Out
-                </button>
-              </form>
+              <SignOutButton
+                wrapperClassName="border-t border-border py-1.5"
+                className="w-full px-4 py-2 text-left text-sm text-danger transition-colors hover:bg-danger/10"
+              >
+                Sign Out
+              </SignOutButton>
             </div>
           )}
         </div>

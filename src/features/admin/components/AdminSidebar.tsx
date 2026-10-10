@@ -6,7 +6,7 @@ import { LogOut, X } from "lucide-react";
 import { ADMIN_NAV_GROUPS, type AdminNavItem } from "@/features/admin/constants/nav";
 import { ROLE_LABELS, type UserRole } from "@/constants/roles";
 import { ROUTES } from "@/constants/routes";
-import { signOutAction } from "@/features/auth/actions/auth.actions";
+import { SignOutButton } from "@/features/auth/components/SignOutButton";
 import { cn } from "@/lib/utils/cn";
 import { getInitials } from "@/lib/utils/format";
 import type { SessionUser } from "@/types/common.types";
@@ -101,15 +101,10 @@ export function AdminSidebar({ user, pathname, onNavigate, onClose }: AdminSideb
             </p>
           </div>
         </div>
-        <form action={signOutAction}>
-          <button
-            type="submit"
-            className="flex w-full items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-sm text-sidebar-muted-foreground transition-all duration-150 hover:border-danger/20 hover:bg-sidebar-border/50 hover:text-danger"
-          >
-            <LogOut className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
-            <span className="font-medium">Sign Out</span>
-          </button>
-        </form>
+        <SignOutButton className="flex w-full items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-sm text-sidebar-muted-foreground transition-all duration-150 hover:border-danger/20 hover:bg-sidebar-border/50 hover:text-danger">
+          <LogOut className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
+          <span className="font-medium">Sign Out</span>
+        </SignOutButton>
       </div>
     </div>
   );

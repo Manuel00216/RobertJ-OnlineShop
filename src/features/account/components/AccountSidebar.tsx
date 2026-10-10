@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 
 import { ROUTES } from "@/constants/routes";
-import { signOutAction } from "@/features/auth/actions/auth.actions";
+import { SignOutButton } from "@/features/auth/components/SignOutButton";
 import { cn } from "@/lib/utils/cn";
 import { getInitials } from "@/lib/utils/format";
 import type { SessionUser } from "@/types/common.types";
@@ -96,14 +96,12 @@ export function AccountSidebar({ user }: { user: SessionUser }) {
         </nav>
       </div>
 
-      <form action={signOutAction} className="mt-auto">
-        <button
-          type="submit"
-          className="flex w-full items-center gap-2.5 rounded-xl px-4 py-2.5 text-[13px] font-semibold text-rj-red-dark transition-colors hover:bg-rj-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30"
-        >
-          Sign out
-        </button>
-      </form>
+      <SignOutButton
+        wrapperClassName="mt-auto"
+        className="flex w-full items-center gap-2.5 rounded-xl px-4 py-2.5 text-[13px] font-semibold text-rj-red-dark transition-colors hover:bg-rj-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rj-red/30"
+      >
+        Sign out
+      </SignOutButton>
     </aside>
   );
 }

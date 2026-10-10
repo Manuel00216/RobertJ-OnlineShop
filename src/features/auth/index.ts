@@ -14,6 +14,7 @@ export { PasswordInput } from "./components/fields/PasswordInput";
 export { VerificationPending } from "./components/feedback/VerificationPending";
 export { AuthSuccessState } from "./components/feedback/AuthSuccessState";
 export { AuthButton } from "./components/AuthButton";
+export { SignOutButton } from "./components/SignOutButton";
 export { LoginForm } from "./components/forms/LoginForm";
 export { RegisterForm } from "./components/forms/RegisterForm";
 export { ForgotPasswordForm } from "./components/forms/ForgotPasswordForm";
