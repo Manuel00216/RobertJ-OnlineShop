@@ -27,6 +27,7 @@ import { curatedRpcError, queryError, rpcError } from "@/lib/supabase/query-erro
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { slugify } from "@/lib/utils/format";
 import { toCents } from "@/lib/utils/currency";
+import { compareNatural } from "@/lib/utils/sort";
 import { toRange, type PaginatedResult, type PaginationParams } from "@/types/pagination.types";
 import type { SessionUser } from "@/types/common.types";
 import type {
@@ -4408,13 +4409,18 @@ export async function listShops(): Promise<Shop[]> {
   const { data, error } = await supabase
     .from(DATABASE_TABLES.SHOPS)
     .select(SHOP_COLUMNS)
-    .order("name", { ascending: true });
+    .order("created_at", { ascending: true });
 
   if (error) {
     throw queryError("Failed to load shops", error);
   }
 
-  return (data ?? []).map((row) => toShop(row as ShopRow));
+  // Natural-sort by name (not insertion order) so every shop picker that
+  // consumes this list — product filters, reports, admin shop assignment —
+  // shows shops in a stable, human-expected order.
+  return (data ?? [])
+    .map((row) => toShop(row as ShopRow))
+    .sort((a, b) => compareNatural(a.name, b.name));
 }
 
 /** Single shop by id, or null if it doesn't exist / isn't visible to the
