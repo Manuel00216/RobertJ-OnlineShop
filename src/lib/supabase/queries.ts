@@ -4528,9 +4528,10 @@ export interface FeaturedShopView {
  * Active shops with a real active-product count, for the homepage's Featured
  * Shops carousel. Composed from two already-public reads (`listShops`,
  * `resolve_shop_membership`) plus one lightweight `products` read — no new
- * RPC beyond `resolve_shop_membership`. Ranking (by active-product count) is
- * unchanged by shop branding — a shop's logo/banner/description never affects
- * its Featured placement, only real product activity does.
+ * RPC beyond `resolve_shop_membership`. Which shops qualify as "featured" is
+ * still ranked by active-product count — unaffected by shop branding, only
+ * real product activity decides placement — but the final, already-selected
+ * set is then natural-sorted by name for a stable display order.
  */
 export async function getFeaturedShops(limit = 4): Promise<FeaturedShopView[]> {
   const shops = await listShops();
@@ -4587,7 +4588,8 @@ export async function getFeaturedShops(limit = 4): Promise<FeaturedShopView[]> {
       logoUrl: shop.logoUrl,
     }))
     .sort((a, b) => b.productCount - a.productCount)
-    .slice(0, limit);
+    .slice(0, limit)
+    .sort((a, b) => compareNatural(a.name, b.name));
 }
 
 /** Payload for creating a shop — `slug` is always server-derived from `name`, never client-submitted. */
