@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { LogOut, X } from "lucide-react";
 
@@ -45,13 +46,17 @@ export function SellerSidebar({ user, pathname, onNavigate, onClose }: SellerSid
 
   return (
     <div className="flex h-full flex-col select-none border-r border-sidebar-border bg-sidebar-background">
-      <div className="flex h-16 flex-shrink-0 items-center justify-between border-b border-sidebar-border px-5">
-        <Link href={ROUTES.sellerDashboard} className="flex items-center gap-3">
-          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-danger text-xs font-bold text-primary-foreground">
-            RJ
-          </div>
+      <div className="flex h-20 flex-shrink-0 items-center justify-between border-b border-sidebar-border px-5 lg:justify-center">
+        <Link href={ROUTES.home} className="flex items-center gap-3">
+          <Image
+            src="/brand/logo.png"
+            alt="RobertJ Shop — back to homepage"
+            width={1254}
+            height={1254}
+            className="h-14 w-14 flex-shrink-0 rounded-lg object-cover"
+          />
           <div className="flex flex-col">
-            <span className="text-sm font-semibold leading-tight tracking-tight text-sidebar-foreground">
+            <span className="text-base font-semibold leading-tight tracking-tight text-sidebar-foreground">
               RobertJ
             </span>
             <span className="text-[10px] font-medium leading-tight text-sidebar-muted-foreground">
