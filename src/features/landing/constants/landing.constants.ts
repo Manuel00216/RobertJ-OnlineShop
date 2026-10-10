@@ -2,18 +2,18 @@ import type { LandingStat } from "@/features/landing/types/landing.types";
 
 /** Rotating top-bar promos. Pure marketing copy — not modelled in the DB. */
 export const ANNOUNCEMENTS = [
-  "Free shipping on orders over ₱2,000  ·  Shop Now →",
-  "New shops added weekly  ·  Explore the Marketplace →",
-  "Secure checkout with buyer protection on every order",
+  "Cash on Delivery or GCash, Maya, and Card  ·  Shop Now →",
+  "One cart across all three shops  ·  Explore the Marketplace →",
+  "Secure checkout with manually verified payments",
 ] as const;
 
 /** Trust-signal strip that scrolls beneath the hero. */
 export const MARQUEE_ITEMS = [
   "New Arrivals Weekly",
-  "Verified Filipino Sellers",
-  "Free Shipping Over ₱2,000",
-  "Secure Buyer Protection",
-  "Shop 120+ Brands",
+  "Three Trusted Sibling Shops",
+  "Cash on Delivery or GCash/Maya/Card",
+  "Manually Verified Payments",
+  "One Catalog, Three Shops",
   "Easy Returns",
 ] as const;
 

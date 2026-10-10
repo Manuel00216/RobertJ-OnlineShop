@@ -10,25 +10,25 @@ const FEATURES: MarketplaceFeature[] = [
     icon: <Layers className={ICON_CLASS} aria-hidden="true" />,
     title: "Curated Multi-Shop Catalog",
     description:
-      "Hundreds of verified independent fashion shops, quality-checked and unified in one experience.",
+      "Three trusted sibling shops, unified into one catalog and one checkout.",
   },
   {
     icon: <ShieldCheck className={ICON_CLASS} aria-hidden="true" />,
     title: "Secure & Trusted Checkout",
     description:
-      "Encrypted payments, buyer protection, and a straightforward return policy across all shops.",
+      "Manually verified payments and a straightforward return policy across all shops.",
   },
   {
     icon: <Zap className={ICON_CLASS} aria-hidden="true" />,
-    title: "Smart Shopping Assistant",
+    title: "Guided Product Selection",
     description:
-      "Our AI finds the right fit, style, and price across every shop in seconds.",
+      "Rule-based matching finds the right fit, style, and budget across every shop in seconds.",
   },
   {
     icon: <Truck className={ICON_CLASS} aria-hidden="true" />,
-    title: "One Cart, One Shipment",
+    title: "One Cart, One Checkout",
     description:
-      "Order from multiple shops and receive a single consolidated delivery to your door.",
+      "Order from multiple shops in a single cart — each shop then fulfills its own items.",
   },
 ];
 
