@@ -6407,7 +6407,7 @@ export async function signUpWithPassword(
   captchaToken: string,
 ) {
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
@@ -6418,11 +6418,29 @@ export async function signUpWithPassword(
     },
   });
   if (error) throw new Error(error.message);
+  // Supabase's anti-enumeration design for signUp(): calling it with an
+  // email that already has an account returns success (no `error`), but
+  // `data.user.identities` comes back empty and — critically — no new
+  // confirmation email is sent. Without this check the caller sees
+  // "success" and shows "check your email" even though nothing was sent.
+  // Matches the existing `already registered` copy in mapAuthError, which
+  // stays enumeration-safe ("couldn't create your account", not "that email
+  // exists").
+  if (data.user && data.user.identities?.length === 0) {
+    throw new Error("already registered");
+  }
 }
 
 export async function signOut() {
   const supabase = await createSupabaseServerClient();
-  await supabase.auth.signOut();
+  const { error } = await supabase.auth.signOut();
+  if (error) {
+    // Local cookies are still cleared in virtually all failure modes — this
+    // is observability (so a failed server-side revoke doesn't silently
+    // leave a session a race/second tab could still present as valid), not
+    // a change in sign-out's user-facing behavior.
+    console.error("[auth] signOut failed to fully revoke session:", error.message);
+  }
 }
 
 /**

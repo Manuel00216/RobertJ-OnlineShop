@@ -124,7 +124,14 @@ export function RegisterForm() {
   }
 
   const fieldErrors = state && !state.success ? state.fieldErrors : undefined;
-  const formError = state && !state.success && !state.fieldErrors ? state.error : undefined;
+  // fieldErrors?.captchaToken is handled here, not as a rendered field, since
+  // this form has no visible field for captchaToken — without this fallback,
+  // a captcha-only validation failure would suppress the banner (fieldErrors
+  // is truthy) and render nowhere.
+  const formError =
+    (state && !state.success && !fieldErrors ? state.error : undefined) ??
+    fieldErrors?.captchaToken?.[0] ??
+    undefined;
 
   return (
     <>

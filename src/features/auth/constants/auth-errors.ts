@@ -18,7 +18,10 @@ const KNOWN_ERRORS: Array<[RegExp, string]> = [
     /already registered|user already exists/i,
     "Couldn't create your account with those details. If you already have an account, try signing in instead.",
   ],
-  [/rate limit|too many requests|429/i, "Too many attempts. Please try again later."],
+  [
+    /rate limit|too many requests|too many attempts|429/i,
+    "Too many attempts. Please try again later.",
+  ],
   [/captcha/i, "Verification failed. Please try again."],
   [
     /password reset link has expired/i,
@@ -49,6 +52,11 @@ export function mapAuthError(error: unknown): string {
  */
 const OAUTH_CALLBACK_ERRORS: Record<string, string> = {
   access_denied: "Sign-in was cancelled.",
+  // GoTrue sends this for an expired or already-used password-reset or
+  // signup-confirmation link, distinguished from a plain OAuth-cancellation
+  // `access_denied` by the route handler reading `error_code` — see
+  // src/app/auth/callback/route.ts.
+  otp_expired: "This link has expired or has already been used. Please request a new one.",
   rate_limited: "Too many attempts. Please wait a moment and try again.",
   oauth_start_failed: "Something went wrong starting that sign-in. Please try again.",
   // `server_error` is GoTrue's standard OAuth2 error code for a failed

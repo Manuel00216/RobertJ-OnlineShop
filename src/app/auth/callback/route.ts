@@ -28,9 +28,13 @@ export async function GET(request: NextRequest) {
   // distinguishable code instead of falling through to the generic message.
   const providerError = searchParams.get("error");
   if (providerError) {
-    return NextResponse.redirect(
-      `${origin}${ROUTES.signIn}?error=${encodeURIComponent(providerError)}`,
-    );
+    // GoTrue reuses the same top-level `error=access_denied` for both an
+    // OAuth consent cancellation and an expired/already-used email link —
+    // disambiguate via `error_code` so the two don't get the same (wrong,
+    // for the link case) "Sign-in was cancelled." copy.
+    const providerErrorCode = searchParams.get("error_code");
+    const code = providerErrorCode === "otp_expired" ? "otp_expired" : providerError;
+    return NextResponse.redirect(`${origin}${ROUTES.signIn}?error=${encodeURIComponent(code)}`);
   }
 
   if (code) {

@@ -61,7 +61,17 @@ export default async function proxy(request: NextRequest) {
   const isAuthRoute = AUTH_ROUTES.some(
     (route) => pathname === route || pathname.startsWith(`${route}/`),
   );
-  if (isAuthRoute && user) {
+  // GET-only: a POST here is a Server Action submission (signInAction,
+  // signInWithOAuthAction, signUpAction, ...) — those forms post back to the
+  // current /sign-in|/sign-up URL, so this bounce must not intercept them.
+  // Otherwise an explicit "Continue with Google/Facebook" click (or a
+  // password sign-in retry) made while a stale/lingering session cookie is
+  // still considered valid gets silently redirected to the dashboard instead
+  // of ever reaching the action — the user never gets to actually
+  // re-authenticate. This check is a UX convenience, not the security
+  // boundary (that's RLS + requireSessionUser/requireRole inside the
+  // actions), so scoping it to GET loses no protection.
+  if (isAuthRoute && user && request.method === "GET") {
     // An already-authenticated visitor may land here via a stale
     // ?redirectTo= link — send them onward instead of discarding it.
     const redirectTo = request.nextUrl.searchParams.get("redirectTo");

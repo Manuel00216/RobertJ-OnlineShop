@@ -42,6 +42,21 @@ export function Turnstile({ onVerify }: TurnstileProps) {
     return () => clearTimeout(timeout);
   }, [scriptLoaded]);
 
+  // On a forced remount (new `key` after a submit attempt, so the widget
+  // gets a fresh single-use token) the Cloudflare script is almost always
+  // already loaded process-wide — next/script only invokes `onLoad` the
+  // first time a given `src` loads, so a later remount's own onLoad would
+  // never fire and scriptLoaded would stay stuck false forever. Check
+  // directly on mount instead of waiting on a callback that won't come.
+  useEffect(() => {
+    // Syncing from an external system (the script tag's load state, which
+    // may already be true before this effect ever runs) — the same
+    // sanctioned exception used elsewhere in this file/feature for Turnstile
+    // state resets.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (window.turnstile) setScriptLoaded(true);
+  }, []);
+
   useEffect(() => {
     if (!scriptLoaded || !window.turnstile) return;
 

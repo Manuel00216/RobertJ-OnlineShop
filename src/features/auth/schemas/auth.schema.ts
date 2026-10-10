@@ -16,11 +16,12 @@ const captchaTokenSchema = z.string().min(1, "Verification failed. Please try ag
 
 export const signInSchema = z.object({
   email: z.email("Enter a valid email address."),
-  // Deliberately not raised alongside NEW_PASSWORD_MIN: this only validates
-  // input shape before handing off to Supabase, which is the real source of
-  // truth for whether the password is correct — it must not reject a
-  // legitimate, already-existing shorter password.
-  password: z.string().min(8, "Password must be at least 8 characters."),
+  // Deliberately not raised alongside NEW_PASSWORD_MIN, and deliberately no
+  // minimum beyond "non-empty": this only validates input shape before
+  // handing off to Supabase, which is the real source of truth for whether
+  // the password is correct — it must not reject a legitimate,
+  // already-existing shorter password.
+  password: z.string().min(1, "Enter your password."),
   captchaToken: captchaTokenSchema,
 });
 
