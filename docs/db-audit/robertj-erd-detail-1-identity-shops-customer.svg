@@ -1,0 +1,431 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1608" height="1580" viewBox="0 0 1608 1580" font-family="Inter, 'DejaVu Sans', Arial, sans-serif">
+<rect width="100%" height="100%" fill="#f8f9fb"/>
+<text x="40" y="52" font-size="30" font-weight="700" fill="#16202c">Detail 1 — Identity, shops, customer data</text>
+<text x="40" y="80" font-size="14.5" fill="#566574">profiles is the hub of the schema (FK target of 22 relationships). Tables outside this domain are shown collapsed.</text>
+<path d="M636,209.5 C555.0,209.5 537.0,149.5 456,149.5" fill="none" stroke="#e03131" stroke-width="1.7" opacity=".62"/>
+<path d="M456,288.5 C537.0,288.5 555.0,209.5 636,209.5" fill="none" stroke="#e03131" stroke-width="1.7" opacity=".62"/>
+<path d="M456,636.5 C537.0,636.5 555.0,209.5 636,209.5" fill="none" stroke="#e03131" stroke-width="1.7" opacity=".62"/>
+<path d="M972,987.5 C1022.0,987.5 1022.0,209.5 972,209.5" fill="none" stroke="#f08c00" stroke-width="1.7" opacity=".62"/>
+<path d="M972,1025.5 C1022.0,1025.5 1022.0,209.5 972,209.5" fill="none" stroke="#f08c00" stroke-width="1.7" opacity=".62"/>
+<path d="M972,1044.5 C1034.0,1044.5 1034.0,715.5 972,715.5" fill="none" stroke="#f08c00" stroke-width="1.7" opacity=".62"/>
+<path d="M972,576.5 C1028.0,576.5 1028.0,715.5 972,715.5" fill="none" stroke="#e03131" stroke-width="1.7" opacity=".62"/>
+<path d="M972,595.5 C1040.0,595.5 1040.0,209.5 972,209.5" fill="none" stroke="#e03131" stroke-width="1.7" opacity=".62"/>
+<path d="M456,908.5 C537.0,908.5 555.0,209.5 636,209.5" fill="none" stroke="#e03131" stroke-width="1.7" opacity=".62"/>
+<path d="M456,1066.5 C512.0,1066.5 512.0,889.5 456,889.5" fill="none" stroke="#e03131" stroke-width="1.7" opacity=".62"/>
+<path d="M456,1085.5 C769.2,1085.5 838.8,209.5 1152,209.5" fill="none" stroke="#e03131" stroke-width="1.7" opacity=".62"/>
+<path d="M456,1104.5 C769.2,1104.5 838.8,329.5 1152,329.5" fill="none" stroke="#e03131" stroke-width="1.7" opacity=".62"/>
+<path d="M456,1281.5 C537.0,1281.5 555.0,209.5 636,209.5" fill="none" stroke="#e03131" stroke-width="1.7" opacity=".62"/>
+<path d="M456,1300.5 C769.2,1300.5 838.8,209.5 1152,209.5" fill="none" stroke="#e03131" stroke-width="1.7" opacity=".62"/>
+<path d="M1152,209.5 C1071.0,209.5 1053.0,209.5 972,209.5" fill="none" stroke="#f08c00" stroke-width="1.7" opacity=".62"/>
+<path d="M1152,209.5 C1071.0,209.5 1053.0,715.5 972,715.5" fill="none" stroke="#f08c00" stroke-width="1.7" opacity=".62"/>
+<path d="M1152,329.5 C1071.0,329.5 1053.0,209.5 972,209.5" fill="none" stroke="#f08c00" stroke-width="1.7" opacity=".62"/>
+<path d="M1152,329.5 C1071.0,329.5 1053.0,715.5 972,715.5" fill="none" stroke="#f08c00" stroke-width="1.7" opacity=".62"/>
+<path d="M1152,449.5 C1071.0,449.5 1053.0,209.5 972,209.5" fill="none" stroke="#1971c2" stroke-width="1.7" opacity=".62"/>
+<path d="M1152,449.5 C1071.0,449.5 1053.0,209.5 972,209.5" fill="none" stroke="#f08c00" stroke-width="1.7" opacity=".62"/>
+<path d="M1152,449.5 C1071.0,449.5 1053.0,715.5 972,715.5" fill="none" stroke="#5c7080" stroke-width="1.7" opacity=".62"/>
+<g>
+<rect x="122" y="113" width="336" height="74" rx="8" fill="#0b1220" opacity=".10"/>
+<rect x="120" y="110" width="336" height="74" rx="8" fill="#ffffff" stroke="#868e96" stroke-width="1.6" stroke-dasharray="5 4"/>
+<path d="M120,140 V118 a8,8 0 0 1 8,-8 H448 a8,8 0 0 1 8,8 V140 Z" fill="#868e96"/>
+<text x="130" y="130" font-size="14.5" font-weight="700" fill="#fff">auth.users</text>
+<text x="130" y="153.5" font-size="9.5" font-weight="700" fill="#e8590c" font-family="'DejaVu Sans Mono', Menlo, monospace">PK</text>
+<text x="152" y="153.5" font-size="12.2" font-weight="600" fill="#1b2430">id</text>
+<text x="446" y="153.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">uuid</text>
+<text x="152" y="172" font-size="10.5" fill="#868e96" font-style="italic">(columns omitted — see main diagram)</text>
+</g>
+<g>
+<rect x="122" y="233" width="336" height="321" rx="8" fill="#0b1220" opacity=".10"/>
+<rect x="120" y="230" width="336" height="321" rx="8" fill="#ffffff" stroke="#3b5bdb" stroke-width="1.6"/>
+<path d="M120,260 V238 a8,8 0 0 1 8,-8 H448 a8,8 0 0 1 8,8 V260 Z" fill="#3b5bdb"/>
+<text x="130" y="250" font-size="14.5" font-weight="700" fill="#fff">addresses</text>
+<text x="446" y="250" font-size="11" fill="#ffffffcc" text-anchor="end">9 rows</text>
+<text x="130" y="273.5" font-size="9.5" font-weight="700" fill="#e8590c" font-family="'DejaVu Sans Mono', Menlo, monospace">PK</text>
+<text x="152" y="273.5" font-size="12.2" font-weight="600" fill="#1b2430">id</text>
+<text x="446" y="273.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">uuid</text>
+<rect x="121" y="279" width="334" height="19" fill="#f4f6fa"/>
+<text x="130" y="292.5" font-size="9.5" font-weight="700" fill="#e03131" font-family="'DejaVu Sans Mono', Menlo, monospace">FK</text>
+<text x="152" y="292.5" font-size="12.2" font-weight="400" fill="#1b2430">user_id</text>
+<text x="446" y="292.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">uuid</text>
+<text x="152" y="311.5" font-size="12.2" font-weight="400" fill="#1b2430">label</text>
+<text x="446" y="311.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">text</text>
+<rect x="121" y="317" width="334" height="19" fill="#f4f6fa"/>
+<text x="152" y="330.5" font-size="12.2" font-weight="400" fill="#1b2430">recipient_name</text>
+<text x="446" y="330.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">text</text>
+<text x="152" y="349.5" font-size="12.2" font-weight="400" fill="#1b2430">phone</text>
+<text x="446" y="349.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">text</text>
+<rect x="121" y="355" width="334" height="19" fill="#f4f6fa"/>
+<text x="152" y="368.5" font-size="12.2" font-weight="400" fill="#1b2430">region</text>
+<text x="446" y="368.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">text?</text>
+<text x="152" y="387.5" font-size="12.2" font-weight="400" fill="#1b2430">province</text>
+<text x="446" y="387.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">text?</text>
+<rect x="121" y="393" width="334" height="19" fill="#f4f6fa"/>
+<text x="152" y="406.5" font-size="12.2" font-weight="400" fill="#1b2430">city</text>
+<text x="446" y="406.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">text</text>
+<text x="152" y="425.5" font-size="12.2" font-weight="400" fill="#1b2430">barangay</text>
+<text x="446" y="425.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">text?</text>
+<rect x="121" y="431" width="334" height="19" fill="#f4f6fa"/>
+<text x="152" y="444.5" font-size="12.2" font-weight="400" fill="#1b2430">street_details</text>
+<text x="446" y="444.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">text</text>
+<text x="152" y="463.5" font-size="12.2" font-weight="400" fill="#1b2430">postal_code</text>
+<text x="446" y="463.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">text</text>
+<rect x="121" y="469" width="334" height="19" fill="#f4f6fa"/>
+<text x="152" y="482.5" font-size="12.2" font-weight="400" fill="#1b2430">country</text>
+<text x="446" y="482.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">text</text>
+<text x="152" y="501.5" font-size="12.2" font-weight="400" fill="#1b2430">is_default</text>
+<text x="446" y="501.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">bool</text>
+<rect x="121" y="507" width="334" height="19" fill="#f4f6fa"/>
+<text x="152" y="520.5" font-size="12.2" font-weight="400" fill="#1b2430">created_at</text>
+<text x="446" y="520.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">timestamptz</text>
+<text x="152" y="539.5" font-size="12.2" font-weight="400" fill="#1b2430">updated_at</text>
+<text x="446" y="539.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">timestamptz</text>
+</g>
+<g>
+<rect x="122" y="600" width="336" height="207" rx="8" fill="#0b1220" opacity=".10"/>
+<rect x="120" y="597" width="336" height="207" rx="8" fill="#ffffff" stroke="#3b5bdb" stroke-width="1.6"/>
+<path d="M120,627 V605 a8,8 0 0 1 8,-8 H448 a8,8 0 0 1 8,8 V627 Z" fill="#3b5bdb"/>
+<text x="130" y="617" font-size="14.5" font-weight="700" fill="#fff">buyer_preferences</text>
+<text x="446" y="617" font-size="11" fill="#ffffffcc" text-anchor="end">2 rows</text>
+<text x="130" y="640.5" font-size="9.5" font-weight="700" fill="#e8590c" font-family="'DejaVu Sans Mono', Menlo, monospace">PK</text>
+<text x="146" y="640.5" font-size="9.5" font-weight="700" fill="#e03131" font-family="'DejaVu Sans Mono', Menlo, monospace">FK</text>
+<text x="164" y="640.5" font-size="12.2" font-weight="600" fill="#1b2430">user_id</text>
+<text x="446" y="640.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">uuid</text>
+<rect x="121" y="646" width="334" height="19" fill="#f4f6fa"/>
+<text x="152" y="659.5" font-size="12.2" font-weight="400" fill="#1b2430">order_updates</text>
+<text x="446" y="659.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">bool</text>
+<text x="152" y="678.5" font-size="12.2" font-weight="400" fill="#1b2430">promotions</text>
+<text x="446" y="678.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">bool</text>
+<rect x="121" y="684" width="334" height="19" fill="#f4f6fa"/>
+<text x="152" y="697.5" font-size="12.2" font-weight="400" fill="#1b2430">push_enabled</text>
+<text x="446" y="697.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">bool</text>
+<text x="152" y="716.5" font-size="12.2" font-weight="400" fill="#1b2430">email_enabled</text>
+<text x="446" y="716.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">bool</text>
+<rect x="121" y="722" width="334" height="19" fill="#f4f6fa"/>
+<text x="152" y="735.5" font-size="12.2" font-weight="400" fill="#1b2430">sms_enabled</text>
+<text x="446" y="735.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">bool</text>
+<text x="152" y="754.5" font-size="12.2" font-weight="400" fill="#1b2430">default_payment_method</text>
+<text x="446" y="754.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">text?</text>
+<rect x="121" y="760" width="334" height="19" fill="#f4f6fa"/>
+<text x="152" y="773.5" font-size="12.2" font-weight="400" fill="#1b2430">created_at</text>
+<text x="446" y="773.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">timestamptz</text>
+<text x="152" y="792.5" font-size="12.2" font-weight="400" fill="#1b2430">updated_at</text>
+<text x="446" y="792.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">timestamptz</text>
+</g>
+<g>
+<rect x="122" y="853" width="336" height="112" rx="8" fill="#0b1220" opacity=".10"/>
+<rect x="120" y="850" width="336" height="112" rx="8" fill="#ffffff" stroke="#7048e8" stroke-width="1.6"/>
+<path d="M120,880 V858 a8,8 0 0 1 8,-8 H448 a8,8 0 0 1 8,8 V880 Z" fill="#7048e8"/>
+<text x="130" y="870" font-size="14.5" font-weight="700" fill="#fff">carts</text>
+<text x="446" y="870" font-size="11" fill="#ffffffcc" text-anchor="end">13 rows</text>
+<text x="130" y="893.5" font-size="9.5" font-weight="700" fill="#e8590c" font-family="'DejaVu Sans Mono', Menlo, monospace">PK</text>
+<text x="152" y="893.5" font-size="12.2" font-weight="600" fill="#1b2430">id</text>
+<text x="446" y="893.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">uuid</text>
+<rect x="121" y="899" width="334" height="19" fill="#f4f6fa"/>
+<text x="130" y="912.5" font-size="9.5" font-weight="700" fill="#e03131" font-family="'DejaVu Sans Mono', Menlo, monospace">FK</text>
+<text x="152" y="912.5" font-size="12.2" font-weight="400" fill="#1b2430">user_id</text>
+<text x="446" y="912.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">uuid</text>
+<text x="152" y="931.5" font-size="12.2" font-weight="400" fill="#1b2430">created_at</text>
+<text x="446" y="931.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">timestamptz</text>
+<rect x="121" y="937" width="334" height="19" fill="#f4f6fa"/>
+<text x="152" y="950.5" font-size="12.2" font-weight="400" fill="#1b2430">updated_at</text>
+<text x="446" y="950.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">timestamptz</text>
+</g>
+<g>
+<rect x="122" y="1011" width="336" height="169" rx="8" fill="#0b1220" opacity=".10"/>
+<rect x="120" y="1008" width="336" height="169" rx="8" fill="#ffffff" stroke="#7048e8" stroke-width="1.6"/>
+<path d="M120,1038 V1016 a8,8 0 0 1 8,-8 H448 a8,8 0 0 1 8,8 V1038 Z" fill="#7048e8"/>
+<text x="130" y="1028" font-size="14.5" font-weight="700" fill="#fff">cart_items</text>
+<text x="446" y="1028" font-size="11" fill="#ffffffcc" text-anchor="end">13 rows</text>
+<text x="130" y="1051.5" font-size="9.5" font-weight="700" fill="#e8590c" font-family="'DejaVu Sans Mono', Menlo, monospace">PK</text>
+<text x="152" y="1051.5" font-size="12.2" font-weight="600" fill="#1b2430">id</text>
+<text x="446" y="1051.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">uuid</text>
+<rect x="121" y="1057" width="334" height="19" fill="#f4f6fa"/>
+<text x="130" y="1070.5" font-size="9.5" font-weight="700" fill="#e03131" font-family="'DejaVu Sans Mono', Menlo, monospace">FK</text>
+<text x="152" y="1070.5" font-size="12.2" font-weight="400" fill="#1b2430">cart_id</text>
+<text x="446" y="1070.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">uuid</text>
+<text x="130" y="1089.5" font-size="9.5" font-weight="700" fill="#e03131" font-family="'DejaVu Sans Mono', Menlo, monospace">FK</text>
+<text x="152" y="1089.5" font-size="12.2" font-weight="400" fill="#1b2430">product_id</text>
+<text x="446" y="1089.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">uuid</text>
+<rect x="121" y="1095" width="334" height="19" fill="#f4f6fa"/>
+<text x="130" y="1108.5" font-size="9.5" font-weight="700" fill="#e03131" font-family="'DejaVu Sans Mono', Menlo, monospace">FK</text>
+<text x="152" y="1108.5" font-size="12.2" font-weight="400" fill="#1b2430">variant_id</text>
+<text x="446" y="1108.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">uuid?</text>
+<text x="152" y="1127.5" font-size="12.2" font-weight="400" fill="#1b2430">quantity</text>
+<text x="446" y="1127.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">int4</text>
+<rect x="121" y="1133" width="334" height="19" fill="#f4f6fa"/>
+<text x="152" y="1146.5" font-size="12.2" font-weight="400" fill="#1b2430">created_at</text>
+<text x="446" y="1146.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">timestamptz</text>
+<text x="152" y="1165.5" font-size="12.2" font-weight="400" fill="#1b2430">updated_at</text>
+<text x="446" y="1165.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">timestamptz</text>
+</g>
+<g>
+<rect x="122" y="1226" width="336" height="112" rx="8" fill="#0b1220" opacity=".10"/>
+<rect x="120" y="1223" width="336" height="112" rx="8" fill="#ffffff" stroke="#7048e8" stroke-width="1.6"/>
+<path d="M120,1253 V1231 a8,8 0 0 1 8,-8 H448 a8,8 0 0 1 8,8 V1253 Z" fill="#7048e8"/>
+<text x="130" y="1243" font-size="14.5" font-weight="700" fill="#fff">wishlists</text>
+<text x="446" y="1243" font-size="11" fill="#ffffffcc" text-anchor="end">5 rows</text>
+<text x="130" y="1266.5" font-size="9.5" font-weight="700" fill="#e8590c" font-family="'DejaVu Sans Mono', Menlo, monospace">PK</text>
+<text x="152" y="1266.5" font-size="12.2" font-weight="600" fill="#1b2430">id</text>
+<text x="446" y="1266.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">uuid</text>
+<rect x="121" y="1272" width="334" height="19" fill="#f4f6fa"/>
+<text x="130" y="1285.5" font-size="9.5" font-weight="700" fill="#e03131" font-family="'DejaVu Sans Mono', Menlo, monospace">FK</text>
+<text x="152" y="1285.5" font-size="12.2" font-weight="400" fill="#1b2430">user_id</text>
+<text x="446" y="1285.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">uuid</text>
+<text x="130" y="1304.5" font-size="9.5" font-weight="700" fill="#e03131" font-family="'DejaVu Sans Mono', Menlo, monospace">FK</text>
+<text x="152" y="1304.5" font-size="12.2" font-weight="400" fill="#1b2430">product_id</text>
+<text x="446" y="1304.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">uuid</text>
+<rect x="121" y="1310" width="334" height="19" fill="#f4f6fa"/>
+<text x="152" y="1323.5" font-size="12.2" font-weight="400" fill="#1b2430">created_at</text>
+<text x="446" y="1323.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">timestamptz</text>
+</g>
+<g>
+<rect x="638" y="173" width="336" height="302" rx="8" fill="#0b1220" opacity=".10"/>
+<rect x="636" y="170" width="336" height="302" rx="8" fill="#ffffff" stroke="#3b5bdb" stroke-width="1.6"/>
+<path d="M636,200 V178 a8,8 0 0 1 8,-8 H964 a8,8 0 0 1 8,8 V200 Z" fill="#3b5bdb"/>
+<text x="646" y="190" font-size="14.5" font-weight="700" fill="#fff">profiles</text>
+<text x="962" y="190" font-size="11" fill="#ffffffcc" text-anchor="end">18 rows</text>
+<text x="646" y="213.5" font-size="9.5" font-weight="700" fill="#e8590c" font-family="'DejaVu Sans Mono', Menlo, monospace">PK</text>
+<text x="662" y="213.5" font-size="9.5" font-weight="700" fill="#e03131" font-family="'DejaVu Sans Mono', Menlo, monospace">FK</text>
+<text x="680" y="213.5" font-size="12.2" font-weight="600" fill="#1b2430">id</text>
+<text x="962" y="213.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">uuid</text>
+<rect x="637" y="219" width="334" height="19" fill="#f4f6fa"/>
+<text x="668" y="232.5" font-size="12.2" font-weight="400" fill="#1b2430">role</text>
+<text x="962" y="232.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">user_role</text>
+<text x="668" y="251.5" font-size="12.2" font-weight="400" fill="#1b2430">full_name</text>
+<text x="962" y="251.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">text?</text>
+<rect x="637" y="257" width="334" height="19" fill="#f4f6fa"/>
+<text x="646" y="270.5" font-size="9.5" font-weight="700" fill="#6741d9" font-family="'DejaVu Sans Mono', Menlo, monospace">UQ</text>
+<text x="668" y="270.5" font-size="12.2" font-weight="400" fill="#1b2430">username</text>
+<text x="962" y="270.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">text?</text>
+<text x="668" y="289.5" font-size="12.2" font-weight="400" fill="#1b2430">avatar_url</text>
+<text x="962" y="289.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">text?</text>
+<rect x="637" y="295" width="334" height="19" fill="#f4f6fa"/>
+<text x="668" y="308.5" font-size="12.2" font-weight="400" fill="#1b2430">phone</text>
+<text x="962" y="308.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">text?</text>
+<text x="668" y="327.5" font-size="12.2" font-weight="400" fill="#1b2430">bio</text>
+<text x="962" y="327.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">text?</text>
+<rect x="637" y="333" width="334" height="19" fill="#f4f6fa"/>
+<text x="668" y="346.5" font-size="12.2" font-weight="400" fill="#1b2430">created_at</text>
+<text x="962" y="346.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">timestamptz</text>
+<text x="668" y="365.5" font-size="12.2" font-weight="400" fill="#1b2430">updated_at</text>
+<text x="962" y="365.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">timestamptz</text>
+<rect x="637" y="371" width="334" height="19" fill="#f4f6fa"/>
+<text x="668" y="384.5" font-size="12.2" font-weight="400" fill="#1b2430">payment_qr_url</text>
+<text x="962" y="384.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">text?</text>
+<text x="668" y="403.5" font-size="12.2" font-weight="400" fill="#1b2430">is_active</text>
+<text x="962" y="403.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">bool</text>
+<rect x="637" y="409" width="334" height="19" fill="#f4f6fa"/>
+<text x="668" y="422.5" font-size="12.2" font-weight="400" fill="#1b2430">username_changed_at</text>
+<text x="962" y="422.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">timestamptz?</text>
+<text x="668" y="441.5" font-size="12.2" font-weight="400" fill="#1b2430">gender</text>
+<text x="962" y="441.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">gender_type?</text>
+<rect x="637" y="447" width="334" height="19" fill="#f4f6fa"/>
+<text x="668" y="460.5" font-size="12.2" font-weight="400" fill="#1b2430">date_of_birth</text>
+<text x="962" y="460.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">date?</text>
+</g>
+<g>
+<rect x="638" y="521" width="336" height="112" rx="8" fill="#0b1220" opacity=".10"/>
+<rect x="636" y="518" width="336" height="112" rx="8" fill="#ffffff" stroke="#3b5bdb" stroke-width="1.6"/>
+<path d="M636,548 V526 a8,8 0 0 1 8,-8 H964 a8,8 0 0 1 8,8 V548 Z" fill="#3b5bdb"/>
+<text x="646" y="538" font-size="14.5" font-weight="700" fill="#fff">shop_users</text>
+<text x="962" y="538" font-size="11" fill="#ffffffcc" text-anchor="end">5 rows</text>
+<text x="646" y="561.5" font-size="9.5" font-weight="700" fill="#e8590c" font-family="'DejaVu Sans Mono', Menlo, monospace">PK</text>
+<text x="668" y="561.5" font-size="12.2" font-weight="600" fill="#1b2430">id</text>
+<text x="962" y="561.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">uuid</text>
+<rect x="637" y="567" width="334" height="19" fill="#f4f6fa"/>
+<text x="646" y="580.5" font-size="9.5" font-weight="700" fill="#e03131" font-family="'DejaVu Sans Mono', Menlo, monospace">FK</text>
+<text x="668" y="580.5" font-size="12.2" font-weight="400" fill="#1b2430">shop_id</text>
+<text x="962" y="580.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">uuid</text>
+<text x="646" y="599.5" font-size="9.5" font-weight="700" fill="#e03131" font-family="'DejaVu Sans Mono', Menlo, monospace">FK</text>
+<text x="668" y="599.5" font-size="12.2" font-weight="400" fill="#1b2430">user_id</text>
+<text x="962" y="599.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">uuid</text>
+<rect x="637" y="605" width="334" height="19" fill="#f4f6fa"/>
+<text x="668" y="618.5" font-size="12.2" font-weight="400" fill="#1b2430">created_at</text>
+<text x="962" y="618.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">timestamptz</text>
+</g>
+<g>
+<rect x="638" y="679" width="336" height="207" rx="8" fill="#0b1220" opacity=".10"/>
+<rect x="636" y="676" width="336" height="207" rx="8" fill="#ffffff" stroke="#3b5bdb" stroke-width="1.6"/>
+<path d="M636,706 V684 a8,8 0 0 1 8,-8 H964 a8,8 0 0 1 8,8 V706 Z" fill="#3b5bdb"/>
+<text x="646" y="696" font-size="14.5" font-weight="700" fill="#fff">shops</text>
+<text x="962" y="696" font-size="11" fill="#ffffffcc" text-anchor="end">3 rows</text>
+<text x="646" y="719.5" font-size="9.5" font-weight="700" fill="#e8590c" font-family="'DejaVu Sans Mono', Menlo, monospace">PK</text>
+<text x="668" y="719.5" font-size="12.2" font-weight="600" fill="#1b2430">id</text>
+<text x="962" y="719.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">uuid</text>
+<rect x="637" y="725" width="334" height="19" fill="#f4f6fa"/>
+<text x="668" y="738.5" font-size="12.2" font-weight="400" fill="#1b2430">name</text>
+<text x="962" y="738.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">text</text>
+<text x="646" y="757.5" font-size="9.5" font-weight="700" fill="#6741d9" font-family="'DejaVu Sans Mono', Menlo, monospace">UQ</text>
+<text x="668" y="757.5" font-size="12.2" font-weight="400" fill="#1b2430">slug</text>
+<text x="962" y="757.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">text</text>
+<rect x="637" y="763" width="334" height="19" fill="#f4f6fa"/>
+<text x="668" y="776.5" font-size="12.2" font-weight="400" fill="#1b2430">active</text>
+<text x="962" y="776.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">bool</text>
+<text x="668" y="795.5" font-size="12.2" font-weight="400" fill="#1b2430">created_at</text>
+<text x="962" y="795.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">timestamptz</text>
+<rect x="637" y="801" width="334" height="19" fill="#f4f6fa"/>
+<text x="668" y="814.5" font-size="12.2" font-weight="400" fill="#1b2430">updated_at</text>
+<text x="962" y="814.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">timestamptz</text>
+<text x="668" y="833.5" font-size="12.2" font-weight="400" fill="#1b2430">logo_url</text>
+<text x="962" y="833.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">text?</text>
+<rect x="637" y="839" width="334" height="19" fill="#f4f6fa"/>
+<text x="668" y="852.5" font-size="12.2" font-weight="400" fill="#1b2430">banner_url</text>
+<text x="962" y="852.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">text?</text>
+<text x="668" y="871.5" font-size="12.2" font-weight="400" fill="#1b2430">description</text>
+<text x="962" y="871.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">text?</text>
+</g>
+<g>
+<rect x="638" y="932" width="336" height="169" rx="8" fill="#0b1220" opacity=".10"/>
+<rect x="636" y="929" width="336" height="169" rx="8" fill="#ffffff" stroke="#3b5bdb" stroke-width="1.6"/>
+<path d="M636,959 V937 a8,8 0 0 1 8,-8 H964 a8,8 0 0 1 8,8 V959 Z" fill="#3b5bdb"/>
+<text x="646" y="949" font-size="14.5" font-weight="700" fill="#fff">admin_action_log</text>
+<text x="962" y="949" font-size="11" fill="#ffffffcc" text-anchor="end">36 rows</text>
+<text x="646" y="972.5" font-size="9.5" font-weight="700" fill="#e8590c" font-family="'DejaVu Sans Mono', Menlo, monospace">PK</text>
+<text x="668" y="972.5" font-size="12.2" font-weight="600" fill="#1b2430">id</text>
+<text x="962" y="972.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">uuid</text>
+<rect x="637" y="978" width="334" height="19" fill="#f4f6fa"/>
+<text x="646" y="991.5" font-size="9.5" font-weight="700" fill="#f08c00" font-family="'DejaVu Sans Mono', Menlo, monospace">FK</text>
+<text x="668" y="991.5" font-size="12.2" font-weight="400" fill="#1b2430">actor_id</text>
+<text x="962" y="991.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">uuid?</text>
+<text x="668" y="1010.5" font-size="12.2" font-weight="400" fill="#1b2430">action</text>
+<text x="962" y="1010.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">text</text>
+<rect x="637" y="1016" width="334" height="19" fill="#f4f6fa"/>
+<text x="646" y="1029.5" font-size="9.5" font-weight="700" fill="#f08c00" font-family="'DejaVu Sans Mono', Menlo, monospace">FK</text>
+<text x="668" y="1029.5" font-size="12.2" font-weight="400" fill="#1b2430">target_user_id</text>
+<text x="962" y="1029.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">uuid?</text>
+<text x="646" y="1048.5" font-size="9.5" font-weight="700" fill="#f08c00" font-family="'DejaVu Sans Mono', Menlo, monospace">FK</text>
+<text x="668" y="1048.5" font-size="12.2" font-weight="400" fill="#1b2430">target_shop_id</text>
+<text x="962" y="1048.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">uuid?</text>
+<rect x="637" y="1054" width="334" height="19" fill="#f4f6fa"/>
+<text x="668" y="1067.5" font-size="12.2" font-weight="400" fill="#1b2430">metadata</text>
+<text x="962" y="1067.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">jsonb?</text>
+<text x="668" y="1086.5" font-size="12.2" font-weight="400" fill="#1b2430">created_at</text>
+<text x="962" y="1086.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">timestamptz</text>
+</g>
+<g>
+<rect x="1154" y="173" width="336" height="74" rx="8" fill="#0b1220" opacity=".10"/>
+<rect x="1152" y="170" width="336" height="74" rx="8" fill="#ffffff" stroke="#0b7285" stroke-width="1.6"/>
+<path d="M1152,200 V178 a8,8 0 0 1 8,-8 H1480 a8,8 0 0 1 8,8 V200 Z" fill="#0b7285"/>
+<text x="1162" y="190" font-size="14.5" font-weight="700" fill="#fff">products</text>
+<text x="1478" y="190" font-size="11" fill="#ffffffcc" text-anchor="end">100 rows</text>
+<text x="1162" y="213.5" font-size="9.5" font-weight="700" fill="#e8590c" font-family="'DejaVu Sans Mono', Menlo, monospace">PK</text>
+<text x="1184" y="213.5" font-size="12.2" font-weight="600" fill="#1b2430">id</text>
+<text x="1478" y="213.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">uuid</text>
+<text x="1184" y="232" font-size="10.5" fill="#868e96" font-style="italic">(columns omitted — see main diagram)</text>
+</g>
+<g>
+<rect x="1154" y="293" width="336" height="74" rx="8" fill="#0b1220" opacity=".10"/>
+<rect x="1152" y="290" width="336" height="74" rx="8" fill="#ffffff" stroke="#0b7285" stroke-width="1.6"/>
+<path d="M1152,320 V298 a8,8 0 0 1 8,-8 H1480 a8,8 0 0 1 8,8 V320 Z" fill="#0b7285"/>
+<text x="1162" y="310" font-size="14.5" font-weight="700" fill="#fff">product_variants</text>
+<text x="1478" y="310" font-size="11" fill="#ffffffcc" text-anchor="end">0 rows</text>
+<text x="1162" y="333.5" font-size="9.5" font-weight="700" fill="#e8590c" font-family="'DejaVu Sans Mono', Menlo, monospace">PK</text>
+<text x="1184" y="333.5" font-size="12.2" font-weight="600" fill="#1b2430">id</text>
+<text x="1478" y="333.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">uuid</text>
+<text x="1184" y="352" font-size="10.5" fill="#868e96" font-style="italic">(columns omitted — see main diagram)</text>
+</g>
+<g>
+<rect x="1154" y="413" width="336" height="74" rx="8" fill="#0b1220" opacity=".10"/>
+<rect x="1152" y="410" width="336" height="74" rx="8" fill="#ffffff" stroke="#c2410c" stroke-width="1.6"/>
+<path d="M1152,440 V418 a8,8 0 0 1 8,-8 H1480 a8,8 0 0 1 8,8 V440 Z" fill="#c2410c"/>
+<text x="1162" y="430" font-size="14.5" font-weight="700" fill="#fff">orders</text>
+<text x="1478" y="430" font-size="11" fill="#ffffffcc" text-anchor="end">163 rows</text>
+<text x="1162" y="453.5" font-size="9.5" font-weight="700" fill="#e8590c" font-family="'DejaVu Sans Mono', Menlo, monospace">PK</text>
+<text x="1184" y="453.5" font-size="12.2" font-weight="600" fill="#1b2430">id</text>
+<text x="1478" y="453.5" font-size="11" fill="#6b7785" text-anchor="end" font-family="'DejaVu Sans Mono', Menlo, monospace">uuid</text>
+<text x="1184" y="472" font-size="10.5" fill="#868e96" font-style="italic">(columns omitted — see main diagram)</text>
+</g>
+<path d="M636,209.5 l-12,-6 M636,209.5 l-12,6 M636,209.5 l-12,0" stroke="#e03131" stroke-width="1.7" fill="none"/>
+<path d="M464,143.5 v12" stroke="#e03131" stroke-width="2" fill="none"/>
+<circle cx="636" cy="209.5" r="2.2" fill="#e03131"/><circle cx="456" cy="149.5" r="2.2" fill="#e03131"/>
+<path d="M456,288.5 l12,-6 M456,288.5 l12,6 M456,288.5 l12,0" stroke="#e03131" stroke-width="1.7" fill="none"/>
+<path d="M628,203.5 v12" stroke="#e03131" stroke-width="2" fill="none"/>
+<circle cx="456" cy="288.5" r="2.2" fill="#e03131"/><circle cx="636" cy="209.5" r="2.2" fill="#e03131"/>
+<path d="M456,636.5 l12,-6 M456,636.5 l12,6 M456,636.5 l12,0" stroke="#e03131" stroke-width="1.7" fill="none"/>
+<path d="M628,203.5 v12" stroke="#e03131" stroke-width="2" fill="none"/>
+<circle cx="456" cy="636.5" r="2.2" fill="#e03131"/><circle cx="636" cy="209.5" r="2.2" fill="#e03131"/>
+<path d="M972,987.5 l12,-6 M972,987.5 l12,6 M972,987.5 l12,0" stroke="#f08c00" stroke-width="1.7" fill="none"/>
+<path d="M980,203.5 v12" stroke="#f08c00" stroke-width="2" fill="none"/>
+<circle cx="972" cy="987.5" r="2.2" fill="#f08c00"/><circle cx="972" cy="209.5" r="2.2" fill="#f08c00"/>
+<path d="M972,1025.5 l12,-6 M972,1025.5 l12,6 M972,1025.5 l12,0" stroke="#f08c00" stroke-width="1.7" fill="none"/>
+<path d="M980,203.5 v12" stroke="#f08c00" stroke-width="2" fill="none"/>
+<circle cx="972" cy="1025.5" r="2.2" fill="#f08c00"/><circle cx="972" cy="209.5" r="2.2" fill="#f08c00"/>
+<path d="M972,1044.5 l12,-6 M972,1044.5 l12,6 M972,1044.5 l12,0" stroke="#f08c00" stroke-width="1.7" fill="none"/>
+<path d="M980,709.5 v12" stroke="#f08c00" stroke-width="2" fill="none"/>
+<circle cx="972" cy="1044.5" r="2.2" fill="#f08c00"/><circle cx="972" cy="715.5" r="2.2" fill="#f08c00"/>
+<path d="M972,576.5 l12,-6 M972,576.5 l12,6 M972,576.5 l12,0" stroke="#e03131" stroke-width="1.7" fill="none"/>
+<path d="M980,709.5 v12" stroke="#e03131" stroke-width="2" fill="none"/>
+<circle cx="972" cy="576.5" r="2.2" fill="#e03131"/><circle cx="972" cy="715.5" r="2.2" fill="#e03131"/>
+<path d="M972,595.5 l12,-6 M972,595.5 l12,6 M972,595.5 l12,0" stroke="#e03131" stroke-width="1.7" fill="none"/>
+<path d="M980,203.5 v12" stroke="#e03131" stroke-width="2" fill="none"/>
+<circle cx="972" cy="595.5" r="2.2" fill="#e03131"/><circle cx="972" cy="209.5" r="2.2" fill="#e03131"/>
+<path d="M456,908.5 l12,-6 M456,908.5 l12,6 M456,908.5 l12,0" stroke="#e03131" stroke-width="1.7" fill="none"/>
+<path d="M628,203.5 v12" stroke="#e03131" stroke-width="2" fill="none"/>
+<circle cx="456" cy="908.5" r="2.2" fill="#e03131"/><circle cx="636" cy="209.5" r="2.2" fill="#e03131"/>
+<path d="M456,1066.5 l12,-6 M456,1066.5 l12,6 M456,1066.5 l12,0" stroke="#e03131" stroke-width="1.7" fill="none"/>
+<path d="M464,883.5 v12" stroke="#e03131" stroke-width="2" fill="none"/>
+<circle cx="456" cy="1066.5" r="2.2" fill="#e03131"/><circle cx="456" cy="889.5" r="2.2" fill="#e03131"/>
+<path d="M456,1085.5 l12,-6 M456,1085.5 l12,6 M456,1085.5 l12,0" stroke="#e03131" stroke-width="1.7" fill="none"/>
+<path d="M1144,203.5 v12" stroke="#e03131" stroke-width="2" fill="none"/>
+<circle cx="456" cy="1085.5" r="2.2" fill="#e03131"/><circle cx="1152" cy="209.5" r="2.2" fill="#e03131"/>
+<path d="M456,1104.5 l12,-6 M456,1104.5 l12,6 M456,1104.5 l12,0" stroke="#e03131" stroke-width="1.7" fill="none"/>
+<path d="M1144,323.5 v12" stroke="#e03131" stroke-width="2" fill="none"/>
+<circle cx="456" cy="1104.5" r="2.2" fill="#e03131"/><circle cx="1152" cy="329.5" r="2.2" fill="#e03131"/>
+<path d="M456,1281.5 l12,-6 M456,1281.5 l12,6 M456,1281.5 l12,0" stroke="#e03131" stroke-width="1.7" fill="none"/>
+<path d="M628,203.5 v12" stroke="#e03131" stroke-width="2" fill="none"/>
+<circle cx="456" cy="1281.5" r="2.2" fill="#e03131"/><circle cx="636" cy="209.5" r="2.2" fill="#e03131"/>
+<path d="M456,1300.5 l12,-6 M456,1300.5 l12,6 M456,1300.5 l12,0" stroke="#e03131" stroke-width="1.7" fill="none"/>
+<path d="M1144,203.5 v12" stroke="#e03131" stroke-width="2" fill="none"/>
+<circle cx="456" cy="1300.5" r="2.2" fill="#e03131"/><circle cx="1152" cy="209.5" r="2.2" fill="#e03131"/>
+<path d="M1152,209.5 l-12,-6 M1152,209.5 l-12,6 M1152,209.5 l-12,0" stroke="#f08c00" stroke-width="1.7" fill="none"/>
+<path d="M980,203.5 v12" stroke="#f08c00" stroke-width="2" fill="none"/>
+<circle cx="1152" cy="209.5" r="2.2" fill="#f08c00"/><circle cx="972" cy="209.5" r="2.2" fill="#f08c00"/>
+<path d="M1152,209.5 l-12,-6 M1152,209.5 l-12,6 M1152,209.5 l-12,0" stroke="#f08c00" stroke-width="1.7" fill="none"/>
+<path d="M980,709.5 v12" stroke="#f08c00" stroke-width="2" fill="none"/>
+<circle cx="1152" cy="209.5" r="2.2" fill="#f08c00"/><circle cx="972" cy="715.5" r="2.2" fill="#f08c00"/>
+<path d="M1152,329.5 l-12,-6 M1152,329.5 l-12,6 M1152,329.5 l-12,0" stroke="#f08c00" stroke-width="1.7" fill="none"/>
+<path d="M980,203.5 v12" stroke="#f08c00" stroke-width="2" fill="none"/>
+<circle cx="1152" cy="329.5" r="2.2" fill="#f08c00"/><circle cx="972" cy="209.5" r="2.2" fill="#f08c00"/>
+<path d="M1152,329.5 l-12,-6 M1152,329.5 l-12,6 M1152,329.5 l-12,0" stroke="#f08c00" stroke-width="1.7" fill="none"/>
+<path d="M980,709.5 v12" stroke="#f08c00" stroke-width="2" fill="none"/>
+<circle cx="1152" cy="329.5" r="2.2" fill="#f08c00"/><circle cx="972" cy="715.5" r="2.2" fill="#f08c00"/>
+<path d="M1152,449.5 l-12,-6 M1152,449.5 l-12,6 M1152,449.5 l-12,0" stroke="#1971c2" stroke-width="1.7" fill="none"/>
+<path d="M980,203.5 v12" stroke="#1971c2" stroke-width="2" fill="none"/>
+<circle cx="1152" cy="449.5" r="2.2" fill="#1971c2"/><circle cx="972" cy="209.5" r="2.2" fill="#1971c2"/>
+<path d="M1152,449.5 l-12,-6 M1152,449.5 l-12,6 M1152,449.5 l-12,0" stroke="#f08c00" stroke-width="1.7" fill="none"/>
+<path d="M980,203.5 v12" stroke="#f08c00" stroke-width="2" fill="none"/>
+<circle cx="1152" cy="449.5" r="2.2" fill="#f08c00"/><circle cx="972" cy="209.5" r="2.2" fill="#f08c00"/>
+<path d="M1152,449.5 l-12,-6 M1152,449.5 l-12,6 M1152,449.5 l-12,0" stroke="#5c7080" stroke-width="1.7" fill="none"/>
+<path d="M980,709.5 v12" stroke="#5c7080" stroke-width="2" fill="none"/>
+<circle cx="1152" cy="449.5" r="2.2" fill="#5c7080"/><circle cx="972" cy="715.5" r="2.2" fill="#5c7080"/>
+<rect x="40" y="1415" width="1528" height="151" rx="10" fill="#fff" stroke="#d5dbe3"/>
+<text x="58" y="1441" font-size="13" font-weight="700" fill="#16202c">Legend</text>
+<line x1="58" y1="1461" x2="92" y2="1461" stroke="#e03131" stroke-width="3"/>
+<text x="100" y="1465" font-size="12" fill="#2b3642">ON DELETE CASCADE</text>
+<line x1="248" y1="1461" x2="282" y2="1461" stroke="#f08c00" stroke-width="3"/>
+<text x="290" y="1465" font-size="12" fill="#2b3642">ON DELETE SET NULL</text>
+<line x1="438" y1="1461" x2="472" y2="1461" stroke="#1971c2" stroke-width="3"/>
+<text x="480" y="1465" font-size="12" fill="#2b3642">ON DELETE RESTRICT</text>
+<line x1="628" y1="1461" x2="662" y2="1461" stroke="#5c7080" stroke-width="3"/>
+<text x="670" y="1465" font-size="12" fill="#2b3642">ON DELETE NO ACTION</text>
+<line x1="818" y1="1461" x2="852" y2="1461" stroke="#868e96" stroke-width="2" stroke-dasharray="6 5"/>
+<text x="860" y="1465" font-size="12" fill="#2b3642">logical link (no FK constraint)</text>
+<text x="58" y="1493" font-size="11" font-weight="700" fill="#e8590c" font-family="'DejaVu Sans Mono', Menlo, monospace">PK</text>
+<text x="82" y="1493" font-size="12" fill="#2b3642">primary key</text>
+<text x="318" y="1493" font-size="11" font-weight="700" fill="#e03131" font-family="'DejaVu Sans Mono', Menlo, monospace">FK</text>
+<text x="342" y="1493" font-size="12" fill="#2b3642">foreign key (color = delete rule)</text>
+<text x="578" y="1493" font-size="11" font-weight="700" fill="#6741d9" font-family="'DejaVu Sans Mono', Menlo, monospace">UQ</text>
+<text x="602" y="1493" font-size="12" fill="#2b3642">unique column</text>
+<text x="838" y="1493" font-size="11" font-weight="700" fill="#6b7785" font-family="'DejaVu Sans Mono', Menlo, monospace">type?</text>
+<text x="884" y="1493" font-size="12" fill="#2b3642">nullable column (no ? = NOT NULL)</text>
+<text x="58" y="1517" font-size="12" fill="#2b3642">Crow's foot = many (child FK column) · bar = one (referenced PK) · row counts = exact COUNT(*) at audit time</text>
+<rect x="58" y="1534" width="12" height="12" rx="3" fill="#3b5bdb"/>
+<text x="76" y="1544" font-size="12" fill="#2b3642">Identity, shops &amp; admin</text>
+<rect x="268.20000000000005" y="1534" width="12" height="12" rx="3" fill="#7048e8"/>
+<text x="286.20000000000005" y="1544" font-size="12" fill="#2b3642">Cart &amp; wishlist</text>
+<rect x="419.20000000000005" y="1534" width="12" height="12" rx="3" fill="#0b7285"/>
+<text x="437.20000000000005" y="1544" font-size="12" fill="#2b3642">Catalog</text>
+<rect x="511.00000000000006" y="1534" width="12" height="12" rx="3" fill="#c2410c"/>
+<text x="529.0" y="1544" font-size="12" fill="#2b3642">Orders &amp; reviews</text>
+<rect x="669.4000000000001" y="1534" width="12" height="12" rx="3" fill="#868e96"/>
+<text x="687.4000000000001" y="1544" font-size="12" fill="#2b3642">Supabase Auth (external)</text>
+</svg>
