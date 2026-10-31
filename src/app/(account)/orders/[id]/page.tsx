@@ -14,6 +14,8 @@ import { OrderHeader } from "@/features/orders/components/OrderHeader";
 import { OrderItemsList } from "@/features/orders/components/OrderItemsList";
 import { OrderSummary } from "@/features/orders/components/OrderSummary";
 import { OrderTimeline } from "@/features/orders/components/OrderTimeline";
+import { ContactSellerDock } from "@/features/messages";
+import { getOrderStatusLabel } from "@/features/orders";
 import { PaymentStatusBadge } from "@/features/orders/components/PaymentStatusBadge";
 import { ReceiptConfirmedNotice } from "@/features/orders/components/ReceiptConfirmedNotice";
 import { SellerShopRow } from "@/features/orders/components/SellerShopRow";
@@ -34,6 +36,7 @@ import {
   getReturnRequestForOrder,
   getShopMembershipBySellerIds,
   listMyReviewsByOrderItem,
+  listOrderMessages,
   requireSessionUser,
 } from "@/lib/supabase/queries";
 import { ORDER_STATUS } from "@/constants/status";
@@ -190,6 +193,26 @@ export default async function OrderDetailPage({
     ? await getOrderShipment(order.id).catch(() => null)
     : null;
 
+  // Contact Seller — the order's buyer<->shop conversation. Only when there is
+  // a seller to reach. The buyer sees seller/admin messages attributed to the
+  // shop name, never an individual staff member (the sender_id is kept
+  // server-side for audit and deliberately not forwarded to this view).
+  const canContactSeller = Boolean(order.sellerId);
+  const messageViews = canContactSeller
+    ? (await listOrderMessages(order.id).catch(() => [])).map((message) => ({
+        id: message.id,
+        body: message.body,
+        createdAt: message.createdAt,
+        isOwn: message.senderId === user.id,
+        authorLabel:
+          message.senderId === user.id
+            ? "You"
+            : message.senderRole === "buyer"
+              ? "Buyer"
+              : (shopName ?? "Seller"),
+      }))
+    : [];
+
   return (
     <article className="flex flex-col gap-8">
       <OrderHeader order={order} />
@@ -234,6 +257,18 @@ export default async function OrderDetailPage({
           Print Receipt
         </Link>
         <BuyAgainButton order={order} sellerName={shopName} />
+        {canContactSeller ? (
+          <ContactSellerDock
+            orderId={order.id}
+            messages={messageViews}
+            shopName={shopName}
+            orderNumber={order.orderNumber}
+            statusLabel={getOrderStatusLabel(order.status)}
+            itemSummary={`${order.items.length} item${order.items.length === 1 ? "" : "s"}`}
+            totalLabel={formatCurrency(order.totalCents, order.currency)}
+            thumbnailUrl={order.items[0]?.imageUrl ?? null}
+          />
+        ) : null}
       </div>
 
       {showTracking ? (

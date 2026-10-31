@@ -42,6 +42,7 @@ Every decision is a numbered ADR with a fixed shape: **Context → Problem → O
 | [ADR-017](#adr-017-oauth-account-linking-trusts-supabases-verified-email-matching-only) | OAuth account linking trusts Supabase's verified-email matching only | ✅ Accepted |
 | [ADR-018](#adr-018-wishlist-reviews-and-a-derived-buyer-activity-feed) | Wishlist, Reviews, and a Derived Buyer Activity Feed | ✅ Accepted |
 | [ADR-020](#adr-020-authenticated-cart-becomes-database-backed-with-guest-cart-merge-on-sign-in) | Authenticated cart becomes database-backed, with guest-cart merge on sign-in | ✅ Accepted |
+| [ADR-026](#adr-026-order-scoped-buyerseller-messaging-contact-seller) | Order-scoped buyer↔seller messaging (Contact Seller) | ✅ Accepted |
 
 ---
 
@@ -655,3 +656,26 @@ Original decision: Option 2. The Stripe code stayed in the repo (real, working c
 **Amendment (atomic add):** signed-in adds now call `public.add_cart_item` — one SECURITY INVOKER function that takes a per-cart advisory lock, checks the product/option is active and that existing quantity plus the add fits live stock, writes the line and returns the new total. The earlier read-check-write in the app could be raced by two concurrent adds (nothing could be oversold — `create_order` locks stock — but the cart could exceed it). Messages are prefixed `CART: ` and shown to the buyer as they are. Add-to-cart feedback always states the cart's new total.
 
 **Consequences:** `create_order` and the cart tables are untouched; the only database change is the added function. A bought-now checkout is not saved anywhere, so reopening its link starts a new checkout for the same item (`router.replace` keeps the post-order Back button from doing that by accident). Adding a quantity beyond stock to a signed-in cart is now refused instead of accepted-and-flagged.
+
+---
+
+## ADR-026: Order-scoped buyer↔seller messaging (Contact Seller)
+
+**Status:** ✅ Accepted
+
+**Context:** The order-detail pages had no way for a buyer to reach the seller about a specific order — `SellerShopRow` even documented the absence ("no messaging feature exists in this app"). The notifications feature is a read-only *derived* activity feed, not a messaging channel. Realtime/push/email notifications are explicitly a Future Enhancement (out of scope — see [README.md → Future Enhancements](./README.md#future-enhancements)).
+
+**Problem:** Provide a buyer↔seller conversation scoped to one order, usable by a shared shop (RobertJ's model allows several sellers per shop — Shop One has three members across 103 orders), without introducing realtime infrastructure.
+
+**Options Considered:**
+1. Full in-app realtime chat (Supabase Realtime) — rejected: out of scope, large surface.
+2. A no-DB "Contact Seller" deep-link to the shop page — rejected: not an actual conversation.
+3. A refresh-based, order-scoped message thread backed by one additive table + a `SECURITY DEFINER` write RPC, authorized by the existing shop-membership RLS pattern — chosen.
+
+**Decision:** Option 3. `order_messages` (`20261031130000_order_messages.sql`): one shared conversation per `order_id`, append-only, with `shop_id` denormalized from the order. Reads go through an RLS `SELECT` policy that reuses `is_shop_member(shop_id)` exactly like orders/order_items/shipments/returns — so **every member of the order's shop** sees and can reply (a shared shop inbox), while an individual `sender_id`/`sender_role` is retained per message for accountability. Writes go only through `send_order_message` (`SECURITY DEFINER`), which authorizes the caller as an order participant (buyer, the order's seller, a shop member, or admin), derives `sender_id`/`sender_role` from the session (never the client), enforces the 1–2000-character bound, and dedups accidental double-submits. There is no `INSERT`/`UPDATE`/`DELETE` policy or grant — history is immutable.
+
+**Buyer-facing identity:** the buyer UI attributes every seller/admin message to the **shop name**, never an individual staff member; the raw `sender_id` is resolved server-side and not forwarded to the buyer view. Shop-mates see each other's individual names on the seller side.
+
+**Scope guardrails:** refresh-based only — **no** realtime, push, email, SMS, attachments, typing indicators, or read receipts. Legacy orders with a NULL `shop_id` fall back to the policy's buyer/seller/admin branch — shop-mates don't see those threads; no backfill.
+
+**Consequences:** `orders`, `create_order`, payments, and the RLS of every existing table are untouched; the only database change is the additive table + RPC (fully reversible). A new `src/features/messages/` module plus `listOrderMessages`/`sendOrderMessage` mount the conversation as a bottom-right **docked chat panel** on the buyer order page and **inline** on the seller/admin order page. Verified on the hosted project via rolled-back transactions: shared-inbox visibility, cross-shop isolation, NULL-`shop_id` non-leakage, participant-only sends, empty/over-limit rejection, dedup, and server-derived `sender_role`.

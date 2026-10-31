@@ -282,6 +282,23 @@ flowchart LR
     Admin --> Reports
 ```
 
+## 14. Messages (Contact Seller)
+
+| Field | Detail |
+|---|---|
+| **Purpose** | An order-scoped buyer↔shop conversation ("Contact Seller"). One shared thread per order; every member of the order's shop can read and reply, while the buyer sees one continuous conversation. See [ADR-026](./DECISIONS.md#adr-026-order-scoped-buyerseller-messaging-contact-seller). |
+| **Responsibilities** | Persisting/listing an order's messages; authorizing participants; deriving sender identity server-side; presenting the thread on the buyer and seller/admin order-detail pages. |
+| **Features** | Refresh-based only — **no** realtime, push, email, SMS, attachments, typing indicators, or read receipts. The buyer sees seller/admin messages attributed to the **shop name** (never individual staff); shop-mates see each other's individual names. 2,000-character limit; accidental double-submit dedup. |
+| **Pages** | None of its own — the buyer mounts `ContactSellerDock` (a bottom-right docked chat panel) on `src/app/(account)/orders/[id]/page.tsx`; the seller/admin mount the inline `OrderMessageThread` on `src/app/seller/orders/[id]/page.tsx`. |
+| **Components** | `features/messages/components/{ContactSellerDock, OrderMessageThread, MessageThreadBody}` — `MessageThreadBody` is the shared bubbles + composer that both the dock and the inline card wrap. |
+| **Server Actions** | `features/messages/actions/message.actions.ts` — `sendOrderMessageAction` (Zod-validated; `requireSessionUser` defense-in-depth; delegates to the RPC). |
+| **Services** | `lib/supabase/queries.ts` — `listOrderMessages` (RLS-scoped read + `sender` profile embed) and `sendOrderMessage` (wraps the `send_order_message` RPC). |
+| **Database Tables** | `order_messages` (one shared conversation per order; `shop_id` denormalized from the order; append-only). RLS: participants + shop members + admin read via `is_shop_member(shop_id)`; writes **only** through the `send_order_message` `SECURITY DEFINER` RPC (no INSERT/UPDATE/DELETE policy or grant). See `20261031130000_order_messages.sql`. |
+| **Dependencies** | Orders (every thread is scoped to an order); Shops/`shop_users` (the shared-inbox authorization via `is_shop_member`). |
+| **Current Status** | ✅ Implemented 2026-10-31; migration applied to the hosted project; verified via rolled-back RLS/RPC tests. |
+
+---
+
 > [!NOTE]
 > **Admin and Shop Owner do not own separate data models.** Both are role-scoped **views** over Products, Inventory, Orders, Payments, and Reports, differentiated entirely by RLS/role guards. Do not fork parallel components or services for these roles — extend the existing module and gate by role, per [CLAUDE.md → AI Non-Negotiable Rules](./CLAUDE.md#ai-non-negotiable-rules).
 

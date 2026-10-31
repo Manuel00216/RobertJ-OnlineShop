@@ -559,6 +559,65 @@ export type Database = {
           },
         ]
       }
+      order_messages: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          order_id: string
+          sender_id: string
+          sender_role: Database["public"]["Enums"]["user_role"]
+          shop_id: string | null
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          order_id: string
+          sender_id: string
+          sender_role: Database["public"]["Enums"]["user_role"]
+          shop_id?: string | null
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          order_id?: string
+          sender_id?: string
+          sender_role?: Database["public"]["Enums"]["user_role"]
+          shop_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_messages_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "buyer_order_lifecycle"
+            referencedColumns: ["order_id"]
+          },
+          {
+            foreignKeyName: "order_messages_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_messages_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_shipments: {
         Row: {
           courier: string | null
@@ -3169,6 +3228,24 @@ export type Database = {
           from: "*"
           to: "reviews"
           isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      send_order_message: {
+        Args: { p_body: string; p_order_id: string }
+        Returns: {
+          body: string
+          created_at: string
+          id: string
+          order_id: string
+          sender_id: string
+          sender_role: Database["public"]["Enums"]["user_role"]
+          shop_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "order_messages"
+          isOneToOne: false
           isSetofReturn: false
         }
       }

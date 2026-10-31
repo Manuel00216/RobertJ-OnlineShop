@@ -98,6 +98,7 @@ import type {
   ShippingAddress,
 } from "@/features/orders/types/order.types";
 import type { UpdateProfileInput } from "@/features/account/schemas/account.schema";
+import type { OrderMessage } from "@/features/messages/types/message.types";
 import type { OAuthProvider } from "@/features/auth/schemas/auth.schema";
 import type { BuyerPreferences, Profile } from "@/features/account/types/account.types";
 import {
@@ -4286,6 +4287,75 @@ export async function getOrderShipment(
   }
   if (!data) return null;
   return toOrderShipment(data);
+}
+
+// Contact Seller — one shared buyer<->shop conversation per order.
+const ORDER_MESSAGE_COLUMNS = `
+  id, order_id, sender_id, sender_role, body, created_at,
+  sender:profiles!order_messages_sender_id_fkey ( full_name, username )
+`;
+
+type OrderMessageRow = {
+  id: string;
+  order_id: string;
+  sender_id: string;
+  sender_role: Database["public"]["Enums"]["user_role"];
+  body: string;
+  created_at: string;
+  sender: { full_name: string | null; username: string | null } | null;
+};
+
+function toOrderMessage(row: OrderMessageRow): OrderMessage {
+  return {
+    id: row.id,
+    orderId: row.order_id,
+    senderId: row.sender_id,
+    senderRole: row.sender_role,
+    // Individual author name (for the seller-side view only — the buyer UI
+    // resolves seller/admin messages to the shop name, never this).
+    senderName: row.sender?.full_name ?? row.sender?.username ?? null,
+    body: row.body,
+    createdAt: row.created_at,
+  };
+}
+
+/**
+ * The full conversation for one order, oldest-first. RLS restricts visibility
+ * to the order's participants — its buyer, the order's seller, any member of
+ * the order's shop (`is_shop_member(shop_id)`), or an admin — see
+ * 20261031130000_order_messages.sql. Safe to call from the buyer and the
+ * seller/admin order-detail pages alike.
+ */
+export async function listOrderMessages(orderId: string): Promise<OrderMessage[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from(DATABASE_TABLES.ORDER_MESSAGES)
+    .select(ORDER_MESSAGE_COLUMNS)
+    .eq("order_id", orderId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw queryError("Failed to load messages", error);
+  }
+  return ((data ?? []) as OrderMessageRow[]).map(toOrderMessage);
+}
+
+/**
+ * Appends a message to an order's conversation via the `send_order_message`
+ * RPC (SECURITY DEFINER), which authorizes the caller as a participant and
+ * derives sender identity/role from the session — never the client. The
+ * action layer revalidates and re-reads the thread afterward.
+ */
+export async function sendOrderMessage(orderId: string, body: string): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("send_order_message", {
+    p_order_id: orderId,
+    p_body: body,
+  });
+
+  if (error) {
+    throw rpcError("Could not send your message.", error);
+  }
 }
 
 /**
